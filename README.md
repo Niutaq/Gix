@@ -11,7 +11,7 @@
 ---
 
 <div align="center">
-  <img src="gix_demo.gif" alt="Gix Demo" width="300" />
+  <img src="gix_demo_2.gif" alt="Gix Demo" width="300" />
   <br>
 </div>
 
