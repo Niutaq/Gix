@@ -19,3 +19,4 @@
 </div>
 
 For now, it's in early stage of development - it's got only one local cantor.
+Sorry for laggy gif :)
