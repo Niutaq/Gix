@@ -3,8 +3,11 @@
 
 ### ✨ Key Features ✨
 
+- **Desktop or Mobile** 📈  
+  App is created for desktop usage but can easily be exported for mobile (Android for now).
+
 - **Real-Time Rate Tracking** 📈  
-  Get live updates from exchange offices in your area—no more outdated info!
+  Get live updates from exchange offices in your area—no more outdated info.
 
 - **User-Friendly Interface** 📱  
   Clean, intuitive design lets you compare rates in seconds. No clutter, just clarity.
