@@ -13,7 +13,6 @@
 <div align="center">
   <img src="your-demo-link-here" alt="Gix Demo" width="300" />
   <br>
-  <em>See real-time rates and compare exchange offices in seconds! 🚀</em>
 </div>
 
 For now, it's in early stage of development - it's got only one local cantor.
