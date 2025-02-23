@@ -15,8 +15,9 @@
 
 <div align="center">
   <img src="gix_demo.gif" alt="Gix Demo" width="300" />
+  #1 Version
   <br>
 </div>
 
 For now, it's in early stage of development - it's got only one local cantor.
-Sorry for laggy gif :)
+
