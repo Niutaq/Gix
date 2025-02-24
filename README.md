@@ -21,7 +21,7 @@
 1. Go to the location in the folder where _main.go_ is located
 2. Run terminal and type: go build main.go
 
-How to run it locally on mobile?
+## How to run it locally on mobile?
 Connect to a mobile phone via USB (Activate USB Debugging settings on Android; search the web for instructions on your specific smartphone).
 1. Go to the location in the folder where _main.go_ is located.
 2. Run terminal and type: go run gioui.org/cmd/gogio -target android -o <path>/<app_name>.apk .  -icon <path> .    
