@@ -1,4 +1,4 @@
-package readers
+package reading_data
 
 import (
 	"embed"
