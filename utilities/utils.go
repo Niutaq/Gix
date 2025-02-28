@@ -2,7 +2,6 @@ package utilities
 
 import (
 	"fmt"
-	"gioui.org/f32"
 	"gioui.org/font"
 	"gioui.org/layout"
 	"gioui.org/op/clip"
@@ -40,17 +39,27 @@ type AppState struct {
 	// Main Vault
 	Vault *CantorVault
 
+	// Modal widgets
+	ModalOpen             string
+	LangModalButton       widget.Clickable
+	CurrencyModalButton   widget.Clickable
+	ModalClick            widget.Clickable
+	LanguageOptions       []string
+	CurrencyOptions       []string
+	LanguageOptionButtons []widget.Clickable
+	CurrencyOptionButtons []widget.Clickable
+
 	// Language widgets
 	Language string
-	EnButton widget.Clickable
+	/*EnButton widget.Clickable
 	PlButton widget.Clickable
-	DeButton widget.Clickable
+	DeButton widget.Clickable*/
 
 	// Currency widgets
-	Currency  string
-	EurButton widget.Clickable
+	Currency string
+	/*EurButton widget.Clickable
 	UsdButton widget.Clickable
-	GbpButton widget.Clickable
+	GbpButton widget.Clickable*/
 
 	// Exchange currency widgets
 	TadekButton    widget.Clickable
@@ -108,27 +117,118 @@ var AppColors = struct {
 // Language options
 var translations = map[string]map[string]string{
 	"EN": {
+		"info":          "Select the language and the currency",
 		"title":         "Gix",
 		"languageLabel": "Language",
-		"subtitle":      "Exchange rates from local currency exchange offices",
 		"buyLabel":      "Buy",
 		"sellLabel":     "Sell",
 	},
 	"PL": {
+		"info":          "Wybierz język oraz walutę",
 		"title":         "Gix",
 		"languageLabel": "Język",
-		"subtitle":      "Kursy wymiany walut od lokalnych kantorów",
 		"buyLabel":      "Kupno",
 		"sellLabel":     "Sprzedaż",
 		"errorPrefix":   "Błąd",
 	},
 	"DE": {
+		"info":          "Wählen Sie die Sprache und die Währung",
 		"title":         "Gix",
 		"languageLabel": "Sprache",
-		"subtitle":      "Die Wechselkurse der örtlichen Wechselstuben an",
 		"buyLabel":      "Kaufen",
 		"sellLabel":     "Verkaufen",
 		"errorPrefix":   "Fehler",
+	},
+	"DA": {
+		"info":          "Vælg sprog og valuta",
+		"title":         "Gix",
+		"languageLabel": "Sprog",
+		"buyLabel":      "Køb",
+		"sellLabel":     "Sælg",
+	},
+	"NO": {
+		"info":          "Velg språk og valuta",
+		"title":         "Gix",
+		"languageLabel": "Språk",
+		"buyLabel":      "Kjøp",
+		"sellLabel":     "Selg",
+	},
+	"FR": {
+		"info":        "Sélectionnez la langue et la devise",
+		"titre":       "Gix",
+		"langueLabel": "Langue",
+		"buyLabel":    "Acheter",
+		"sellLabel":   "Vendre",
+	},
+	"SW": {
+		"info":          "Välj språk och valuta",
+		"title":         "Gix",
+		"languageLabel": "Språk",
+		"buyLabel":      "Köp",
+		"sellLabel":     "Sälj",
+	},
+	"CZ": {
+		"info":          "Vyberte jazyk a měnu",
+		"title":         "Gix",
+		"languageLabel": "Jazyk",
+		"buyLabel":      "Koupit",
+		"sellLabel":     "Prodat",
+	},
+	"HR": {
+		"info":          "Odaberite jezik i valutu",
+		"title":         "Gix",
+		"languageLabel": "Jezik",
+		"buyLabel":      "Kupi",
+		"sellLabel":     "Prodaja",
+	},
+	"HU": {
+		"info":          "Odaberite jezik i valutu",
+		"title":         "Gix",
+		"languageLabel": "Jezik",
+		"buyLabel":      "Kupi",
+		"sellLabel":     "Prodaja",
+	},
+	"UA": {
+		"info":          "Виберіть мову та валюту",
+		"title":         "Gix",
+		"languageLabel": "Мова",
+		"buyLabel":      "Купити",
+		"sellLabel":     "Продати",
+	},
+	"BU": {
+		"info":          "Изберете език и валута",
+		"title":         "Gix",
+		"languageLabel": "Език",
+		"buyLabel":      "Купете",
+		"sellLabel":     "Продавам",
+	},
+	"RO": {
+		"info":          "Selectați limba și moneda",
+		"title":         "Gix",
+		"languageLabel": "Limba",
+		"buyLabel":      "Cumpără",
+		"sellLabel":     "Vând",
+	},
+	"AL": {
+		"info":          "Zgjidh gjuhën dhe monedhën",
+		"title":         "Gix",
+		"languageLabel": "Gjuha",
+		"buyLabel":      "Bli",
+		"sellLabel":     "Shitet",
+	},
+	"TR": {
+		"info":          "Dil ve para birimini seçin",
+		"title":         "Gix",
+		"languageLabel": "Dil",
+		"buyLabel":      "Satın Al",
+		"sellLabel":     "Sat",
+	},
+	"IC": {
+		"info":          "Veldu tungumál og gjaldmiðil",
+		"title":         "Gix",
+		"languageLabel": "Tungumál",
+		"buyLabel":      "Kaupa",
+		"sellLabel":     "Selja",
 	},
 }
 
@@ -153,6 +253,7 @@ func FormatRate(rate string) (string, error) {
 }
 
 // Function for loading progress bar
+// Function for loading progress bar
 func DrawProgressBar(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	elapsed := time.Since(state.IsLoadingStart).Seconds()
 	progress := float32(elapsed) / 0.6
@@ -160,32 +261,39 @@ func DrawProgressBar(gtx layout.Context, theme *material.Theme, state *AppState)
 		progress = 1
 	}
 
-	barHeight := gtx.Dp(unit.Dp(12))
-	margin := gtx.Dp(unit.Dp(15))
-	maxWidth := gtx.Constraints.Max.X - margin*2
+	// Nowe parametry rozmiaru
+	barHeight := gtx.Dp(unit.Dp(8))  // Zmniejszona wysokość
+	barWidth := gtx.Dp(unit.Dp(300)) // Stała szerokość paska
+	margin := gtx.Dp(unit.Dp(10))    // Zmniejszony margines
 
-	if maxWidth < 1 {
-		maxWidth = 1
+	// Wyśrodkowanie paska
+	startX := (gtx.Constraints.Max.X - barWidth) / 2
+	if startX < 0 {
+		startX = 0
 	}
 
+	// Tło paska
 	bgRadius := barHeight / 2
+	bgRect := image.Rect(startX, 0, startX+barWidth, barHeight)
 	bg := clip.RRect{
-		Rect: image.Rect(margin, 0, margin+maxWidth, barHeight),
+		Rect: bgRect,
 		NE:   bgRadius, NW: bgRadius, SE: bgRadius, SW: bgRadius,
 	}
 	paint.FillShape(gtx.Ops,
-		color.NRGBA{R: 50, G: 50, B: 50, A: 200},
+		color.NRGBA{R: 255, G: 255, B: 255, A: 100}, // Półprzezroczyste tło
 		bg.Op(gtx.Ops),
 	)
 
-	fillWidth := int(float32(maxWidth) * progress)
+	// Wypełnienie paska
+	fillWidth := int(float32(barWidth) * progress)
 	alpha := uint8(255)
 	if progress < 0.3 {
 		alpha = uint8(255 * (progress / 0.3))
 	}
 
+	fillRect := image.Rect(startX, 0, startX+fillWidth, barHeight)
 	fill := clip.RRect{
-		Rect: image.Rect(margin, 0, margin+fillWidth, barHeight),
+		Rect: fillRect,
 		NE:   bgRadius, NW: bgRadius, SE: bgRadius, SW: bgRadius,
 	}
 	paint.FillShape(gtx.Ops,
@@ -194,7 +302,7 @@ func DrawProgressBar(gtx layout.Context, theme *material.Theme, state *AppState)
 	)
 
 	return layout.Dimensions{
-		Size:     image.Point{X: gtx.Constraints.Max.X, Y: barHeight + margin},
+		Size:     image.Point{X: gtx.Constraints.Max.X, Y: barHeight + margin*2},
 		Baseline: 0,
 	}
 }
@@ -228,6 +336,9 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 				errorText.Alignment = text.Middle
 				return layout.Center.Layout(gtx, errorText.Layout)
 			} else {
+				if entry.Rate.BuyRate == "" {
+					return DrawProgressBar(gtx, theme, state)
+				}
 				var buyRate, sellRate string
 
 				if entry.URL == "https://kantory-rzeszow.pl/tabela.htm" || entry.URL == "http://www.kantorsupersam.pl/" {
@@ -278,7 +389,82 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, input *widget.Editor, a
 	t := translations[lang]
 
 	children := []layout.FlexChild{
+		/*// Subtitle
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			subtitle := material.Body1(theme, t["subtitle"])
+			subtitle.Alignment = text.Middle
+			subtitle.TextSize = unit.Sp(18)
+			subtitle.Color = AppColors.Text
+			subtitle.Font.Weight = font.Normal
+			return subtitle.Layout(gtx)
+		}),*/
+
+		// Subtitle empty
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			subtitle := material.Body1(theme, "\n")
+			subtitle.Alignment = text.Middle
+			subtitle.TextSize = unit.Sp(5)
+			subtitle.Color = AppColors.Text
+			subtitle.Font.Weight = font.Normal
+			return subtitle.Layout(gtx)
+		}),
+
+		// Title
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: 50, Bottom: 15, Left: 10, Right: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				title := material.H1(theme, t["title"])
+				title.Alignment = text.Middle
+				title.TextSize = unit.Sp(90)
+				title.Font.Weight = font.Bold
+				title.Color = AppColors.Title
+				return title.Layout(gtx)
+			})
+		}),
+
+		// Info
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			info := material.Body1(theme, t["info"])
+			info.Alignment = text.Middle
+			info.TextSize = unit.Sp(18)
+			info.Color = AppColors.Text
+			info.Font.Weight = font.Normal
+			if lang == "UA" || lang == "BU" {
+				info.Font.Weight = font.SemiBold
+				info.Font.Style = font.Regular
+			}
+			return info.Layout(gtx)
+		}),
+
+		// Buttons for language and currency choose
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: 10, Bottom: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{
+					Axis:    layout.Horizontal,
+					Spacing: layout.SpaceSides,
+				}.Layout(gtx,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						btn := material.Button(theme, &state.LangModalButton, ""+state.Language)
+						btn.Color = AppColors.Text
+						btn.Background = AppColors.Background
+						if state.LangModalButton.Clicked(gtx) {
+							state.ModalOpen = "language"
+						}
+						return btn.Layout(gtx)
+					}),
+					layout.Rigid(layout.Spacer{Width: unit.Dp(11)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						btn := material.Button(theme, &state.CurrencyModalButton, ""+state.Currency)
+						btn.Color = AppColors.Text
+						btn.Background = AppColors.Background
+						if state.CurrencyModalButton.Clicked(gtx) {
+							state.ModalOpen = "currency"
+						}
+						return btn.Layout(gtx)
+					}),
+				)
+			})
+		}),
+		/*layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: 10, Bottom: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{
 					Axis:      layout.Horizontal,
@@ -339,81 +525,90 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, input *widget.Editor, a
 					}),
 				)
 			})
-		}),
+		}),*/
 
-		// Title
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Inset{Top: 100, Bottom: 15, Left: 10, Right: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				title := material.H1(theme, t["title"])
-				title.Alignment = text.Middle
-				title.TextSize = unit.Sp(90)
-				title.Font.Weight = font.Bold
-				title.Color = AppColors.Title
-				return title.Layout(gtx)
+		/*layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: 10, Bottom: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{
+					Axis:      layout.Horizontal,
+					Alignment: layout.Middle,
+					Spacing:   layout.SpaceSides,
+				}.Layout(gtx,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						btn := material.Button(theme, &state.LangModalButton, "Language: "+state.Language)
+						btn.Background = AppColors.Dark
+						if state.LangModalButton.Clicked(gtx) {
+							state.ModalOpen = "language"
+						}
+						return btn.Layout(gtx)
+					}),
+					layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						btn := material.Button(theme, &state.CurrencyModalButton, "Currency: "+state.Currency)
+						btn.Background = AppColors.Dark
+						if state.CurrencyModalButton.Clicked(gtx) {
+							state.ModalOpen = "currency"
+						}
+						return btn.Layout(gtx)
+					}),
+				)
 			})
-		}),
-		// Subtitle
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			subtitle := material.Body1(theme, t["subtitle"])
-			subtitle.Alignment = text.Middle
-			subtitle.TextSize = unit.Sp(18)
-			subtitle.Color = AppColors.Text
-			subtitle.Font.Weight = font.Normal
-			return subtitle.Layout(gtx)
-		}),
-		// Subtitle
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			subtitle := material.Body1(theme, "\n")
-			subtitle.Alignment = text.Middle
-			subtitle.TextSize = unit.Sp(22)
-			subtitle.Color = AppColors.Text
-			subtitle.Font.Weight = font.Normal
-			return subtitle.Layout(gtx)
-		}),
+		}),*/
+
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if state.IsLoading.Load() {
 				return DrawProgressBar(gtx, theme, state)
 			} else {
-				button := material.Button(theme, &state.TadekButton, "Kantor Tadek (Stalowa Wola / Rzeszów)")
-				button.Background = color.NRGBA{R: 0, G: 0, B: 0, A: 255}
-				button.Color = AppColors.Text
-				button.TextSize = unit.Sp(16)
-				button.Inset = layout.UniformInset(unit.Dp(2))
+				return layout.Inset{Top: unit.Dp(120), Bottom: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					maxWidth := gtx.Dp(unit.Dp(600))
+					gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, maxWidth)
 
-				if state.SelectedCantor == "tadek" {
-					return layout.Inset{Bottom: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return widget.Border{
-							Color:        AppColors.Accent1,
-							Width:        unit.Dp(2),
-							CornerRadius: unit.Dp(4),
-						}.Layout(gtx, button.Layout)
+					button := material.Button(theme, &state.TadekButton, "Kantor Tadek (Stalowa Wola / Rzeszów)")
+					button.Background = color.NRGBA{R: 0, G: 0, B: 0, A: 230}
+					button.Color = AppColors.Text
+					button.TextSize = unit.Sp(16)
+					button.Inset = layout.UniformInset(unit.Dp(10))
+
+					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						if state.SelectedCantor == "tadek" {
+							return widget.Border{
+								Color:        AppColors.Accent1,
+								Width:        unit.Dp(2),
+								CornerRadius: unit.Dp(4),
+							}.Layout(gtx, button.Layout)
+						}
+						return button.Layout(gtx)
 					})
-				}
-				return layout.Inset{Bottom: 10}.Layout(gtx, button.Layout)
+				})
 			}
 		}),
 
-		// Analogicznie dla pozostałych przycisków
+		// For other cantors - the same pattern
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if state.IsLoading.Load() {
 				return DrawProgressBar(gtx, theme, state)
 			} else {
-				button := material.Button(theme, &state.KwadratButton, "Kantor Kwadrat (Rzeszów)")
-				button.Background = color.NRGBA{R: 5, G: 5, B: 5, A: 255}
-				button.Color = AppColors.Text
-				button.TextSize = unit.Sp(16)
-				button.Inset = layout.UniformInset(unit.Dp(2))
+				return layout.Inset{Top: unit.Dp(0), Bottom: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					maxWidth := gtx.Dp(unit.Dp(600))
+					gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, maxWidth)
 
-				if state.SelectedCantor == "kwadrat" {
-					return layout.Inset{Bottom: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return widget.Border{
-							Color:        AppColors.Accent2,
-							Width:        unit.Dp(2),
-							CornerRadius: unit.Dp(4),
-						}.Layout(gtx, button.Layout)
+					button := material.Button(theme, &state.KwadratButton, "Kantor Kwadrat (Rzeszów)")
+					button.Background = color.NRGBA{R: 0, G: 0, B: 0, A: 230}
+					button.Color = AppColors.Text
+					button.TextSize = unit.Sp(16)
+					button.Inset = layout.UniformInset(unit.Dp(10))
+
+					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						if state.SelectedCantor == "kwadrat" {
+							return widget.Border{
+								Color:        AppColors.Accent1,
+								Width:        unit.Dp(2),
+								CornerRadius: unit.Dp(4),
+							}.Layout(gtx, button.Layout)
+						}
+						return button.Layout(gtx)
 					})
-				}
-				return layout.Inset{Bottom: 10}.Layout(gtx, button.Layout)
+				})
 			}
 		}),
 
@@ -421,25 +616,44 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, input *widget.Editor, a
 			if state.IsLoading.Load() {
 				return DrawProgressBar(gtx, theme, state)
 			} else {
-				button := material.Button(theme, &state.SupersamButton, "Kantor SuperSam (Rzeszów)")
-				button.Background = color.NRGBA{R: 10, G: 10, B: 10, A: 255}
-				button.Color = AppColors.Text
-				button.TextSize = unit.Sp(16)
-				button.Inset = layout.UniformInset(unit.Dp(2))
+				return layout.Inset{Top: unit.Dp(0), Bottom: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					maxWidth := gtx.Dp(unit.Dp(600))
+					gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, maxWidth)
 
-				if state.SelectedCantor == "supersam" {
-					return layout.Inset{Bottom: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return widget.Border{
-							Color:        AppColors.Accent3,
-							Width:        unit.Dp(2),
-							CornerRadius: unit.Dp(4),
-						}.Layout(gtx, button.Layout)
+					button := material.Button(theme, &state.SupersamButton, "Kantor SuperSam (Rzeszów)")
+					button.Background = color.NRGBA{R: 0, G: 0, B: 0, A: 230}
+					button.Color = AppColors.Text
+					button.TextSize = unit.Sp(16)
+					button.Inset = layout.UniformInset(unit.Dp(10))
+
+					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						if state.SelectedCantor == "supersam" {
+							return widget.Border{
+								Color:        AppColors.Accent1,
+								Width:        unit.Dp(2),
+								CornerRadius: unit.Dp(4),
+							}.Layout(gtx, button.Layout)
+						}
+						return button.Layout(gtx)
 					})
-				}
-				return layout.Inset{Bottom: 10}.Layout(gtx, button.Layout)
+				})
 			}
 		}),
 	}
+
+	layout.Stack{}.Layout(gtx,
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			if state.ModalOpen != "" {
+				switch state.ModalOpen {
+				case "language":
+					return LanguageModal(gtx, theme, state)
+				case "currency":
+					return CurrencyModal(gtx, theme, state)
+				}
+			}
+			return layout.Dimensions{}
+		}),
+	)
 
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		return LayoutVaultLinks(gtx, theme, state)
@@ -448,9 +662,10 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, input *widget.Editor, a
 	layout.Flex{
 		Axis: layout.Vertical,
 	}.Layout(gtx, children...)
+
 }
 
-func EnButtonLayout(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+/*func EnButtonLayout(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	btn := material.Button(theme, &state.EnButton, "EN")
 	btn.TextSize = unit.Sp(14)
 	btn.Background = AppColors.Dark
@@ -621,4 +836,109 @@ func DeButtonLayout(gtx layout.Context, theme *material.Theme, state *AppState) 
 	}
 
 	return dimensions
+}*/
+
+func LanguageModal(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+	return ModalOverlay(gtx, theme, state, func(gtx layout.Context) layout.Dimensions {
+		return ModalDialog(
+			gtx,
+			theme,
+			"↓",
+			state.LanguageOptions,
+			state.LanguageOptionButtons,
+			func(lang string) {
+				state.Language = lang
+				state.ModalOpen = ""
+			},
+		)
+	})
+}
+
+func CurrencyModal(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+	return ModalOverlay(gtx, theme, state, func(gtx layout.Context) layout.Dimensions {
+		return ModalDialog(
+			gtx,
+			theme,
+			"↓",
+			state.CurrencyOptions,
+			state.CurrencyOptionButtons,
+			func(currency string) {
+				state.Currency = currency
+				state.ModalOpen = ""
+			},
+		)
+	})
+}
+
+func ModalOverlay(gtx layout.Context, theme *material.Theme, state *AppState, content layout.Widget) layout.Dimensions {
+	if state.ModalClick.Clicked(gtx) {
+		state.ModalOpen = ""
+	}
+
+	paint.Fill(gtx.Ops, color.NRGBA{R: 0, G: 0, B: 0, A: 150})
+
+	return layout.Stack{}.Layout(gtx,
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			return state.ModalClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Dimensions{Size: gtx.Constraints.Max}
+			})
+		}),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return widget.Border{
+					Color:        AppColors.Accent1,
+					Width:        unit.Dp(0),
+					CornerRadius: unit.Dp(6),
+				}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.UniformInset(unit.Dp(12)).Layout(gtx, content)
+				})
+			})
+		}),
+	)
+}
+
+func ModalDialog(
+	gtx layout.Context,
+	theme *material.Theme,
+	title string,
+	options []string,
+	buttons []widget.Clickable,
+	onSelect func(string),
+) layout.Dimensions {
+	var widgets []layout.FlexChild
+
+	widgets = append(widgets, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		lbl := material.H6(theme, title)
+		lbl.Color = AppColors.Text
+		return lbl.Layout(gtx)
+	}))
+
+	for i := range options {
+		if i >= len(buttons) {
+			break
+		}
+
+		i := i
+		option := options[i]
+		btn := &buttons[i]
+
+		widgets = append(widgets, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if btn.Clicked(gtx) {
+				onSelect(option)
+			}
+
+			button := material.Button(theme, btn, option)
+			button.Background = color.NRGBA{R: 25, G: 25, B: 25, A: 255}
+			button.Color = AppColors.Text
+			button.Inset = layout.UniformInset(unit.Dp(5))
+			button.TextSize = unit.Sp(16)
+
+			return layout.Inset{Top: unit.Dp(5), Bottom: unit.Dp(5)}.Layout(gtx, button.Layout)
+		}))
+	}
+
+	return layout.Flex{
+		Axis:    layout.Vertical,
+		Spacing: layout.SpaceEnd,
+	}.Layout(gtx, widgets...)
 }

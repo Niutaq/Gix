@@ -73,7 +73,7 @@ func loadFontCollection() ([]font.FontFace, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	// ---
 	RubikScribbleRegularTTF, err := reading_data.GetFont("fonts/RubikScribble-Regular.ttf")
 	if err != nil {
 		log.Fatalf("Error reading font: %v", err)
@@ -83,10 +83,21 @@ func loadFontCollection() ([]font.FontFace, error) {
 	if err != nil {
 		return nil, err
 	}
+	// ---
+	NotoSansRegularTTF, err := reading_data.GetFont("fonts/NotoSans-Regular.ttf")
+	if err != nil {
+		log.Fatalf("Error reading font: %v", err)
+	}
 
+	NotoSansRegular, err := opentype.Parse(NotoSansRegularTTF)
+	if err != nil {
+		return nil, err
+	}
+	// ---
 	fontCollection := []font.FontFace{}
 	fontCollection = append(fontCollection, font.FontFace{Font: font.Font{Weight: font.Normal}, Face: PoppinsRegular})
 	fontCollection = append(fontCollection, font.FontFace{Font: font.Font{Weight: font.Bold}, Face: RubikScribbleRegular})
+	fontCollection = append(fontCollection, font.FontFace{Font: font.Font{Weight: font.SemiBold}, Face: NotoSansRegular})
 	return fontCollection, nil
 }
 
@@ -96,12 +107,20 @@ func run(window *app.Window) error {
 	var ops op.Ops
 
 	// STATE
-	state := &utilities.AppState{
+	/*state := &utilities.AppState{
 		Vault:    &utilities.CantorVault{},
 		Language: "EN",
 		Currency: "EUR",
+	}*/
+	state := &utilities.AppState{
+		Vault:                 &utilities.CantorVault{},
+		Language:              "EN",
+		Currency:              "EUR",
+		LanguageOptions:       []string{"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ", "HR", "HU", "UA", "BU", "RO", "AL", "TR", "IC"},
+		CurrencyOptions:       []string{"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF", "SEK", "CZK", "HRF", "HUF", "UAH", "BGN", "RON", "LEK", "TRY", "ISK"},
+		LanguageOptionButtons: make([]widget.Clickable, 16),
+		CurrencyOptionButtons: make([]widget.Clickable, 17),
 	}
-
 	// CURRENCY
 	state.Currency = "EUR"
 
@@ -133,7 +152,7 @@ func run(window *app.Window) error {
 			state.GradientOffset += float32(elapsed) * 0.75
 
 			maxY := float32(gtx.Constraints.Max.Y)
-			stopY := maxY - (maxY / 2)
+			stopY := maxY - (maxY / 2) - 80
 
 			gradient := paint.LinearGradientOp{
 				Stop1:  f32.Pt(0, 0),
@@ -152,7 +171,7 @@ func run(window *app.Window) error {
 			}
 			state.Vault.Mu.Unlock()
 
-			// Language changer
+			/*// Language changer
 			if state.EnButton.Clicked(gtx) {
 				state.Language = "EN"
 				window.Invalidate()
@@ -178,7 +197,7 @@ func run(window *app.Window) error {
 			if state.GbpButton.Clicked(gtx) {
 				state.Currency = "GBP"
 				window.Invalidate()
-			}
+			}*/
 
 			// Cantor 1 - button handle
 			if state.TadekButton.Clicked(gtx) {
