@@ -47,4 +47,10 @@ For now, it's in the early stage of development - it's got only one local cantor
   <p><strong>Version #2</strong></p>
 </div>
 
+<div align="center">
+  <img src="gix_demo_3.gif" alt="Gix Demo" width="300" />
+  <br>
+  <p><strong>Version #3</strong></p>
+</div>
+
 
