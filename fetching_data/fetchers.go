@@ -50,7 +50,7 @@ func FetchRatesC1(ctx context.Context, url, currency string, state *utilities.Ap
 	})
 
 	if buyRate == "" || sellRate == "" {
-		return utilities.ExchangeRates{}, fmt.Errorf("%s not found, try diffrent symbol.", currency)
+		return utilities.ExchangeRates{}, fmt.Errorf("%s ...", currency)
 	}
 
 	return utilities.ExchangeRates{
@@ -97,7 +97,7 @@ func FetchRatesC2(ctx context.Context, url, currency string, state *utilities.Ap
 	})
 
 	if buyRate == "" || sellRate == "" {
-		return utilities.ExchangeRates{}, fmt.Errorf("currency %s not found", currency)
+		return utilities.ExchangeRates{}, fmt.Errorf("%s ...", currency)
 	}
 
 	return utilities.ExchangeRates{
@@ -149,7 +149,7 @@ func FetchRatesC3(ctx context.Context, url, currency string, state *utilities.Ap
 	})
 
 	if buyRate == "" || sellRate == "" {
-		return utilities.ExchangeRates{}, fmt.Errorf("currency %s not found", currency)
+		return utilities.ExchangeRates{}, fmt.Errorf("%s ...", currency)
 	}
 
 	return utilities.ExchangeRates{
