@@ -20,12 +20,13 @@ package main
 import (
 	// Main libraries
 	"context"
-	"github.com/Niutaq/Gix/fetching_data"
-	"github.com/Niutaq/Gix/utilities"
 	_ "image/png"
 	"log"
 	"os"
 	"time"
+
+	"github.com/Niutaq/Gix/fetching_data"
+	"github.com/Niutaq/Gix/utilities"
 
 	"gioui.org/f32"
 	"gioui.org/op/paint"
@@ -155,8 +156,8 @@ func run(window *app.Window) error {
 			stopY := maxY - (maxY / 2) - 80
 
 			gradient := paint.LinearGradientOp{
-				Stop1:  f32.Pt(0, 0),
-				Stop2:  f32.Pt(0, stopY),
+				Stop1:  f32.Pt(0, 400),
+				Stop2:  f32.Pt(0, stopY/1.25),
 				Color1: utilities.AppColors.Accent4,
 				Color2: utilities.AppColors.Background,
 			}
@@ -170,34 +171,6 @@ func run(window *app.Window) error {
 				window.Invalidate()
 			}
 			state.Vault.Mu.Unlock()
-
-			/*// Language changer
-			if state.EnButton.Clicked(gtx) {
-				state.Language = "EN"
-				window.Invalidate()
-			}
-			if state.PlButton.Clicked(gtx) {
-				state.Language = "PL"
-				window.Invalidate()
-			}
-			if state.DeButton.Clicked(gtx) {
-				state.Language = "DE"
-				window.Invalidate()
-			}
-
-			// Currency changing
-			if state.EurButton.Clicked(gtx) {
-				state.Currency = "EUR"
-				window.Invalidate()
-			}
-			if state.UsdButton.Clicked(gtx) {
-				state.Currency = "USD"
-				window.Invalidate()
-			}
-			if state.GbpButton.Clicked(gtx) {
-				state.Currency = "GBP"
-				window.Invalidate()
-			}*/
 
 			// Cantor 1 - button handle
 			if state.TadekButton.Clicked(gtx) {
@@ -305,5 +278,4 @@ func run(window *app.Window) error {
 			e.Frame(gtx.Ops)
 		}
 	}
-	return nil
 }
