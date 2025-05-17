@@ -6,8 +6,9 @@ import (
 	"image/color"
 	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
+
+	// "sync"
+	// "sync/atomic"
 	"time"
 
 	"gioui.org/font"
@@ -20,220 +21,7 @@ import (
 	"gioui.org/widget/material"
 )
 
-// Structs
-type ExchangeRates struct {
-	BuyRate  string
-	SellRate string
-}
-type CantorEntry struct {
-	URL   string
-	Rate  ExchangeRates
-	Error string
-}
-
-type CantorVault struct {
-	Mu        sync.Mutex
-	LastEntry *CantorEntry
-}
-
-type AppState struct {
-	// Main Vault
-	Vault *CantorVault
-
-	// Modal widgets
-	ModalOpen             string
-	LangModalButton       widget.Clickable
-	CurrencyModalButton   widget.Clickable
-	ModalClick            widget.Clickable
-	LanguageOptions       []string
-	CurrencyOptions       []string
-	LanguageOptionButtons []widget.Clickable
-	CurrencyOptionButtons []widget.Clickable
-
-	// Language widgets
-	Language string
-	/*EnButton widget.Clickable
-	PlButton widget.Clickable
-	DeButton widget.Clickable*/
-
-	// Currency widgets
-	Currency string
-	/*EurButton widget.Clickable
-	UsdButton widget.Clickable
-	GbpButton widget.Clickable*/
-
-	// Exchange currency widgets
-	TadekButton    widget.Clickable
-	KwadratButton  widget.Clickable
-	SupersamButton widget.Clickable
-	SelectedCantor string
-
-	// Erros, indicators, etc.
-	LastInvalidation time.Time
-	IsLoading        atomic.Bool
-	IsLoadingStart   time.Time
-	LastFrameTime    time.Time
-
-	// Gradient
-	GradientOffset float32
-}
-
-// Colors
-var AppColors = struct {
-	Background color.NRGBA
-	Text       color.NRGBA
-	Error      color.NRGBA
-	Success    color.NRGBA
-	Title      color.NRGBA
-	Button     color.NRGBA
-	Info       color.NRGBA
-	Warning    color.NRGBA
-	Primary    color.NRGBA
-	Secondary  color.NRGBA
-	Light      color.NRGBA
-	Dark       color.NRGBA
-	Accent1    color.NRGBA
-	Accent2    color.NRGBA
-	Accent3    color.NRGBA
-	Accent4    color.NRGBA
-}{
-	Background: color.NRGBA{R: 0, G: 0, B: 0, A: 255},       // Dark background
-	Text:       color.NRGBA{R: 255, G: 255, B: 255, A: 255}, // White text
-	Error:      color.NRGBA{R: 255, G: 230, B: 20, A: 255},  // Error color
-	Success:    color.NRGBA{R: 255, G: 250, B: 10, A: 255},  // Success color
-	Title:      color.NRGBA{R: 255, G: 255, B: 0, A: 255},   // Yellow title
-	Button:     color.NRGBA{R: 80, G: 80, B: 80, A: 255},    // White button
-	Info:       color.NRGBA{R: 0, G: 191, B: 255, A: 255},   // DeepSkyBlue info
-	Warning:    color.NRGBA{R: 255, G: 165, B: 0, A: 255},   // Orange warning
-	Primary:    color.NRGBA{R: 0, G: 123, B: 255, A: 255},   // Blue primary
-	Secondary:  color.NRGBA{R: 108, G: 117, B: 125, A: 255}, // Gray secondary
-	Light:      color.NRGBA{R: 248, G: 249, B: 250, A: 255}, // LightGray light
-	Dark:       color.NRGBA{R: 0, G: 0, B: 0, A: 255},       // Dark accent
-	Accent1:    color.NRGBA{R: 255, G: 255, B: 0, A: 255},   // Yellow accent
-	Accent2:    color.NRGBA{R: 255, G: 245, B: 0, A: 255},   // Yellow/Orange accent
-	Accent3:    color.NRGBA{R: 255, G: 235, B: 0, A: 255},   // Yellow/Orange v2 accent
-	Accent4:    color.NRGBA{R: 20, G: 20, B: 0, A: 255},     // Gradient accent (piece of it)
-}
-
-// Language options
-var translations = map[string]map[string]string{
-	"EN": {
-		"info":          "Select the language and the currency",
-		"title":         "Gix",
-		"languageLabel": "Language",
-		"buyLabel":      "Buy",
-		"sellLabel":     "Sell",
-	},
-	"PL": {
-		"info":          "Wybierz język oraz walutę",
-		"title":         "Gix",
-		"languageLabel": "Język",
-		"buyLabel":      "Kupno",
-		"sellLabel":     "Sprzedaż",
-		"errorPrefix":   "Błąd",
-	},
-	"DE": {
-		"info":          "Wählen Sie die Sprache und die Währung",
-		"title":         "Gix",
-		"languageLabel": "Sprache",
-		"buyLabel":      "Kaufen",
-		"sellLabel":     "Verkaufen",
-		"errorPrefix":   "Fehler",
-	},
-	"DA": {
-		"info":          "Vælg sprog og valuta",
-		"title":         "Gix",
-		"languageLabel": "Sprog",
-		"buyLabel":      "Køb",
-		"sellLabel":     "Sælg",
-	},
-	"NO": {
-		"info":          "Velg språk og valuta",
-		"title":         "Gix",
-		"languageLabel": "Språk",
-		"buyLabel":      "Kjøp",
-		"sellLabel":     "Selg",
-	},
-	"FR": {
-		"info":        "Sélectionnez la langue et la devise",
-		"titre":       "Gix",
-		"langueLabel": "Langue",
-		"buyLabel":    "Acheter",
-		"sellLabel":   "Vendre",
-	},
-	"SW": {
-		"info":          "Välj språk och valuta",
-		"title":         "Gix",
-		"languageLabel": "Språk",
-		"buyLabel":      "Köp",
-		"sellLabel":     "Sälj",
-	},
-	"CZ": {
-		"info":          "Vyberte jazyk a měnu",
-		"title":         "Gix",
-		"languageLabel": "Jazyk",
-		"buyLabel":      "Koupit",
-		"sellLabel":     "Prodat",
-	},
-	"HR": {
-		"info":          "Odaberite jezik i valutu",
-		"title":         "Gix",
-		"languageLabel": "Jezik",
-		"buyLabel":      "Kupi",
-		"sellLabel":     "Prodaja",
-	},
-	"HU": {
-		"info":          "Odaberite jezik i valutu",
-		"title":         "Gix",
-		"languageLabel": "Jezik",
-		"buyLabel":      "Kupi",
-		"sellLabel":     "Prodaja",
-	},
-	"UA": {
-		"info":          "Виберіть мову та валюту",
-		"title":         "Gix",
-		"languageLabel": "Мова",
-		"buyLabel":      "Купити",
-		"sellLabel":     "Продати",
-	},
-	"BU": {
-		"info":          "Изберете език и валута",
-		"title":         "Gix",
-		"languageLabel": "Език",
-		"buyLabel":      "Купете",
-		"sellLabel":     "Продавам",
-	},
-	"RO": {
-		"info":          "Selectați limba și moneda",
-		"title":         "Gix",
-		"languageLabel": "Limba",
-		"buyLabel":      "Cumpără",
-		"sellLabel":     "Vând",
-	},
-	"AL": {
-		"info":          "Zgjidh gjuhën dhe monedhën",
-		"title":         "Gix",
-		"languageLabel": "Gjuha",
-		"buyLabel":      "Bli",
-		"sellLabel":     "Shitet",
-	},
-	"TR": {
-		"info":          "Dil ve para birimini seçin",
-		"title":         "Gix",
-		"languageLabel": "Dil",
-		"buyLabel":      "Satın Al",
-		"sellLabel":     "Sat",
-	},
-	"IC": {
-		"info":          "Veldu tungumál og gjaldmiðil",
-		"title":         "Gix",
-		"languageLabel": "Tungumál",
-		"buyLabel":      "Kaupa",
-		"sellLabel":     "Selja",
-	},
-}
-
-// Abs function
+// Abs returns the absolute value of a float32.
 func Abs(x float32) float32 {
 	if x < 0 {
 		return -x
@@ -241,11 +29,13 @@ func Abs(x float32) float32 {
 	return x
 }
 
-// Function fot exchange rates formatting
+// FormatRate converts a string representation of a rate (assumed to be in smallest currency units)
+// into a formatted string with three decimal places (e.g., "1.234").
+// It divides the input rate by 100 before formatting.
 func FormatRate(rate string) (string, error) {
 	floatRate, err := strconv.ParseFloat(rate, 64)
 	if err != nil {
-		return "", fmt.Errorf("Upss: ", err)
+		return "", fmt.Errorf("Error: %v", err)
 	}
 
 	formattedRate := floatRate / 100
@@ -253,7 +43,7 @@ func FormatRate(rate string) (string, error) {
 	return fmt.Sprintf("%.3f", formattedRate), nil
 }
 
-// Function for loading progress bar
+// DrawProgressBar renders a progress bar based on the loading state in AppState.
 func DrawProgressBar(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	elapsed := time.Since(state.IsLoadingStart).Seconds()
 	progress := float32(elapsed) / 0.6
@@ -305,7 +95,8 @@ func DrawProgressBar(gtx layout.Context, theme *material.Theme, state *AppState)
 	}
 }
 
-// Adding link to links container + sorting
+// LayoutVaultLinks displays the fetched exchange rates or an error message from the CantorVault.
+// It also shows a progress bar if rates are being fetched (BuyRate is empty and no error).
 func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	state.Vault.Mu.Lock()
 	defer state.Vault.Mu.Unlock()
