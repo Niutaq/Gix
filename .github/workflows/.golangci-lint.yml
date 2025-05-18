@@ -30,7 +30,8 @@ jobs:
             xorg-dev \
             libwayland-dev \
             libxkbcommon-dev \
-            pkg-config
+            pkg-config \
+            libvulkan-dev
 
       - name: Verify current directory and list files
         run: |
@@ -40,7 +41,7 @@ jobs:
       - name: Download Go modules
         run: go mod download
 
-      - name: Build project (to generate export data)
+      - name: Build project
         run: go build ./...
 
       - name: Run golangci-lint
