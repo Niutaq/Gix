@@ -1,6 +1,6 @@
 module github.com/Niutaq/Gix/fetching_data
 
-go 1.23.6
+go 1.24.2
 
 require (
 	gioui.org v0.8.0

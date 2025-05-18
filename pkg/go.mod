@@ -1,3 +1,3 @@
-module Gix/pkg
+module github.com/Niutaq/Gix/pkg
 
-go 1.23.6
+go 1.24.2
