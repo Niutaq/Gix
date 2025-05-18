@@ -24,3 +24,7 @@ issues:
       linters:
         - govet
         - staticcheck
+
+skip-files:
+  - "gioui.org/app/internal/xkb"
+  - "gioui.org/.*"
