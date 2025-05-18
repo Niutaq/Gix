@@ -20,18 +20,22 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            pkg-config \
             libx11-dev \
             libxcursor-dev \
             libxrandr-dev \
             libxinerama-dev \
             libxi-dev \
-            libgl1-mesa-dev \
-            libgles2-mesa-dev \
-            xorg-dev \
-            libwayland-dev \
             libxkbcommon-dev \
-            pkg-config \
-            libvulkan-dev
+            libxkbcommon-x11-dev \
+            libx11-xcb-dev \
+            libwayland-dev \
+            libegl1-mesa-dev \
+            libgles2-mesa-dev \
+            libgl1-mesa-dev \
+            libvulkan-dev \
+            libffi-dev \
+            xorg-dev
 
       - name: Verify current directory and list files
         run: |
