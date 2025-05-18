@@ -19,30 +19,45 @@ package main
 
 import (
 	// Main libraries
+	"bytes"
 	"context"
+	"embed"
+	"image"
 	_ "image/png"
 	"log"
 	"os"
 	"time"
 
 	// Go files
-	"github.com/Niutaq/Gix/utilities"
 	"github.com/Niutaq/Gix/fetching_data"
 	"github.com/Niutaq/Gix/reading_data"
+	"github.com/Niutaq/Gix/utilities"
 
 	// Gio utilities
-	"gioui.org/f32"
-	"gioui.org/op/paint"
 	"gioui.org/app"
+	"gioui.org/f32"
 	"gioui.org/font"
 	"gioui.org/font/opentype"
 	"gioui.org/op"
+	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 )
 
+// Global variables
+//
+//go:embed res/background.png
+var backgroundImageFS embed.FS
+
+var (
+	originalBackgroundImage  image.Image
+	paintableBackgroundImage paint.ImageOp
+	backgroundImageLoaded    bool
+)
+
+// Functions
 // ++++++++++++++++++++ MAIN Function ++++++++++++++++++++
 func main() {
 	window := new(app.Window)
@@ -60,7 +75,28 @@ func main() {
 	app.Main()
 }
 
-// Functions
+// Background image initialization
+func initBackgroundImage() {
+	if backgroundImageLoaded {
+		return
+	}
+	fileData, err := backgroundImageFS.ReadFile("res/background.png")
+	if err != nil {
+		log.Printf("Warning: Failed to read embedded background image: %v", err)
+		return
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(fileData))
+	if err != nil {
+		log.Printf("Warning: Failed to decode embedded background image: %v", err)
+		return
+	}
+
+	originalBackgroundImage = img
+	paintableBackgroundImage = paint.NewImageOp(originalBackgroundImage)
+	backgroundImageLoaded = true
+	log.Println("Background image loaded successfully.")
+}
 
 // Font handling
 // Credits: g45t345rt
@@ -104,35 +140,53 @@ func loadFontCollection() ([]font.FontFace, error) {
 
 // Function to handle window input
 func run(window *app.Window) error {
-	// OPERATION
+	// Operations and background image initialization
 	var ops op.Ops
-	_ = ops
+	initBackgroundImage()
 
-	// STATE
-	/*state := &utilities.AppState{
-		Vault:    &utilities.CantorVault{},
-		Language: "EN",
-		Currency: "EUR",
-	}*/
-	state := &utilities.AppState{
-		Vault:                 &utilities.CantorVault{},
-		Language:              "EN",
-		Currency:              "EUR",
-		LanguageOptions:       []string{"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ", "HR", "HU", "UA", "BU", "RO", "AL", "TR", "IC"},
-		CurrencyOptions:       []string{"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF", "SEK", "CZK", "HRF", "HUF", "UAH", "BGN", "RON", "LEK", "TRY", "ISK"},
-		LanguageOptionButtons: make([]widget.Clickable, 16),
-		CurrencyOptionButtons: make([]widget.Clickable, 17),
+	definedCantors := []*utilities.CantorInfo{
+		{
+			ID:                  "tadek",
+			Displayname:         "cantor_tadek_name",
+			URL:                 "https://kantorstalowawola.tadek.pl",
+			Fetcher:             fetching_data.FetchRatesC1,
+			DefaultTimeout:      20 * time.Second,
+			NeedsRateFormatting: true,
+		},
+		{
+			ID:                  "kwadrat",
+			Displayname:         "cantor_kwadrat_name",
+			URL:                 "https://kantory-rzeszow.pl/tabela.htm",
+			Fetcher:             fetching_data.FetchRatesC2,
+			DefaultTimeout:      60 * time.Second,
+			NeedsRateFormatting: false,
+		},
+		{
+			ID:                  "supersam",
+			Displayname:         "cantor_supersam_name",
+			URL:                 "http://www.kantorsupersam.pl/",
+			Fetcher:             fetching_data.FetchRatesC3,
+			DefaultTimeout:      20 * time.Second,
+			NeedsRateFormatting: false,
+		},
 	}
-	// CURRENCY
-	state.Currency = "EUR"
 
-	// UI
-	var input widget.Editor
-	var addButton widget.Clickable
+	state := &utilities.AppState{
+		Vault:           &utilities.CantorVault{},
+		Language:        "EN",
+		Currency:        "EUR",
+		LanguageOptions: []string{"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ", "HR", "HU", "UA", "BU", "RO", "AL", "TR", "IC"},
+		CurrencyOptions: []string{"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF", "SEK", "CZK", "HRF", "HUF", "UAH", "BGN", "RON", "LEK", "TRY", "ISK"},
+		LanguageOptionButtons: make([]widget.Clickable, len([]string{
+			"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ", "HR", "HU", "UA", "BU", "RO", "AL", "TR", "IC",
+		})),
+		CurrencyOptionButtons: make([]widget.Clickable, len([]string{
+			"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF", "SEK", "CZK", "HRF", "HUF", "UAH", "BGN", "RON", "LEK", "TRY", "ISK",
+		})),
+		Cantors:       definedCantors,
+		LastFrameTime: time.Now(),
+	}
 
-	_, _ = input, addButton
-
-	// THEMES
 	fontCollection, err := loadFontCollection()
 	if err != nil {
 		log.Fatal(err)
@@ -140,144 +194,121 @@ func run(window *app.Window) error {
 
 	theme := material.NewTheme()
 	theme.Shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(fontCollection))
-	theme.FingerSize = 45
+	theme.FingerSize = 48
 
 	for {
 		switch e := window.Event().(type) {
-		// Closing window
 		case app.DestroyEvent:
 			return e.Err
-		// Running window
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, e)
 
-			elapsed := time.Since(state.LastFrameTime).Seconds()
-			state.LastFrameTime = time.Now()
-			state.GradientOffset += float32(elapsed) * 0.75
+			if backgroundImageLoaded && originalBackgroundImage != nil {
+				imgBounds := originalBackgroundImage.Bounds()
+				imgWidth := float32(imgBounds.Dx())
+				imgHeight := float32(imgBounds.Dy())
 
-			maxY := float32(gtx.Constraints.Max.Y)
-			stopY := maxY - (maxY / 2) - 80
+				winWidth := float32(gtx.Constraints.Max.X)
+				winHeight := float32(gtx.Constraints.Max.Y)
 
-			gradient := paint.LinearGradientOp{
-				Stop1:  f32.Pt(0, 400),
-				Stop2:  f32.Pt(0, stopY/1.25),
-				Color1: utilities.AppColors.Accent4,
-				Color2: utilities.AppColors.Background,
+				if imgWidth == 0 || imgHeight == 0 || winWidth == 0 || winHeight == 0 {
+					paint.Fill(gtx.Ops, utilities.AppColors.Background)
+				} else {
+					scaleX := winWidth / imgWidth
+					scaleY := winHeight / imgHeight
+
+					var finalScale float32
+					var offsetX, offsetY float32
+
+					if scaleX > scaleY {
+						finalScale = scaleX
+						scaledImgHeight := imgHeight * finalScale
+						offsetY = (winHeight - scaledImgHeight) / 2
+						offsetX = 0
+					} else {
+						finalScale = scaleY
+						scaledImgWidth := imgWidth * finalScale
+						offsetX = (winWidth - scaledImgWidth) / 2
+						offsetY = 0
+					}
+
+					transform := op.Affine(f32.Affine2D{}.
+						Scale(f32.Pt(0, 0), f32.Pt(finalScale, finalScale)).
+						Offset(f32.Pt(offsetX, offsetY)))
+
+					defer transform.Push(gtx.Ops).Pop()
+
+					paintableBackgroundImage.Add(gtx.Ops)
+					paint.PaintOp{}.Add(gtx.Ops)
+				}
+			} else {
+				paint.Fill(gtx.Ops, utilities.AppColors.Background)
 			}
 
-			gradient.Add(gtx.Ops)
-			paint.PaintOp{}.Add(gtx.Ops)
+			// // Set the background color
+			// screenHeight := float32(gtx.Constraints.Max.Y)
 
-			// Events 'if'
-			state.Vault.Mu.Lock()
+			// colorAtMiddle := color.NRGBA{R: 5, G: 5, B: 0, A: 255}
+			// colorAtBottom := utilities.AppColors.Accent1
+
+			// paint.LinearGradientOp{
+			// 	Stop1:  f32.Pt(0, screenHeight*0.99),
+			// 	Stop2:  f32.Pt(0, screenHeight),
+			// 	Color1: colorAtMiddle,
+			// 	Color2: colorAtBottom,
+			// }.Add(gtx.Ops)
+			// paint.PaintOp{}.Add(gtx.Ops)
+
+			state.LastFrameTime = time.Now()
+
 			if state.IsLoading.Load() {
 				window.Invalidate()
 			}
-			state.Vault.Mu.Unlock()
 
-			// Cantor 1 - button handle
-			if state.TadekButton.Clicked(gtx) {
-				if state.SelectedCantor == "tadek" {
-					state.SelectedCantor = ""
-				} else {
-					state.SelectedCantor = "tadek"
+			for i := range state.Cantors {
+				cantor := state.Cantors[i]
 
-					state.IsLoading.Store(true)
-					state.IsLoadingStart = time.Now()
-					go func(w *app.Window) {
-						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-						defer cancel()
+				if cantor.Button.Clicked(gtx) {
+					if state.SelectedCantor == cantor.ID {
+						state.SelectedCantor = ""
+						state.Vault.LastEntry = nil
+					} else {
+						state.SelectedCantor = cantor.ID
+						state.IsLoading.Store(true)
+						state.IsLoadingStart = time.Now()
+						state.Vault.LastEntry = nil
 
-						rates, err := fetching_data.FetchRatesC1(ctx, "https://kantorstalowawola.tadek.pl", state.Currency, state)
+						go func(w *app.Window, cInfo *utilities.CantorInfo, currentCurrency string, currentAppState *utilities.AppState) {
+							ctx, cancel := context.WithTimeout(context.Background(), cInfo.DefaultTimeout)
+							defer cancel()
 
-						state.Vault.Mu.Lock()
-						defer state.Vault.Mu.Unlock()
-						state.IsLoading.Store(false)
+							rates, fetchErr := cInfo.Fetcher(ctx, cInfo.URL, currentCurrency, currentAppState)
 
-						if err != nil {
-							state.Vault.LastEntry = &utilities.CantorEntry{
-								URL:   "https://kantorstalowawola.tadek.pl",
-								Error: err.Error(),
+							currentAppState.Vault.Mu.Lock()
+							if currentAppState.SelectedCantor == cInfo.ID {
+								if fetchErr != nil {
+									currentAppState.Vault.LastEntry = &utilities.CantorEntry{
+										URL:   cInfo.URL,
+										Error: fetchErr.Error(),
+									}
+								} else {
+									currentAppState.Vault.LastEntry = &utilities.CantorEntry{
+										URL:  cInfo.URL,
+										Rate: rates,
+									}
+								}
 							}
-						} else {
-							state.Vault.LastEntry = &utilities.CantorEntry{
-								URL:  "https://kantorstalowawola.tadek.pl",
-								Rate: rates,
-							}
-						}
-						w.Invalidate()
-					}(window)
+							currentAppState.Vault.Mu.Unlock()
+
+							currentAppState.IsLoading.Store(false)
+							w.Invalidate()
+						}(window, cantor, state.Currency, state)
+					}
 				}
 			}
 
-			// Cantor 2 - button handle
-			if state.KwadratButton.Clicked(gtx) {
-				if state.SelectedCantor == "kwadrat" {
-					state.SelectedCantor = ""
-				} else {
-					state.SelectedCantor = "kwadrat"
-					state.IsLoading.Store(true)
-					state.IsLoadingStart = time.Now()
-					go func(w *app.Window) {
-						ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-						defer cancel()
-
-						rates, err := fetching_data.FetchRatesC2(ctx, "https://kantory-rzeszow.pl/tabela.htm", state.Currency, state)
-
-						state.Vault.Mu.Lock()
-						defer state.Vault.Mu.Unlock()
-						state.IsLoading.Store(false)
-
-						if err != nil {
-							state.Vault.LastEntry = &utilities.CantorEntry{
-								URL:   "https://kantory-rzeszow.pl/tabela.htm",
-								Error: err.Error(),
-							}
-						} else {
-							state.Vault.LastEntry = &utilities.CantorEntry{
-								URL:  "https://kantory-rzeszow.pl/tabela.htm",
-								Rate: rates,
-							}
-						}
-						w.Invalidate()
-					}(window)
-				}
-			}
-
-			// Cantor 3 - button handle
-			if state.SupersamButton.Clicked(gtx) {
-				if state.SelectedCantor == "supersam" {
-					state.SelectedCantor = ""
-				} else {
-					state.SelectedCantor = "supersam"
-					state.IsLoading.Store(true)
-					state.IsLoadingStart = time.Now()
-					go func(w *app.Window) {
-						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-						defer cancel()
-
-						rates, err := fetching_data.FetchRatesC3(ctx, "http://www.kantorsupersam.pl/", state.Currency, state)
-
-						state.Vault.Mu.Lock()
-						defer state.Vault.Mu.Unlock()
-						state.IsLoading.Store(false)
-
-						if err != nil {
-							state.Vault.LastEntry = &utilities.CantorEntry{
-								URL:   "http://www.kantorsupersam.pl/",
-								Error: err.Error(),
-							}
-						} else {
-							state.Vault.LastEntry = &utilities.CantorEntry{
-								URL:  "http://www.kantorsupersam.pl/",
-								Rate: rates,
-							}
-						}
-						w.Invalidate()
-					}(window)
-				}
-			}
-			utilities.LayoutUI(gtx, theme, &input, &addButton, state)
+			// UI rendering
+			utilities.LayoutUI(gtx, theme, state)
 			e.Frame(gtx.Ops)
 		}
 	}
