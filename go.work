@@ -1,7 +1,9 @@
-go 1.21
+go 1.23
 
 use (
 	"./reading_data"
 	"./fetching_data"
+    "./utilities"
+    "./pkg"
 	.
 )
