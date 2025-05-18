@@ -1,6 +1,6 @@
 run:
   timeout: 3m
-  skip-dirs:
+  exclude_dirs:
     - tmp
     - res
     - outputDir
@@ -15,7 +15,9 @@ linters:
     - unused
 
 issues:
+  exclude-dirs:
+    - tmp
+    - res
+    - outputDir
   exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
+    - path: gioui\.org/app/internal/xkb
