@@ -1,6 +1,7 @@
 package utilities
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -9,6 +10,19 @@ import (
 )
 
 // Types
+// Information for fetching data from cantors
+type FetcherFunc func(ctx context.Context, url, currency string, state *AppState) (ExchangeRates, error)
+
+type CantorInfo struct {
+	ID                  string
+	URL                 string
+	Displayname         string
+	Fetcher             FetcherFunc
+	Button              widget.Clickable
+	DefaultTimeout      time.Duration
+	NeedsRateFormatting bool
+}
+
 // ExchangeRates holds the buy and sell rates for a currency.
 type ExchangeRates struct {
 	BuyRate  string
@@ -33,6 +47,10 @@ type AppState struct {
 	// Main Vault
 	Vault *CantorVault
 
+	// Cantor(s) information
+	Cantors        []*CantorInfo
+	SelectedCantor string
+
 	// Modal widgets
 	ModalOpen             string
 	LangModalButton       widget.Clickable
@@ -48,10 +66,9 @@ type AppState struct {
 
 	// Exchange currency widgets
 	Currency       string
-	TadekButton    widget.Clickable
-	KwadratButton  widget.Clickable
-	SupersamButton widget.Clickable
-	SelectedCantor string
+	// TadekButton    widget.Clickable
+	// KwadratButton  widget.Clickable
+	// SupersamButton widget.Clickable
 
 	// Erros, indicators, etc.
 	LastInvalidation time.Time
