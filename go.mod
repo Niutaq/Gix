@@ -1,6 +1,6 @@
 module github.com/Niutaq/Gix
 
-go 1.23.6
+go 1.24.6
 
 toolchain go1.24.2
 
