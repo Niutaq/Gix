@@ -1,10 +1,11 @@
 run:
   timeout: 3m
+  go: 1.24.2
 
 linters:
   enable:
     - govet
-    # - staticcheck
+    - staticcheck
     - gofmt
     - revive
     - errcheck
@@ -26,3 +27,31 @@ issues:
       linters:
         - govet
         - staticcheck
+
+linters-settings:
+  staticcheck:
+    go: '1.24.2'
+
+  govet:
+
+    settings:
+      printf:
+        funcs:
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Debugf
+
+# linters:
+#   enable:
+#     # - govet
+#     # - staticcheck
+#     - gofmt
+#     - revive
+#     - errcheck
+#     - unused
+#   disable:
+#     - goanalysis_metalinter
+#     # - staticcheck
+#     # - govet
