@@ -1,14 +1,17 @@
-name: Lint
+name: Lint and Build
 
 on: [push, pull_request]
 
 jobs:
-  golangci:
-    name: lint
+  lint-and-build:
+    name: Lint and Build Go Project
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
           go-version: '1.24.2'
           cache: true
@@ -18,16 +21,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev libgles2-mesa-dev xorg-dev
 
+      - name: Verify current directory and list files (dla debugowania)
+        run: |
+          pwd
+          ls -la
+
       - name: Download Go modules
         run: go mod download
-        working-directory: Gix
 
       - name: Build project (to generate export data)
         run: go build ./...
-        working-directory: Gix
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v5
         with:
-          version: v1.57.2
-          working-directory: Gix
+          version: v1.64.8
