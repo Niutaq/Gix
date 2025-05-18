@@ -25,14 +25,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/Niutaq/Gix/fetching_data"
+	// Go files
 	"github.com/Niutaq/Gix/utilities"
-
-	"gioui.org/f32"
-	"gioui.org/op/paint"
+	"github.com/Niutaq/Gix/fetching_data"
 	"github.com/Niutaq/Gix/reading_data"
 
 	// Gio utilities
+	"gioui.org/f32"
+	"gioui.org/op/paint"
 	"gioui.org/app"
 	"gioui.org/font"
 	"gioui.org/font/opentype"
