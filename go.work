@@ -1,9 +1,5 @@
 go 1.24.2
 
 use (
-	"./reading_data"
-	"./fetching_data"
-    "./utilities"
-    "./pkg"
 	.
 )
