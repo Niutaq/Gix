@@ -26,4 +26,4 @@ jobs:
     - name: Run golangci-lint
       run: |
         $(go env GOPATH)/bin/golangci-lint cache clean
-        $(go env GOPATH)/bin/golangci-lint run ./fetching_data ./reading_data ./utilities ./pkg
+        $(go env GOPATH)/bin/golangci-lint run ./...
