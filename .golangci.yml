@@ -1,5 +1,9 @@
 run:
   timeout: 3m
+  skip-dirs:
+    - tmp
+    - res
+    - outputDir
 
 linters:
   enable:
