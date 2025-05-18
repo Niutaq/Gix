@@ -130,7 +130,7 @@ func run(window *app.Window) error {
 	var input widget.Editor
 	var addButton widget.Clickable
 
-	_ = input, addButton
+	_, _ = input, addButton
 
 	// THEMES
 	fontCollection, err := loadFontCollection()
