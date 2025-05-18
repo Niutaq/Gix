@@ -1,9 +1,5 @@
 run:
   timeout: 3m
-  exclude_dirs:
-    - tmp
-    - res
-    - outputDir
 
 linters:
   enable:
@@ -19,5 +15,12 @@ issues:
     - tmp
     - res
     - outputDir
+
   exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
     - path: gioui\.org/app/internal/xkb
+      linters:
+        - govet
+        - staticcheck
