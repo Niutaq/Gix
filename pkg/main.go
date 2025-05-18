@@ -106,6 +106,7 @@ func loadFontCollection() ([]font.FontFace, error) {
 func run(window *app.Window) error {
 	// OPERATION
 	var ops op.Ops
+	_ = ops
 
 	// STATE
 	/*state := &utilities.AppState{
@@ -128,6 +129,8 @@ func run(window *app.Window) error {
 	// UI
 	var input widget.Editor
 	var addButton widget.Clickable
+
+	_ = input, addButton
 
 	// THEMES
 	fontCollection, err := loadFontCollection()
