@@ -64,6 +64,7 @@ func main() {
 	window.Option(
 		app.Title("Gix"),
 		app.Size(unit.Dp(1000), unit.Dp(1000)),
+		//app.Decorated(false),
 	)
 
 	go func() {
@@ -236,10 +237,11 @@ func run(window *app.Window) error {
 						Scale(f32.Pt(0, 0), f32.Pt(finalScale, finalScale)).
 						Offset(f32.Pt(offsetX, offsetY)))
 
-					defer transform.Push(gtx.Ops).Pop()
+					stack := transform.Push(gtx.Ops)
 
 					paintableBackgroundImage.Add(gtx.Ops)
 					paint.PaintOp{}.Add(gtx.Ops)
+					stack.Pop()
 				}
 			} else {
 				paint.Fill(gtx.Ops, utilities.AppColors.Background)

@@ -167,7 +167,7 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 	buyLabel := GetTranslation(state.Language, "buyLabel")
 	sellLabel := GetTranslation(state.Language, "sellLabel")
 
-	rateTextBuy := material.H5(theme, fmt.Sprintf("%s: %.3f %s",
+	rateTextBuy := material.H4(theme, fmt.Sprintf("%s: %.3f %s",
 		buyLabel,
 		buyRateFloat,
 		state.Currency,
@@ -176,7 +176,7 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 	rateTextBuy.Color = AppColors.Success
 	rateTextBuy.Alignment = text.Middle
 
-	rateTextSell := material.H5(theme, fmt.Sprintf("%s: %.3f %s",
+	rateTextSell := material.H4(theme, fmt.Sprintf("%s: %.3f %s",
 		sellLabel,
 		sellRateFloat,
 		state.Currency,
@@ -228,23 +228,17 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{
 						Axis:      layout.Horizontal,
-						Spacing:   layout.SpaceAround, // Zachowaj dla odstępów między przyciskami
+						Spacing:   layout.SpaceAround,
 						Alignment: layout.Middle,
 					}.Layout(gtx,
-						// Przycisk Języka
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions { // Zamiast Flexed
-							// Opcjonalnie: Ogranicz maksymalną szerokość pojedynczego przycisku
-							// buttonMaxWidth := gtx.Dp(unit.Dp(120)) // np. maksymalnie 120 Dp szerokości
-							// if gtx.Constraints.Max.X > buttonMaxWidth {
-							// 	gtx.Constraints.Max.X = buttonMaxWidth
-							// }
+						// Language button
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 
 							btn := material.Button(theme, &state.LangModalButton, state.Language)
-							btn.Color = AppColors.Accent1      // Zmieniono na Accent1 dla żółtego napisu
-							btn.Background = color.NRGBA{A: 0} // Przezroczyste tło
+							btn.Color = AppColors.Accent1
+							btn.Background = color.NRGBA{A: 0}
 							btn.CornerRadius = unit.Dp(6)
-							btn.TextSize = unit.Sp(16) // Dostosuj rozmiar tekstu
-							// Zmniejszony padding, aby przycisk był węższy
+							btn.TextSize = unit.Sp(16)
 							btn.Inset = layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}
 							if state.LangModalButton.Clicked(gtx) {
 								state.ModalOpen = "language"
@@ -252,17 +246,12 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 							return btn.Layout(gtx)
 						}),
 
-						// Przycisk Waluty
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions { // Zamiast Flexed
-							// Opcjonalnie: Ogranicz maksymalną szerokość pojedynczego przycisku
-							// buttonMaxWidth := gtx.Dp(unit.Dp(120))
-							// if gtx.Constraints.Max.X > buttonMaxWidth {
-							// 	gtx.Constraints.Max.X = buttonMaxWidth
-							// }
+						// Currency button
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 
 							btn := material.Button(theme, &state.CurrencyModalButton, state.Currency)
-							btn.Color = AppColors.Accent1      // Żółty napis
-							btn.Background = color.NRGBA{A: 0} // Przezroczyste tło
+							btn.Color = AppColors.Accent1
+							btn.Background = color.NRGBA{A: 0}
 							btn.CornerRadius = unit.Dp(6)
 							btn.TextSize = unit.Sp(16)
 							btn.Inset = layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}
@@ -299,6 +288,8 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 
 						return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
 							func(gtx layout.Context) layout.Dimensions {
+								gtx.Constraints.Min.X = gtx.Constraints.Max.X
+
 								button := material.Button(theme, &cantor.Button, displayName)
 								button.Background = color.NRGBA{R: 25, G: 25, B: 25, A: 50}
 								button.Color = AppColors.Text
@@ -319,7 +310,8 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 			})
 		}),
 
-		// Sekcja Paska Postępu (jeśli ładuje)
+		// Section for loading progress bar
+		// This section is displayed when the app is loading data from the selected Cantor
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if state.IsLoading.Load() && state.SelectedCantor != "" {
 				return layout.Inset{Top: unit.Dp(15), Bottom: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
