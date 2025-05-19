@@ -25,7 +25,7 @@ var AppColors = struct {
 	Background: color.NRGBA{R: 0, G: 0, B: 0, A: 255},
 	Text:       color.NRGBA{R: 255, G: 255, B: 255, A: 255},
 	Error:      color.NRGBA{R: 255, G: 230, B: 20, A: 255},
-	Success:    color.NRGBA{R: 255, G: 250, B: 10, A: 255},
+	Success:    color.NRGBA{R: 255, G: 250, B: 130, A: 255},
 	Title:      color.NRGBA{R: 255, G: 255, B: 0, A: 255},
 	Button:     color.NRGBA{R: 80, G: 80, B: 80, A: 255},
 	Info:       color.NRGBA{R: 0, G: 191, B: 255, A: 255},
