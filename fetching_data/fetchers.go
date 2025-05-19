@@ -3,11 +3,12 @@ package fetching_data
 import (
 	"context"
 	"fmt"
-	"github.com/Niutaq/Gix/utilities"
-	"github.com/PuerkitoBio/goquery"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/Niutaq/Gix/utilities"
+	"github.com/PuerkitoBio/goquery"
 )
 
 // HTTP client
@@ -16,26 +17,38 @@ var httpClient = &http.Client{
 	Transport: &http.Transport{
 		MaxIdleConns:       10,
 		IdleConnTimeout:    30 * time.Second,
-		DisableCompression: true,
+		DisableCompression: false,
 	},
+}
+
+// Function to get the language from the AppState
+func getLang(state *utilities.AppState) string {
+	if state != nil && state.SelectedLanguage != "" {
+		return state.SelectedLanguage
+	}
+	return "EN"
 }
 
 // Fetch function : Cantors C1, C2, C3
 func FetchRatesC1(ctx context.Context, url, currency string, state *utilities.AppState) (utilities.ExchangeRates, error) {
+	lang := getLang(state)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return utilities.ExchangeRates{}, err
+		errMsg := utilities.GetTranslation(lang, "err_creating_request")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s: %w", errMsg, err)
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return utilities.ExchangeRates{}, fmt.Errorf("Error with fetching: %w", err)
+		errMsg := utilities.GetTranslation(lang, "err_fetching_data")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s: %w", errMsg, err)
 	}
 	defer resp.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		return utilities.ExchangeRates{}, fmt.Errorf("Error with parsing: %w", err)
+		errMsg := utilities.GetTranslation(lang, "err_parsing_response")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s: %w", errMsg, err)
 	}
 
 	var buyRate, sellRate string
@@ -50,7 +63,8 @@ func FetchRatesC1(ctx context.Context, url, currency string, state *utilities.Ap
 	})
 
 	if buyRate == "" || sellRate == "" {
-		return utilities.ExchangeRates{}, fmt.Errorf("%s ...", currency)
+		errMsg := utilities.GetTranslation(lang, "err_rates_not_found_for")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s %s", errMsg, currency)
 	}
 
 	return utilities.ExchangeRates{
@@ -60,20 +74,24 @@ func FetchRatesC1(ctx context.Context, url, currency string, state *utilities.Ap
 }
 
 func FetchRatesC2(ctx context.Context, url, currency string, state *utilities.AppState) (utilities.ExchangeRates, error) {
+	lang := getLang(state)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return utilities.ExchangeRates{}, err
+		errMsg := utilities.GetTranslation(lang, "err_creating_request")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s: %w", errMsg, err)
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return utilities.ExchangeRates{}, fmt.Errorf("error fetching rates: %w", err)
+		errMsg := utilities.GetTranslation(lang, "err_fetching_data")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s: %w", errMsg, err)
 	}
 	defer resp.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		return utilities.ExchangeRates{}, fmt.Errorf("error parsing HTML: %w", err)
+		errMsg := utilities.GetTranslation(lang, "err_parsing_response")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s: %w", errMsg, err)
 	}
 
 	var buyRate, sellRate string
@@ -86,7 +104,10 @@ func FetchRatesC2(ctx context.Context, url, currency string, state *utilities.Ap
 		currencyCell := s.Find("td").Eq(1)
 		fullText := strings.TrimSpace(currencyCell.Find("b").Text())
 		parts := strings.Fields(fullText)
-		currentSymbol := strings.ToUpper(parts[len(parts)-1])
+		currentSymbol := ""
+		if len(parts) > 0 {
+			currentSymbol = strings.ToUpper(parts[len(parts)-1])
+		}
 
 		if currentSymbol == targetCurrency {
 			buyRate = strings.TrimSpace(s.Find("td").Eq(2).Find("b").Text())
@@ -97,7 +118,8 @@ func FetchRatesC2(ctx context.Context, url, currency string, state *utilities.Ap
 	})
 
 	if buyRate == "" || sellRate == "" {
-		return utilities.ExchangeRates{}, fmt.Errorf("%s ...", currency)
+		errMsg := utilities.GetTranslation(lang, "err_rates_not_found_for")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s %s", errMsg, currency)
 	}
 
 	return utilities.ExchangeRates{
@@ -107,26 +129,30 @@ func FetchRatesC2(ctx context.Context, url, currency string, state *utilities.Ap
 }
 
 func FetchRatesC3(ctx context.Context, url, currency string, state *utilities.AppState) (utilities.ExchangeRates, error) {
+	lang := getLang(state)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return utilities.ExchangeRates{}, err
+		errMsg := utilities.GetTranslation(lang, "err_creating_request")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s: %w", errMsg, err)
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return utilities.ExchangeRates{}, fmt.Errorf("error fetching rates: %w", err)
+		errMsg := utilities.GetTranslation(lang, "err_fetching_data")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s: %w", errMsg, err)
 	}
 	defer resp.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		return utilities.ExchangeRates{}, fmt.Errorf("error parsing HTML: %w", err)
+		errMsg := utilities.GetTranslation(lang, "err_parsing_response")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s: %w", errMsg, err)
 	}
 
 	var buyRate, sellRate string
 	targetCurrency := strings.ToUpper(strings.TrimSpace(currency))
 	doc.Find("table.mceItemTable:first-child[class*='cellPadding=4'][class*='width=90%'] tr").EachWithBreak(func(i int, s *goquery.Selection) bool {
-		if i == 0 {
+		if i == 0 { // Skip header
 			return true
 		}
 
@@ -138,7 +164,12 @@ func FetchRatesC3(ctx context.Context, url, currency string, state *utilities.Ap
 		currentText = strings.Join(strings.Fields(currentText), " ")
 
 		currentSymbol := strings.TrimSpace(strings.Split(currentText, "(")[0])
-		currentSymbol = strings.Split(currentSymbol, " ")[0]
+		currentSymbolParts := strings.Fields(currentSymbol)
+		if len(currentSymbolParts) > 0 {
+			currentSymbol = strings.ToUpper(currentSymbolParts[len(currentSymbolParts)-1])
+		} else {
+			currentSymbol = ""
+		}
 
 		if currentSymbol == targetCurrency {
 			buyRate = strings.TrimSpace(s.Find("td").Eq(2).Text())
@@ -149,7 +180,8 @@ func FetchRatesC3(ctx context.Context, url, currency string, state *utilities.Ap
 	})
 
 	if buyRate == "" || sellRate == "" {
-		return utilities.ExchangeRates{}, fmt.Errorf("%s ...", currency)
+		errMsg := utilities.GetTranslation(lang, "err_rates_not_found_for")
+		return utilities.ExchangeRates{}, fmt.Errorf("%s %s", errMsg, currency)
 	}
 
 	return utilities.ExchangeRates{

@@ -56,6 +56,7 @@ type AppState struct {
 	LangModalButton       widget.Clickable
 	CurrencyModalButton   widget.Clickable
 	ModalClick            widget.Clickable
+	SelectedLanguage      string
 	LanguageOptions       []string
 	CurrencyOptions       []string
 	LanguageOptionButtons []widget.Clickable
@@ -65,7 +66,7 @@ type AppState struct {
 	Language string
 
 	// Exchange currency widgets
-	Currency       string
+	Currency string
 	// TadekButton    widget.Clickable
 	// KwadratButton  widget.Clickable
 	// SupersamButton widget.Clickable
