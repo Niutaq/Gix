@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"sort"
+
 	"gioui.org/font"
 	"gioui.org/layout"
 	"gioui.org/op/clip"
@@ -47,11 +49,8 @@ func DrawProgressBar(gtx layout.Context, theme *material.Theme, state *AppState)
 
 	var totalDuration float32 = 5.0
 	if state.SelectedCantor != "" {
-		for _, c := range state.Cantors {
-			if c.ID == state.SelectedCantor {
-				totalDuration = float32(c.DefaultTimeout.Seconds())
-				break
-			}
+		if c, ok := state.Cantors[state.SelectedCantor]; ok {
+			totalDuration = float32(c.DefaultTimeout.Seconds())
 		}
 	}
 
@@ -136,11 +135,8 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 	var errBuy, errSell error
 
 	needsDivision := false
-	for _, c := range state.Cantors {
-		if c.ID == state.SelectedCantor {
-			needsDivision = c.NeedsRateFormatting
-			break
-		}
+	if c, ok := state.Cantors[state.SelectedCantor]; ok {
+		needsDivision = c.NeedsRateFormatting
 	}
 
 	buyRateStr, errBuy = FormatRate(entry.Rate.BuyRate, needsDivision)
@@ -278,9 +274,15 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 				}
 				gtx.Constraints.Max.X = maxWidth
 
-				return material.List(theme, &list).Layout(gtx, len(state.Cantors),
-					func(gtx layout.Context, i int) layout.Dimensions {
-						cantor := state.Cantors[i]
+						cantorIDs := make([]string, 0, len(state.Cantors))
+						for id := range state.Cantors {
+							cantorIDs = append(cantorIDs, id)
+						}
+						sort.Strings(cantorIDs)
+
+						return material.List(theme, &list).Layout(gtx, len(cantorIDs),
+							func(gtx layout.Context, i int) layout.Dimensions {
+								cantor := state.Cantors[cantorIDs[i]]
 						displayName := GetTranslation(state.Language, cantor.Displayname)
 						if displayName == cantor.Displayname {
 							displayName = cantor.ID

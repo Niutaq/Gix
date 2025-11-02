@@ -48,7 +48,7 @@ type AppState struct {
 	Vault *CantorVault
 
 	// Cantor(s) information
-	Cantors        []*CantorInfo
+	Cantors        map[string]*CantorInfo
 	SelectedCantor string
 
 	// Modal widgets
