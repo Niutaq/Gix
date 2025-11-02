@@ -215,6 +215,35 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 	}
 }
 
+func handleFrameEvent(gtx layout.Context, window *app.Window, state *utilities.AppState, theme *material.Theme, ops *op.Ops) {
+	renderBackground(gtx, ops)
+
+	// // Set the background color
+	// screenHeight := float32(gtx.Constraints.Max.Y)
+
+	// colorAtMiddle := color.NRGBA{R: 5, G: 5, B: 0, A: 255}
+	// colorAtBottom := utilities.AppColors.Accent1
+
+	// paint.LinearGradientOp{
+	// 	Stop1:  f32.Pt(0, screenHeight*0.99),
+	// 	Stop2:  f32.Pt(0, screenHeight),
+	// 	Color1: colorAtMiddle,
+	// 	Color2: colorAtBottom,
+	// }.Add(gtx.Ops)
+	// paint.PaintOp{}.Add(gtx.Ops)
+
+	state.LastFrameTime = time.Now()
+
+	if state.IsLoading.Load() {
+		window.Invalidate()
+	}
+
+	handleCantorClicks(gtx, window, state)
+
+	// UI rendering
+	utilities.LayoutUI(gtx, theme, state)
+}
+
 // Function to handle window input
 func run(window *app.Window) error {
 	// Operations and background image initialization
@@ -291,32 +320,9 @@ func run(window *app.Window) error {
 		case app.FrameEvent:
 					gtx := app.NewContext(&ops, e)
 		
-					renderBackground(gtx, &ops)
-			// // Set the background color
-			// screenHeight := float32(gtx.Constraints.Max.Y)
-
-			// colorAtMiddle := color.NRGBA{R: 5, G: 5, B: 0, A: 255}
-			// colorAtBottom := utilities.AppColors.Accent1
-
-			// paint.LinearGradientOp{
-			// 	Stop1:  f32.Pt(0, screenHeight*0.99),
-			// 	Stop2:  f32.Pt(0, screenHeight),
-			// 	Color1: colorAtMiddle,
-			// 	Color2: colorAtBottom,
-			// }.Add(gtx.Ops)
-			// paint.PaintOp{}.Add(gtx.Ops)
-
-			state.LastFrameTime = time.Now()
-
-			if state.IsLoading.Load() {
-				window.Invalidate()
-			}
-
-				handleCantorClicks(gtx, window, state)
-
-			// UI rendering
-			utilities.LayoutUI(gtx, theme, state)
-			e.Frame(gtx.Ops)
+									handleFrameEvent(gtx, window, state, theme, &ops)
+		
+									e.Frame(gtx.Ops)
 		}
 	}
 }
