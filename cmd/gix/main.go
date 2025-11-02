@@ -37,7 +37,6 @@ import (
 	"gioui.org/app"
 	"gioui.org/f32"
 	"gioui.org/font"
-	"gioui.org/font/opentype"
 	"gioui.org/op"
 	"gioui.org/op/paint"
 	"gioui.org/text"
@@ -102,40 +101,22 @@ func initBackgroundImage() {
 // Font handling
 // Credits: g45t345rt
 func loadFontCollection() ([]font.FontFace, error) {
-	PoppinsRegularTTF, err := reading_data.GetFont("fonts/Kanit-Regular.ttf")
-	if err != nil {
-		log.Fatalf("Error reading font: %v", err)
+	var fontCollection []font.FontFace
+
+	fontPaths := []string{
+		"fonts/Kanit-Regular.ttf",
+		"fonts/RubikScribble-Regular.ttf",
+		"fonts/NotoSans-Regular.ttf",
 	}
 
-	PoppinsRegular, err := opentype.Parse(PoppinsRegularTTF)
-	if err != nil {
-		return nil, err
-	}
-	// ---
-	RubikScribbleRegularTTF, err := reading_data.GetFont("fonts/RubikScribble-Regular.ttf")
-	if err != nil {
-		log.Fatalf("Error reading font: %v", err)
+	for _, path := range fontPaths {
+		face, err := reading_data.LoadAndParseFont(path)
+		if err != nil {
+			return nil, err // Return error to caller
+		}
+		fontCollection = append(fontCollection, face)
 	}
 
-	RubikScribbleRegular, err := opentype.Parse(RubikScribbleRegularTTF)
-	if err != nil {
-		return nil, err
-	}
-	// ---
-	NotoSansRegularTTF, err := reading_data.GetFont("fonts/NotoSans-Regular.ttf")
-	if err != nil {
-		log.Fatalf("Error reading font: %v", err)
-	}
-
-	NotoSansRegular, err := opentype.Parse(NotoSansRegularTTF)
-	if err != nil {
-		return nil, err
-	}
-	// ---
-	fontCollection := []font.FontFace{}
-	fontCollection = append(fontCollection, font.FontFace{Font: font.Font{Weight: font.Normal}, Face: PoppinsRegular})
-	fontCollection = append(fontCollection, font.FontFace{Font: font.Font{Weight: font.Bold}, Face: RubikScribbleRegular})
-	fontCollection = append(fontCollection, font.FontFace{Font: font.Font{Weight: font.SemiBold}, Face: NotoSansRegular})
 	return fontCollection, nil
 }
 
@@ -190,7 +171,10 @@ func run(window *app.Window) error {
 
 	fontCollection, err := loadFontCollection()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Warning: Failed to load font collection: %v", err)
+		// Optionally, you can return the error or use a default font collection
+		// For now, we'll proceed with an empty font collection if loading fails
+		fontCollection = []font.FontFace{}
 	}
 
 	theme := material.NewTheme()
