@@ -39,6 +39,7 @@ import (
 	"gioui.org/app"
 	"gioui.org/f32"
 	"gioui.org/font"
+	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/paint"
 	"gioui.org/text"
@@ -125,6 +126,51 @@ func loadFontCollection() ([]font.FontFace, error) {
 	return fontCollection, nil
 }
 
+func renderBackground(gtx layout.Context, ops *op.Ops) {
+	if backgroundImageLoaded && originalBackgroundImage != nil {
+		imgBounds := originalBackgroundImage.Bounds()
+		imgWidth := float32(imgBounds.Dx())
+		imgHeight := float32(imgBounds.Dy())
+
+		winWidth := float32(gtx.Constraints.Max.X)
+		winHeight := float32(gtx.Constraints.Max.Y)
+
+		if imgWidth == 0 || imgHeight == 0 || winWidth == 0 || winHeight == 0 {
+			paint.Fill(gtx.Ops, utilities.AppColors.Background)
+		} else {
+			scaleX := winWidth / imgWidth
+			scaleY := winHeight / imgHeight
+
+			var finalScale float32
+			var offsetX, offsetY float32
+
+			if scaleX > scaleY {
+				finalScale = scaleX
+				scaledImgHeight := imgHeight * finalScale
+				offsetY = (winHeight - scaledImgHeight) / 2
+				offsetX = 0
+			} else {
+				finalScale = scaleY
+				scaledImgWidth := imgWidth * finalScale
+				offsetX = (winWidth - scaledImgWidth) / 2
+				offsetY = 0
+			}
+
+			transform := op.Affine(f32.Affine2D{}.
+				Scale(f32.Pt(0, 0), f32.Pt(finalScale, finalScale)).
+				Offset(f32.Pt(offsetX, offsetY)))
+
+			stack := transform.Push(gtx.Ops)
+
+			paintableBackgroundImage.Add(gtx.Ops)
+			paint.PaintOp{}.Add(gtx.Ops)
+			stack.Pop()
+		}
+	} else {
+		paint.Fill(gtx.Ops, utilities.AppColors.Background)
+	}
+}
+
 // Function to handle window input
 func run(window *app.Window) error {
 	// Operations and background image initialization
@@ -199,51 +245,9 @@ func run(window *app.Window) error {
 		case app.DestroyEvent:
 			return e.Err
 		case app.FrameEvent:
-			gtx := app.NewContext(&ops, e)
-
-			if backgroundImageLoaded && originalBackgroundImage != nil {
-				imgBounds := originalBackgroundImage.Bounds()
-				imgWidth := float32(imgBounds.Dx())
-				imgHeight := float32(imgBounds.Dy())
-
-				winWidth := float32(gtx.Constraints.Max.X)
-				winHeight := float32(gtx.Constraints.Max.Y)
-
-				if imgWidth == 0 || imgHeight == 0 || winWidth == 0 || winHeight == 0 {
-					paint.Fill(gtx.Ops, utilities.AppColors.Background)
-				} else {
-					scaleX := winWidth / imgWidth
-					scaleY := winHeight / imgHeight
-
-					var finalScale float32
-					var offsetX, offsetY float32
-
-					if scaleX > scaleY {
-						finalScale = scaleX
-						scaledImgHeight := imgHeight * finalScale
-						offsetY = (winHeight - scaledImgHeight) / 2
-						offsetX = 0
-					} else {
-						finalScale = scaleY
-						scaledImgWidth := imgWidth * finalScale
-						offsetX = (winWidth - scaledImgWidth) / 2
-						offsetY = 0
-					}
-
-					transform := op.Affine(f32.Affine2D{}.
-						Scale(f32.Pt(0, 0), f32.Pt(finalScale, finalScale)).
-						Offset(f32.Pt(offsetX, offsetY)))
-
-					stack := transform.Push(gtx.Ops)
-
-					paintableBackgroundImage.Add(gtx.Ops)
-					paint.PaintOp{}.Add(gtx.Ops)
-					stack.Pop()
-				}
-			} else {
-				paint.Fill(gtx.Ops, utilities.AppColors.Background)
-			}
-
+					gtx := app.NewContext(&ops, e)
+		
+					renderBackground(gtx, &ops)
 			// // Set the background color
 			// screenHeight := float32(gtx.Constraints.Max.Y)
 
