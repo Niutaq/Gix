@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"fmt"
 	"image"
 	_ "image/png"
 	"log"
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	// Go files
+	"github.com/Niutaq/Gix/pkg/config"
 	"github.com/Niutaq/Gix/pkg/fetching_data"
 	"github.com/Niutaq/Gix/pkg/reading_data"
 	"github.com/Niutaq/Gix/pkg/utilities"
@@ -49,6 +51,9 @@ import (
 //
 //go:embed res/background.png
 var backgroundImageFS embed.FS
+
+//go:embed config.json
+var configFS embed.FS
 
 var (
 	originalBackgroundImage  image.Image
@@ -126,31 +131,39 @@ func run(window *app.Window) error {
 	var ops op.Ops
 	initBackgroundImage()
 
-	definedCantors := []*utilities.CantorInfo{
-		{
-			ID:                  "tadek",
-			Displayname:         "cantor_tadek_name",
-			URL:                 "https://kantorstalowawola.tadek.pl",
-			Fetcher:             fetching_data.FetchRatesC1,
-			DefaultTimeout:      20 * time.Second,
-			NeedsRateFormatting: true,
-		},
-		{
-			ID:                  "kwadrat",
-			Displayname:         "cantor_kwadrat_name",
-			URL:                 "https://kantory-rzeszow.pl/tabela.htm",
-			Fetcher:             fetching_data.FetchRatesC2,
-			DefaultTimeout:      60 * time.Second,
-			NeedsRateFormatting: false,
-		},
-		{
-			ID:                  "supersam",
-			Displayname:         "cantor_supersam_name",
-			URL:                 "http://www.kantorsupersam.pl/",
-			Fetcher:             fetching_data.FetchRatesC3,
-			DefaultTimeout:      20 * time.Second,
-			NeedsRateFormatting: false,
-		},
+	// Load cantor configurations from config.json
+	configData, err := configFS.ReadFile("config.json")
+	if err != nil {
+		return fmt.Errorf("failed to read config.json: %w", err)
+	}
+
+	cantorConfigs, err := config.LoadCantorConfigFromBytes(configData)
+	if err != nil {
+		return fmt.Errorf("failed to load cantor configurations: %w", err)
+	}
+
+	definedCantors := make([]*utilities.CantorInfo, len(cantorConfigs))
+	for i, cfg := range cantorConfigs {
+		var fetcher utilities.FetcherFunc
+		switch cfg.ID {
+		case "tadek":
+			fetcher = fetching_data.FetchRatesC1
+		case "kwadrat":
+			fetcher = fetching_data.FetchRatesC2
+		case "supersam":
+			fetcher = fetching_data.FetchRatesC3
+		default:
+			return fmt.Errorf("unknown cantor ID in config: %s", cfg.ID)
+		}
+
+		definedCantors[i] = &utilities.CantorInfo{
+			ID:                  cfg.ID,
+			Displayname:         cfg.Displayname,
+			URL:                 cfg.URL,
+			Fetcher:             fetcher,
+			DefaultTimeout:      cfg.DefaultTimeout,
+			NeedsRateFormatting: cfg.NeedsRateFormatting,
+		}
 	}
 
 	state := &utilities.AppState{
