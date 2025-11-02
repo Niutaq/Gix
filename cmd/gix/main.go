@@ -261,8 +261,8 @@ func run(window *app.Window) error {
 		return fmt.Errorf("failed to load cantor configurations: %w", err)
 	}
 
-	definedCantors := make([]*utilities.CantorInfo, len(cantorConfigs))
-	for i, cfg := range cantorConfigs {
+	definedCantors := make(map[string]*utilities.CantorInfo)
+	for _, cfg := range cantorConfigs {
 		var fetcher utilities.FetcherFunc
 		switch cfg.ID {
 		case "tadek":
@@ -275,7 +275,7 @@ func run(window *app.Window) error {
 			return fmt.Errorf("unknown cantor ID in config: %s", cfg.ID)
 		}
 
-		definedCantors[i] = &utilities.CantorInfo{
+		definedCantors[cfg.ID] = &utilities.CantorInfo{
 			ID:                  cfg.ID,
 			Displayname:         cfg.Displayname,
 			URL:                 cfg.URL,
