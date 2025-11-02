@@ -29,9 +29,9 @@ import (
 	"time"
 
 	// Go files
-	"github.com/Niutaq/Gix/fetching_data"
-	"github.com/Niutaq/Gix/reading_data"
-	"github.com/Niutaq/Gix/utilities"
+	"github.com/Niutaq/Gix/pkg/fetching_data"
+	"github.com/Niutaq/Gix/pkg/reading_data"
+	"github.com/Niutaq/Gix/pkg/utilities"
 
 	// Gio utilities
 	"gioui.org/app"

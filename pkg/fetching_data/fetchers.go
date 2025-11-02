@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Niutaq/Gix/utilities"
+	"github.com/Niutaq/Gix/pkg/utilities"
 	"github.com/PuerkitoBio/goquery"
 )
 
