@@ -171,6 +171,50 @@ func renderBackground(gtx layout.Context, ops *op.Ops) {
 	}
 }
 
+func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities.AppState) {
+	for i := range state.Cantors {
+		cantor := state.Cantors[i]
+
+		if cantor.Button.Clicked(gtx) {
+			if state.SelectedCantor == cantor.ID {
+				state.SelectedCantor = ""
+				state.Vault.LastEntry = nil
+			} else {
+				state.SelectedCantor = cantor.ID
+				state.IsLoading.Store(true)
+				state.IsLoadingStart = time.Now()
+				state.Vault.LastEntry = nil
+
+				go func(w *app.Window, cInfo *utilities.CantorInfo, currentCurrency string, currentAppState *utilities.AppState) {
+					ctx, cancel := context.WithTimeout(context.Background(), cInfo.DefaultTimeout)
+					defer cancel()
+
+					rates, fetchErr := cInfo.Fetcher(ctx, cInfo.URL, currentCurrency, currentAppState)
+
+					currentAppState.Vault.Mu.Lock()
+					if currentAppState.SelectedCantor == cInfo.ID {
+						if fetchErr != nil {
+							currentAppState.Vault.LastEntry = &utilities.CantorEntry{
+								URL:   cInfo.URL,
+								Error: fetchErr.Error(),
+							}
+						} else {
+							currentAppState.Vault.LastEntry = &utilities.CantorEntry{
+								URL:  cInfo.URL,
+								Rate: rates,
+							}
+						}
+					}
+					currentAppState.Vault.Mu.Unlock()
+
+					currentAppState.IsLoading.Store(false)
+					w.Invalidate()
+				}(window, cantor, state.Currency, state)
+			}
+		}
+	}
+}
+
 // Function to handle window input
 func run(window *app.Window) error {
 	// Operations and background image initialization
@@ -268,47 +312,7 @@ func run(window *app.Window) error {
 				window.Invalidate()
 			}
 
-			for i := range state.Cantors {
-				cantor := state.Cantors[i]
-
-				if cantor.Button.Clicked(gtx) {
-					if state.SelectedCantor == cantor.ID {
-						state.SelectedCantor = ""
-						state.Vault.LastEntry = nil
-					} else {
-						state.SelectedCantor = cantor.ID
-						state.IsLoading.Store(true)
-						state.IsLoadingStart = time.Now()
-						state.Vault.LastEntry = nil
-
-						go func(w *app.Window, cInfo *utilities.CantorInfo, currentCurrency string, currentAppState *utilities.AppState) {
-							ctx, cancel := context.WithTimeout(context.Background(), cInfo.DefaultTimeout)
-							defer cancel()
-
-							rates, fetchErr := cInfo.Fetcher(ctx, cInfo.URL, currentCurrency, currentAppState)
-
-							currentAppState.Vault.Mu.Lock()
-							if currentAppState.SelectedCantor == cInfo.ID {
-								if fetchErr != nil {
-									currentAppState.Vault.LastEntry = &utilities.CantorEntry{
-										URL:   cInfo.URL,
-										Error: fetchErr.Error(),
-									}
-								} else {
-									currentAppState.Vault.LastEntry = &utilities.CantorEntry{
-										URL:  cInfo.URL,
-										Rate: rates,
-									}
-								}
-							}
-							currentAppState.Vault.Mu.Unlock()
-
-							currentAppState.IsLoading.Store(false)
-							w.Invalidate()
-						}(window, cantor, state.Currency, state)
-					}
-				}
-			}
+				handleCantorClicks(gtx, window, state)
 
 			// UI rendering
 			utilities.LayoutUI(gtx, theme, state)
