@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Niutaq/Gix/utilities"
+	"github.com/Niutaq/Gix/pkg/utilities"
 	"github.com/PuerkitoBio/goquery"
 )
 
@@ -23,8 +23,8 @@ var httpClient = &http.Client{
 
 // Function to get the language from the AppState
 func getLang(state *utilities.AppState) string {
-	if state != nil && state.SelectedLanguage != "" {
-		return state.SelectedLanguage
+	if state != nil && state.UI.SelectedLanguage != "" {
+		return state.UI.SelectedLanguage
 	}
 	return "EN"
 }
