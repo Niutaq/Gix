@@ -126,6 +126,7 @@ func loadFontCollection() ([]font.FontFace, error) {
 	return fontCollection, nil
 }
 
+// Rendering background
 func renderBackground(gtx layout.Context, ops *op.Ops) {
 	if backgroundImageLoaded && originalBackgroundImage != nil {
 		imgBounds := originalBackgroundImage.Bounds()
@@ -171,28 +172,30 @@ func renderBackground(gtx layout.Context, ops *op.Ops) {
 	}
 }
 
+// Cantors handling
 func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities.AppState) {
 	for i := range state.Cantors {
 		cantor := state.Cantors[i]
 
 		if cantor.Button.Clicked(gtx) {
-			if state.SelectedCantor == cantor.ID {
-				state.SelectedCantor = ""
+			if state.UI.SelectedCantor == cantor.ID {
+				state.UI.SelectedCantor = ""
 				state.Vault.LastEntry = nil
 			} else {
-				state.SelectedCantor = cantor.ID
+				state.UI.SelectedCantor = cantor.ID
 				state.IsLoading.Store(true)
 				state.IsLoadingStart = time.Now()
 				state.Vault.LastEntry = nil
 
-				go func(w *app.Window, cInfo *utilities.CantorInfo, currentCurrency string, currentAppState *utilities.AppState) {
+				go func(w *app.Window, cInfo *utilities.CantorInfo, currentCurrency string,
+					currentAppState *utilities.AppState) {
 					ctx, cancel := context.WithTimeout(context.Background(), cInfo.DefaultTimeout)
 					defer cancel()
 
 					rates, fetchErr := cInfo.Fetcher(ctx, cInfo.URL, currentCurrency, currentAppState)
 
 					currentAppState.Vault.Mu.Lock()
-					if currentAppState.SelectedCantor == cInfo.ID {
+					if currentAppState.UI.SelectedCantor == cInfo.ID {
 						if fetchErr != nil {
 							currentAppState.Vault.LastEntry = &utilities.CantorEntry{
 								URL:   cInfo.URL,
@@ -209,13 +212,15 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 
 					currentAppState.IsLoading.Store(false)
 					w.Invalidate()
-				}(window, cantor, state.Currency, state)
+				}(window, cantor, state.UI.Currency, state)
 			}
 		}
 	}
 }
 
-func handleFrameEvent(gtx layout.Context, window *app.Window, state *utilities.AppState, theme *material.Theme, ops *op.Ops) {
+// Event frame
+func handleFrameEvent(gtx layout.Context, window *app.Window, state *utilities.AppState,
+	theme *material.Theme, ops *op.Ops) {
 	renderBackground(gtx, ops)
 
 	// // Set the background color
@@ -253,12 +258,12 @@ func run(window *app.Window) error {
 	// Load cantor configurations from config.json
 	configData, err := configFS.ReadFile("config.json")
 	if err != nil {
-		return fmt.Errorf("failed to read config.json: %w", err)
+		return fmt.Errorf("Failed to read config.json: %w", err)
 	}
 
 	cantorConfigs, err := config.LoadCantorConfigFromBytes(configData)
 	if err != nil {
-		return fmt.Errorf("failed to load cantor configurations: %w", err)
+		return fmt.Errorf("Failed to load cantor configurations: %w", err)
 	}
 
 	definedCantors := make(map[string]*utilities.CantorInfo)
@@ -277,35 +282,39 @@ func run(window *app.Window) error {
 
 		definedCantors[cfg.ID] = &utilities.CantorInfo{
 			ID:                  cfg.ID,
-			Displayname:         cfg.Displayname,
+			DisplayName:         cfg.DisplayName,
 			URL:                 cfg.URL,
 			Fetcher:             fetcher,
-			DefaultTimeout:      cfg.DefaultTimeout,
+			DefaultTimeout:      cfg.DefaultTimeout.Duration,
 			NeedsRateFormatting: cfg.NeedsRateFormatting,
 		}
 	}
 
 	state := &utilities.AppState{
-		Vault:           &utilities.CantorVault{},
-		Language:        "EN",
-		Currency:        "EUR",
-		LanguageOptions: []string{"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ", "HR", "HU", "UA", "BU", "RO", "AL", "TR", "IC"},
-		CurrencyOptions: []string{"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF", "SEK", "CZK", "HRF", "HUF", "UAH", "BGN", "RON", "LEK", "TRY", "ISK"},
-		LanguageOptionButtons: make([]widget.Clickable, len([]string{
-			"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ", "HR", "HU", "UA", "BU", "RO", "AL", "TR", "IC",
-		})),
-		CurrencyOptionButtons: make([]widget.Clickable, len([]string{
-			"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF", "SEK", "CZK", "HRF", "HUF", "UAH", "BGN", "RON", "LEK", "TRY", "ISK",
-		})),
+		Vault:         &utilities.CantorVault{},
 		Cantors:       definedCantors,
 		LastFrameTime: time.Now(),
+		UI: utilities.UIState{
+			Language: "EN",
+			Currency: "EUR",
+			LanguageOptions: []string{"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ", "HR", "HU", "UA",
+				"BU", "RO", "AL", "TR", "IC"},
+			CurrencyOptions: []string{"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF", "SEK", "CZK",
+				"HRF", "HUF", "UAH", "BGN", "RON", "LEK", "TRY", "ISK"},
+			LanguageOptionButtons: make([]widget.Clickable, len([]string{
+				"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ", "HR", "HU", "UA", "BU", "RO", "AL",
+				"TR", "IC",
+			})),
+			CurrencyOptionButtons: make([]widget.Clickable, len([]string{
+				"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF", "SEK", "CZK", "HRF", "HUF", "UAH",
+				"BGN", "RON", "LEK", "TRY", "ISK",
+			})),
+		},
 	}
 
 	fontCollection, err := loadFontCollection()
 	if err != nil {
 		log.Printf("Warning: Failed to load font collection: %v", err)
-		// Optionally, you can return the error or use a default font collection
-		// For now, we'll proceed with an empty font collection if loading fails
 		fontCollection = []font.FontFace{}
 	}
 
@@ -318,11 +327,11 @@ func run(window *app.Window) error {
 		case app.DestroyEvent:
 			return e.Err
 		case app.FrameEvent:
-					gtx := app.NewContext(&ops, e)
-		
-									handleFrameEvent(gtx, window, state, theme, &ops)
-		
-									e.Frame(gtx.Ops)
+			gtx := app.NewContext(&ops, e)
+
+			handleFrameEvent(gtx, window, state, theme, &ops)
+
+			e.Frame(gtx.Ops)
 		}
 	}
 }

@@ -3,21 +3,21 @@
     "id": "tadek",
     "displayname": "cantor_tadek_name",
     "url": "https://kantorstalowawola.tadek.pl",
-    "defaultTimeout": "20s",
+    "defaultTimeout": "5s",
     "needsRateFormatting": true
   },
   {
     "id": "kwadrat",
     "displayname": "cantor_kwadrat_name",
     "url": "https://kantory-rzeszow.pl/tabela.htm",
-    "defaultTimeout": "60s",
+    "defaultTimeout": "10s",
     "needsRateFormatting": false
   },
   {
     "id": "supersam",
     "displayname": "cantor_supersam_name",
     "url": "http://www.kantorsupersam.pl/",
-    "defaultTimeout": "20s",
+    "defaultTimeout": "12s",
     "needsRateFormatting": false
   }
 ]
