@@ -48,8 +48,8 @@ func DrawProgressBar(gtx layout.Context, theme *material.Theme, state *AppState)
 	elapsed := time.Since(state.IsLoadingStart).Seconds()
 
 	var totalDuration float32 = 5.0
-	if state.SelectedCantor != "" {
-		if c, ok := state.Cantors[state.SelectedCantor]; ok {
+	if state.UI.SelectedCantor != "" {
+		if c, ok := state.Cantors[state.UI.SelectedCantor]; ok {
 			totalDuration = float32(c.DefaultTimeout.Seconds())
 		}
 	}
@@ -93,7 +93,7 @@ func DrawProgressBar(gtx layout.Context, theme *material.Theme, state *AppState)
 		NE:   bgRadius, NW: bgRadius, SE: bgRadius, SW: bgRadius,
 	}
 	paint.FillShape(gtx.Ops,
-		color.NRGBA{R: 255, G: 255, B: 0, A: alpha},
+		color.NRGBA{R: 230, G: 135, B: 0, A: alpha},
 		fill.Op(gtx.Ops),
 	)
 
@@ -109,12 +109,12 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 	entry := state.Vault.LastEntry
 	state.Vault.Mu.Unlock()
 
-	if entry == nil || state.SelectedCantor == "" {
+	if entry == nil || state.UI.SelectedCantor == "" {
 		return layout.Dimensions{}
 	}
 
 	if entry.Error != "" {
-		errorMsg := GetTranslation(state.Language, "errorPrefix") + ": " + entry.Error
+		errorMsg := GetTranslation(state.UI.Language, "errorPrefix") + ": " + entry.Error
 		errorText := material.Body1(theme, errorMsg)
 		errorText.Color = AppColors.Error
 		errorText.TextSize = unit.Sp(18)
@@ -135,7 +135,7 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 	var errBuy, errSell error
 
 	needsDivision := false
-	if c, ok := state.Cantors[state.SelectedCantor]; ok {
+	if c, ok := state.Cantors[state.UI.SelectedCantor]; ok {
 		needsDivision = c.NeedsRateFormatting
 	}
 
@@ -143,7 +143,7 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 	sellRateStr, errSell = FormatRate(entry.Rate.SellRate, needsDivision)
 
 	if errBuy != nil || errSell != nil {
-		errorMsg := GetTranslation(state.Language, "errorPrefix") + ": " + GetTranslation(state.Language, "invalidRateFormat")
+		errorMsg := GetTranslation(state.UI.Language, "errorPrefix") + ": " + GetTranslation(state.UI.Language, "invalidRateFormat")
 		errorText := material.Body1(theme, errorMsg)
 		errorText.Color = AppColors.Error
 		errorText.TextSize = unit.Sp(18)
@@ -155,30 +155,30 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 	sellRateFloat, errS := strconv.ParseFloat(strings.ReplaceAll(sellRateStr, ",", "."), 64)
 
 	if errB != nil || errS != nil {
-		errorMsg := GetTranslation(state.Language, "errorPrefix") + ": " + GetTranslation(state.Language, "internalRateError")
+		errorMsg := GetTranslation(state.UI.Language, "errorPrefix") + ": " + GetTranslation(state.UI.Language, "internalRateError")
 		errorText := material.Body1(theme, errorMsg)
 		return layout.Center.Layout(gtx, errorText.Layout)
 	}
 
-	buyLabel := GetTranslation(state.Language, "buyLabel")
-	sellLabel := GetTranslation(state.Language, "sellLabel")
+	buyLabel := GetTranslation(state.UI.Language, "buyLabel")
+	sellLabel := GetTranslation(state.UI.Language, "sellLabel")
 
 	rateTextBuy := material.H4(theme, fmt.Sprintf("%s: %.3f %s",
 		buyLabel,
 		buyRateFloat,
-		state.Currency,
+		state.UI.Currency,
 	))
 
-	rateTextBuy.Color = AppColors.Success
+	rateTextBuy.Color = AppColors.Accent2
 	rateTextBuy.Alignment = text.Middle
 
 	rateTextSell := material.H4(theme, fmt.Sprintf("%s: %.3f %s",
 		sellLabel,
 		sellRateFloat,
-		state.Currency,
+		state.UI.Currency,
 	))
 
-	rateTextSell.Color = AppColors.Error
+	rateTextSell.Color = AppColors.Accent3
 	rateTextSell.Alignment = text.Middle
 
 	return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -199,7 +199,7 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 				layout.Rigid(layout.Spacer{Height: unit.Dp(30)}.Layout),
 				// Title
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					title := material.H1(theme, GetTranslation(state.Language, "title"))
+					title := material.H1(theme, GetTranslation(state.UI.Language, "title"))
 					title.Alignment = text.Middle
 					title.TextSize = unit.Sp(120)
 					title.Font.Weight = font.Bold
@@ -209,12 +209,12 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 				layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
 				// Info
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					info := material.Body1(theme, GetTranslation(state.Language, "info"))
+					info := material.Body1(theme, GetTranslation(state.UI.Language, "info"))
 					info.Alignment = text.Middle
 					info.TextSize = unit.Sp(17)
 					info.Color = AppColors.Text
 					info.Font.Weight = font.Normal
-					if state.Language == "UA" || state.Language == "BU" {
+					if state.UI.Language == "UA" || state.UI.Language == "BU" {
 						info.Font.Weight = font.SemiBold
 					}
 					return info.Layout(gtx)
@@ -230,14 +230,15 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 						// Language button
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 
-							btn := material.Button(theme, &state.LangModalButton, state.Language)
+							btn := material.Button(theme, &state.UI.LangModalButton, state.UI.Language)
 							btn.Color = AppColors.Accent1
 							btn.Background = color.NRGBA{A: 0}
 							btn.CornerRadius = unit.Dp(6)
 							btn.TextSize = unit.Sp(16)
-							btn.Inset = layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}
-							if state.LangModalButton.Clicked(gtx) {
-								state.ModalOpen = "language"
+							btn.Inset = layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8),
+								Right: unit.Dp(8)}
+							if state.UI.LangModalButton.Clicked(gtx) {
+								state.UI.ModalOpen = "language"
 							}
 							return btn.Layout(gtx)
 						}),
@@ -245,14 +246,15 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 						// Currency button
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 
-							btn := material.Button(theme, &state.CurrencyModalButton, state.Currency)
+							btn := material.Button(theme, &state.UI.CurrencyModalButton, state.UI.Currency)
 							btn.Color = AppColors.Accent1
 							btn.Background = color.NRGBA{A: 0}
 							btn.CornerRadius = unit.Dp(6)
 							btn.TextSize = unit.Sp(16)
-							btn.Inset = layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}
-							if state.CurrencyModalButton.Clicked(gtx) {
-								state.ModalOpen = "currency"
+							btn.Inset = layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8),
+								Right: unit.Dp(8)}
+							if state.UI.CurrencyModalButton.Clicked(gtx) {
+								state.UI.ModalOpen = "currency"
 							}
 							return btn.Layout(gtx)
 						}),
@@ -274,17 +276,17 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 				}
 				gtx.Constraints.Max.X = maxWidth
 
-						cantorIDs := make([]string, 0, len(state.Cantors))
-						for id := range state.Cantors {
-							cantorIDs = append(cantorIDs, id)
-						}
-						sort.Strings(cantorIDs)
+				cantorIDs := make([]string, 0, len(state.Cantors))
+				for id := range state.Cantors {
+					cantorIDs = append(cantorIDs, id)
+				}
+				sort.Strings(cantorIDs)
 
-						return material.List(theme, &list).Layout(gtx, len(cantorIDs),
-							func(gtx layout.Context, i int) layout.Dimensions {
-								cantor := state.Cantors[cantorIDs[i]]
-						displayName := GetTranslation(state.Language, cantor.Displayname)
-						if displayName == cantor.Displayname {
+				return material.List(theme, &list).Layout(gtx, len(cantorIDs),
+					func(gtx layout.Context, i int) layout.Dimensions {
+						cantor := state.Cantors[cantorIDs[i]]
+						displayName := GetTranslation(state.UI.Language, cantor.DisplayName)
+						if displayName == cantor.DisplayName {
 							displayName = cantor.ID
 						}
 
@@ -299,7 +301,7 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 								button.Inset = layout.UniformInset(unit.Dp(12))
 								button.CornerRadius = unit.Dp(8)
 
-								if state.SelectedCantor == cantor.ID {
+								if state.UI.SelectedCantor == cantor.ID {
 									return widget.Border{
 										Color:        AppColors.Accent1,
 										Width:        unit.Dp(2.5),
@@ -315,7 +317,7 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 		// Section for loading progress bar
 		// This section is displayed when the app is loading data from the selected Cantor
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			if state.IsLoading.Load() && state.SelectedCantor != "" {
+			if state.IsLoading.Load() && state.UI.SelectedCantor != "" {
 				return layout.Inset{Top: unit.Dp(15), Bottom: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return DrawProgressBar(gtx, theme, state)
@@ -332,9 +334,9 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 		}),
 	)
 
-	if state.ModalOpen != "" {
+	if state.UI.ModalOpen != "" {
 		var modalContent layout.Widget
-		switch state.ModalOpen {
+		switch state.UI.ModalOpen {
 		case "language":
 			modalContent = func(gtx layout.Context) layout.Dimensions {
 				return LanguageModal(gtx, theme, state)
@@ -352,94 +354,116 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 
 // LanguageModal and CurrencyModal are the modal dialogs for selecting language and currency respectively.
 func LanguageModal(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
-	title := GetTranslation(state.Language, "↓")
-	if lbl := GetTranslation(state.Language, "selectLanguageTitle"); lbl != "selectLanguageTitle" {
+	title := GetTranslation(state.UI.Language, "===")
+	if lbl := GetTranslation(state.UI.Language, "selectLanguageTitle"); lbl != "selectLanguageTitle" {
 		title = lbl
 	}
-	return ModalOverlay(gtx, theme, state, func(gtx layout.Context) layout.Dimensions {
+	return ModalOverlay(gtx, state, func(gtx layout.Context) layout.Dimensions {
 		return ModalDialog(
 			gtx,
 			theme,
 			title,
-			state.LanguageOptions,
-			state.LanguageOptionButtons,
+			state.UI.LanguageOptions,
+			state.UI.LanguageOptionButtons,
 			func(lang string) {
-				state.Language = lang
-				state.ModalOpen = ""
+				state.UI.Language = lang
+				state.UI.ModalOpen = ""
 			},
+			state,
 		)
 	})
 }
 
 func CurrencyModal(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
-	title := GetTranslation(state.Currency, "↓")
-	if lbl := GetTranslation(state.Currency, "selectCurrencyTitle"); lbl != "selectCurrencyTitle" {
+	title := GetTranslation(state.UI.Currency, "===")
+	if lbl := GetTranslation(state.UI.Currency, "selectCurrencyTitle"); lbl != "selectCurrencyTitle" {
 		title = lbl
 	}
-	return ModalOverlay(gtx, theme, state, func(gtx layout.Context) layout.Dimensions {
+	return ModalOverlay(gtx, state, func(gtx layout.Context) layout.Dimensions {
 		return ModalDialog(
 			gtx,
 			theme,
 			title,
-			state.CurrencyOptions,
-			state.CurrencyOptionButtons,
+			state.UI.CurrencyOptions,
+			state.UI.CurrencyOptionButtons,
 			func(currency string) {
-				state.Currency = currency
-				state.ModalOpen = ""
+				state.UI.Currency = currency
+				state.UI.ModalOpen = ""
 			},
+			state,
 		)
 	})
 }
 
 // Draws the modal overlay
-func ModalOverlay(gtx layout.Context, theme *material.Theme, state *AppState, content layout.Widget) layout.Dimensions {
+func ModalOverlay(gtx layout.Context, state *AppState, content layout.Widget) layout.Dimensions {
 	paint.Fill(gtx.Ops, color.NRGBA{A: 210})
 
-	if state.ModalClick.Clicked(gtx) {
-		state.ModalOpen = ""
-	}
+	clickedOutside := state.UI.ModalClick.Clicked(gtx)
 
-	return layout.Stack{Alignment: layout.Center}.Layout(gtx,
+	result := layout.Stack{Alignment: layout.S}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			return state.ModalClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return state.UI.ModalClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			})
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			modalMaxWidth := gtx.Dp(unit.Dp(300))
-			modalMaxHeight := gtx.Dp(unit.Dp(300))
+			return layout.Inset{Bottom: unit.Dp(50)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 
-			availableWidth := gtx.Constraints.Max.X - gtx.Dp(unit.Dp(40))
-			availableHeight := gtx.Constraints.Max.Y - gtx.Dp(unit.Dp(80))
+				var modalMaxWidth, modalMaxHeight int
+				switch state.UI.ModalOpen {
+				case "language":
+					modalMaxWidth = gtx.Dp(unit.Dp(350))
+					modalMaxHeight = gtx.Dp(unit.Dp(500))
+				case "currency":
+					modalMaxWidth = gtx.Dp(unit.Dp(350))
+					modalMaxHeight = gtx.Dp(unit.Dp(500))
+				default:
+					modalMaxWidth = gtx.Dp(unit.Dp(350))
+					modalMaxHeight = gtx.Dp(unit.Dp(450))
+				}
 
-			if modalMaxWidth > availableWidth {
-				modalMaxWidth = availableWidth
-			}
-			if modalMaxHeight > availableHeight {
-				modalMaxHeight = availableHeight
-			}
+				constrainedGtx := gtx
+				constrainedGtx.Constraints.Max.X = modalMaxWidth
+				constrainedGtx.Constraints.Max.Y = modalMaxHeight
 
-			// Ustaw ograniczenia dla wewnętrznego kontenera modala
-			constrainedGtx := gtx
-			constrainedGtx.Constraints.Max.X = modalMaxWidth
-			constrainedGtx.Constraints.Max.Y = modalMaxHeight
-
-			return widget.Border{
-				Color:        AppColors.Accent1,
-				Width:        unit.Dp(1.5),
-				CornerRadius: unit.Dp(10),
-			}.Layout(constrainedGtx, func(gtx layout.Context) layout.Dimensions {
-				max := gtx.Constraints.Max
-				rrect := clip.UniformRRect(image.Rectangle{Max: max}, gtx.Dp(10-1.5))
-				defer rrect.Push(gtx.Ops).Pop()
-				paint.Fill(gtx.Ops, AppColors.Background)
-
-				return layout.UniformInset(unit.Dp(12)).Layout(gtx, content)
+				return layout.Stack{}.Layout(constrainedGtx,
+					layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+						rect := image.Rectangle{Max: image.Point{X: modalMaxWidth, Y: modalMaxHeight}}
+						rrect := clip.UniformRRect(rect, gtx.Dp(10))
+						defer rrect.Push(gtx.Ops).Pop()
+						paint.Fill(gtx.Ops, AppColors.Background)
+						return layout.Dimensions{Size: image.Point{X: modalMaxWidth, Y: modalMaxHeight}}
+					}),
+					layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+						gtx.Constraints.Max.X = modalMaxWidth
+						gtx.Constraints.Max.Y = modalMaxHeight
+						return widget.Border{
+							Color:        AppColors.Accent1Dark,
+							Width:        unit.Dp(3),
+							CornerRadius: unit.Dp(10),
+						}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							return layout.Dimensions{Size: image.Point{X: modalMaxWidth, Y: modalMaxHeight}}
+						})
+					}),
+					layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+						gtx.Constraints.Max.X = modalMaxWidth
+						gtx.Constraints.Max.Y = modalMaxHeight
+						return layout.UniformInset(unit.Dp(12)).Layout(gtx, content)
+					}),
+				)
 			})
 		}),
 	)
+
+	if clickedOutside {
+		state.UI.ModalOpen = ""
+	}
+
+	return result
 }
 
+// Creates a modal dialog with dynamic sizing
 func ModalDialog(
 	gtx layout.Context,
 	theme *material.Theme,
@@ -447,43 +471,57 @@ func ModalDialog(
 	options []string,
 	buttons []widget.Clickable,
 	onSelect func(string),
+	state *AppState,
 ) layout.Dimensions {
 
 	return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
-		// Tytuł Modala
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			lbl := material.H6(theme, title)
 			lbl.Color = AppColors.Title
 			lbl.Alignment = text.Middle
-			lbl.TextSize = unit.Sp(17)
+			lbl.TextSize = unit.Sp(16)
 			return layout.Inset{Bottom: unit.Dp(10), Top: unit.Dp(5)}.Layout(gtx, lbl.Layout)
 		}),
 
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			list := widget.List{}
-			list.Axis = layout.Vertical
+			return layout.Inset{}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				// Scrollbar parameters
+				state.UI.ModalList.Axis = layout.Vertical
 
-			return material.List(theme, &list).Layout(gtx, len(options),
-				func(gtx layout.Context, i int) layout.Dimensions {
-					if i >= len(buttons) {
-						return layout.Dimensions{}
-					}
-					option := options[i]
-					btnWidget := &buttons[i]
+				listStyle := material.List(theme, &state.UI.ModalList)
 
-					if btnWidget.Clicked(gtx) {
-						onSelect(option)
-					}
+				listStyle.Indicator.MajorMinLen = unit.Dp(40)
+				listStyle.Indicator.MinorWidth = unit.Dp(8)
+				listStyle.Indicator.Color = AppColors.Accent1
+				listStyle.Indicator.HoverColor = AppColors.Accent1Dark
+				listStyle.Indicator.CornerRadius = unit.Dp(4)
 
-					button := material.Button(theme, btnWidget, option)
-					button.Background = AppColors.Button
-					button.Color = AppColors.Text
-					button.Inset = layout.UniformInset(unit.Dp(8))
-					button.TextSize = unit.Sp(15)
-					button.CornerRadius = unit.Dp(6)
+				return listStyle.Layout(gtx, len(options),
+					func(gtx layout.Context, i int) layout.Dimensions {
+						if i >= len(buttons) {
+							return layout.Dimensions{}
+						}
+						option := options[i]
+						btnWidget := &buttons[i]
 
-					return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, button.Layout)
-				})
+						if btnWidget.Clicked(gtx) {
+							onSelect(option)
+						}
+
+						return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(4), Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							gtx.Constraints.Min.X = gtx.Constraints.Max.X
+
+							button := material.Button(theme, btnWidget, option)
+							button.Background = AppColors.Button
+							button.Color = AppColors.Text
+							button.Inset = layout.UniformInset(unit.Dp(8))
+							button.TextSize = unit.Sp(15)
+							button.CornerRadius = unit.Dp(6)
+
+							return button.Layout(gtx)
+						})
+					})
+			})
 		}),
 	)
 }

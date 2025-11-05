@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	_ "sync/atomic"
 	"time"
 
 	"gioui.org/widget"
@@ -16,11 +17,11 @@ type FetcherFunc func(ctx context.Context, url, currency string, state *AppState
 type CantorInfo struct {
 	ID                  string
 	URL                 string
-	Displayname         string
+	DisplayName         string
 	Fetcher             FetcherFunc
-	Button              widget.Clickable
 	DefaultTimeout      time.Duration
 	NeedsRateFormatting bool
+	Button              widget.Clickable
 }
 
 // ExchangeRates holds the buy and sell rates for a currency.
@@ -49,34 +50,31 @@ type AppState struct {
 
 	// Cantor(s) information
 	Cantors        map[string]*CantorInfo
-	SelectedCantor string
+	LastFrameTime  time.Time
+	IsLoadingStart time.Time
+	IsLoading      atomic.Bool
 
-	// Modal widgets
+	// Additional widgets
+	// GradientOffset float32
+
+	UI UIState
+}
+
+// UIState holds UI-specific state and widgets.
+type UIState struct {
 	ModalOpen             string
 	LangModalButton       widget.Clickable
 	CurrencyModalButton   widget.Clickable
 	ModalClick            widget.Clickable
+	ModalList             widget.List
+	SelectedCantor        string
 	SelectedLanguage      string
 	LanguageOptions       []string
 	CurrencyOptions       []string
 	LanguageOptionButtons []widget.Clickable
 	CurrencyOptionButtons []widget.Clickable
-
-	// Language widgets
-	Language string
-
-	// Exchange currency widgets
-	Currency string
-	// TadekButton    widget.Clickable
-	// KwadratButton  widget.Clickable
-	// SupersamButton widget.Clickable
-
-	// Erros, indicators, etc.
-	LastInvalidation time.Time
-	IsLoading        atomic.Bool
-	IsLoadingStart   time.Time
-	LastFrameTime    time.Time
-
-	// Additional widgets
-	GradientOffset float32
+	GradientOffset        float32
+	Language              string
+	Currency              string
+	IsLoading             time.Time
 }
