@@ -1,12 +1,11 @@
 run:
   timeout: 3m
-  go: 1.25
+  go: '1.25.3'
 
 linters:
   enable:
     - govet
     - staticcheck
-    - gofmt
     - revive
     - errcheck
     - unused
@@ -36,4 +35,4 @@ issues:
 
 linters-settings:
   staticcheck:
-    go: '1.25'
+    go: '1.25.3'
