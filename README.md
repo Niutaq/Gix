@@ -1,7 +1,7 @@
 <div align="center">
 
 <!-- Logo placeholder - replace with your actual logo -->
-<img src="appicon.png" alt="GIX Logo" width="200"/>
+<img src="appicon.png" alt="GIX Logo" width="192"/>
 
 # GIX
 
@@ -99,7 +99,4 @@ go run ./cmd/gix/main.go
 
 ![Demo Video](demos/gix_demo_1.gif)
 
-</div>
-
----
 </div>
