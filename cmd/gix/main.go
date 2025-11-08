@@ -227,7 +227,9 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 						if err != nil {
 							fetchErr = fmt.Errorf("err_api_connection") // ZMIANA
 						} else {
-							defer resp.Body.Close()
+							defer func(Body io.ReadCloser) {
+								_ = Body.Close()
+							}(resp.Body)
 							if resp.StatusCode != http.StatusOK {
 								fetchErr = fmt.Errorf("err_api_response") // ZMIANA
 							} else {
@@ -290,8 +292,8 @@ func run(window *app.Window) error {
 		return fmt.Errorf("failed to connect to Gix API server (%s): %w", apiCantors, err)
 	}
 	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
+		if err := Body.Close(); err != nil {
+			log.Printf("failed to close response body: %v", err)
 		}
 	}(resp.Body)
 

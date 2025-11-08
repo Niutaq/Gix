@@ -94,7 +94,7 @@ func main() {
 	}
 }
 
-// ... (funkcje connectToDB i connectToRedis bez zmian) ...
+// connectToDB - a function for connecting to the database
 func connectToDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
@@ -106,6 +106,8 @@ func connectToDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error)
 	}
 	return pool, nil
 }
+
+// connectToRedis - a function for connecting to Redis
 func connectToRedis(ctx context.Context, redisURL string) (*redis.Client, error) {
 	opts, err := redis.ParseURL(redisURL)
 	if err != nil {
@@ -193,7 +195,7 @@ func handleCantorsList(app *AppState) http.HandlerFunc {
 	}
 }
 
-// ... (handleGetRates jest już poprawny, bez zmian) ...
+// handleGetRates - returns a rate for a given cantor and currency
 func handleGetRates(app *AppState) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Part 1: Getting data from a URL
@@ -337,18 +339,23 @@ func handleGetRates(app *AppState) http.HandlerFunc {
 	}
 }
 
-// ... (cleanRate i saveToArchive bez zmian) ...
+// cleanRate - a function for cleaning rates from the source
 func cleanRate(raw string) string {
-	s := strings.Replace(raw, ",", ".", -1)
+	s := strings.ReplaceAll(raw, ",", ".")
 	s = strings.TrimSpace(s)
-	cleaned := ""
+
+	var cleaned strings.Builder
+	cleaned.Grow(len(s))
+
 	for _, r := range s {
 		if (r >= '0' && r <= '9') || r == '.' {
-			cleaned += string(r)
+			cleaned.WriteRune(r)
 		}
 	}
-	return cleaned
+	return cleaned.String()
 }
+
+// saveToArchive - a function for saving rates to TimescaleDB's archive'
 func saveToArchive(db *pgxpool.Pool, cantorID int, currency string, buyRate, sellRate float64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
