@@ -1,0 +1,58 @@
+# docker-compose.yml
+services:
+  # Database
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: gix-db
+    environment:
+      POSTGRES_USER: gixuser
+      POSTGRES_PASSWORD: gixpassword
+      POSTGRES_DB: gix_rates
+    ports:
+      - "5432:5432"
+    volumes:
+      - gix-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: gix-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  # App
+  app:
+    container_name: gix-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    ports:
+      - "8080:8080"
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /app
+          ignore:
+            - tmp
+            - vendor
+            - .git
+        - action: rebuild
+          path: go.mod
+        - action: rebuild
+          path: go.sum
+        - action: rebuild
+          path: Dockerfile
+    environment:
+      DATABASE_URL: "postgres://gixuser:gixpassword@db:5432/gix_rates?sslmode=disable"
+      REDIS_URL: "redis://redis:6379/0"
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+volumes:
+  gix-db-data:

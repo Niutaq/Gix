@@ -28,31 +28,11 @@ func Abs(x float32) float32 {
 	return x
 }
 
-// FormatRate converts a string representation of a rate.
-func FormatRate(rate string, NeedsRateFormatting bool) (string, error) {
-	normalizedRate := strings.Replace(rate, ",", ".", 1)
-	floatRate, err := strconv.ParseFloat(normalizedRate, 64)
-	if err != nil {
-		return rate, fmt.Errorf("FormatRate: error parsing rate '%s': %v", rate, err)
-	}
-
-	if NeedsRateFormatting {
-		floatRate = floatRate / 100
-	}
-
-	return fmt.Sprintf("%.3f", floatRate), nil
-}
-
 // DrawProgressBar renders a progress bar based on the loading state in AppState.
 func DrawProgressBar(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	elapsed := time.Since(state.IsLoadingStart).Seconds()
 
-	var totalDuration float32 = 5.0
-	if state.UI.SelectedCantor != "" {
-		if c, ok := state.Cantors[state.UI.SelectedCantor]; ok {
-			totalDuration = float32(c.DefaultTimeout.Seconds())
-		}
-	}
+	var totalDuration float32 = 10.0
 
 	progress := float32(elapsed) / totalDuration
 	if progress > 1 {
@@ -114,7 +94,16 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 	}
 
 	if entry.Error != "" {
-		errorMsg := GetTranslation(state.UI.Language, "errorPrefix") + ": " + entry.Error
+		errorPrefix := GetTranslation(state.UI.Language, "errorPrefix")
+
+		translatedError := GetTranslation(state.UI.Language, entry.Error)
+
+		if translatedError == entry.Error {
+			translatedError = GetTranslation(state.UI.Language, "err_unknown")
+		}
+
+		errorMsg := errorPrefix + ": " + translatedError
+
 		errorText := material.Body1(theme, errorMsg)
 		errorText.Color = AppColors.Error
 		errorText.TextSize = unit.Sp(18)
@@ -131,18 +120,13 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 		return layout.Dimensions{}
 	}
 
-	var buyRateStr, sellRateStr string
-	var errBuy, errSell error
+	buyRateStr := entry.Rate.BuyRate
+	sellRateStr := entry.Rate.SellRate
 
-	needsDivision := false
-	if c, ok := state.Cantors[state.UI.SelectedCantor]; ok {
-		needsDivision = c.NeedsRateFormatting
-	}
+	buyRateFloat, errB := strconv.ParseFloat(strings.ReplaceAll(buyRateStr, ",", "."), 64)
+	sellRateFloat, errS := strconv.ParseFloat(strings.ReplaceAll(sellRateStr, ",", "."), 64)
 
-	buyRateStr, errBuy = FormatRate(entry.Rate.BuyRate, needsDivision)
-	sellRateStr, errSell = FormatRate(entry.Rate.SellRate, needsDivision)
-
-	if errBuy != nil || errSell != nil {
+	if errB != nil || errS != nil {
 		errorMsg := GetTranslation(state.UI.Language, "errorPrefix") + ": " + GetTranslation(state.UI.Language, "invalidRateFormat")
 		errorText := material.Body1(theme, errorMsg)
 		errorText.Color = AppColors.Error
@@ -151,15 +135,7 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 		return layout.Center.Layout(gtx, errorText.Layout)
 	}
 
-	buyRateFloat, errB := strconv.ParseFloat(strings.ReplaceAll(buyRateStr, ",", "."), 64)
-	sellRateFloat, errS := strconv.ParseFloat(strings.ReplaceAll(sellRateStr, ",", "."), 64)
-
-	if errB != nil || errS != nil {
-		errorMsg := GetTranslation(state.UI.Language, "errorPrefix") + ": " + GetTranslation(state.UI.Language, "internalRateError")
-		errorText := material.Body1(theme, errorMsg)
-		return layout.Center.Layout(gtx, errorText.Layout)
-	}
-
+	// ... (reszta kodu wyświetlania bez zmian) ...
 	buyLabel := GetTranslation(state.UI.Language, "buyLabel")
 	sellLabel := GetTranslation(state.UI.Language, "sellLabel")
 
@@ -191,23 +167,21 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 	})
 }
 
-// GUI Elements creation - function
+// LayoutUI - GUI Elements creation - function
 func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 	layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical, Spacing: layout.SpaceAround, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(layout.Spacer{Height: unit.Dp(30)}.Layout),
-				// Title
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					title := material.H1(theme, GetTranslation(state.UI.Language, "title"))
 					title.Alignment = text.Middle
-					title.TextSize = unit.Sp(120)
+					title.TextSize = unit.Sp(140)
 					title.Font.Weight = font.Bold
 					title.Color = AppColors.Title
 					return title.Layout(gtx)
 				}),
 				layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
-				// Info
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					info := material.Body1(theme, GetTranslation(state.UI.Language, "info"))
 					info.Alignment = text.Middle
@@ -284,11 +258,10 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 
 				return material.List(theme, &list).Layout(gtx, len(cantorIDs),
 					func(gtx layout.Context, i int) layout.Dimensions {
-						cantor := state.Cantors[cantorIDs[i]]
+						cantorKey := cantorIDs[i]
+						cantor := state.Cantors[cantorKey]
+
 						displayName := GetTranslation(state.UI.Language, cantor.DisplayName)
-						if displayName == cantor.DisplayName {
-							displayName = cantor.ID
-						}
 
 						return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
 							func(gtx layout.Context) layout.Dimensions {
@@ -301,7 +274,7 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 								button.Inset = layout.UniformInset(unit.Dp(12))
 								button.CornerRadius = unit.Dp(8)
 
-								if state.UI.SelectedCantor == cantor.ID {
+								if state.UI.SelectedCantor == cantorKey {
 									return widget.Border{
 										Color:        AppColors.Accent1,
 										Width:        unit.Dp(2.5),
@@ -315,7 +288,6 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 		}),
 
 		// Section for loading progress bar
-		// This section is displayed when the app is loading data from the selected Cantor
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if state.IsLoading.Load() && state.UI.SelectedCantor != "" {
 				return layout.Inset{Top: unit.Dp(15), Bottom: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -352,7 +324,7 @@ func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 	}
 }
 
-// LanguageModal and CurrencyModal are the modal dialogs for selecting language and currency respectively.
+// LanguageModal - Modal for language selection
 func LanguageModal(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	title := GetTranslation(state.UI.Language, "===")
 	if lbl := GetTranslation(state.UI.Language, "selectLanguageTitle"); lbl != "selectLanguageTitle" {
@@ -374,6 +346,7 @@ func LanguageModal(gtx layout.Context, theme *material.Theme, state *AppState) l
 	})
 }
 
+// CurrencyModal - Modal for currency selection
 func CurrencyModal(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	title := GetTranslation(state.UI.Currency, "===")
 	if lbl := GetTranslation(state.UI.Currency, "selectCurrencyTitle"); lbl != "selectCurrencyTitle" {
@@ -395,7 +368,7 @@ func CurrencyModal(gtx layout.Context, theme *material.Theme, state *AppState) l
 	})
 }
 
-// Draws the modal overlay
+// ModalOverlay - Modal overlay with click outside to close
 func ModalOverlay(gtx layout.Context, state *AppState, content layout.Widget) layout.Dimensions {
 	paint.Fill(gtx.Ops, color.NRGBA{A: 210})
 
@@ -463,7 +436,6 @@ func ModalOverlay(gtx layout.Context, state *AppState, content layout.Widget) la
 	return result
 }
 
-// Creates a modal dialog with dynamic sizing
 func ModalDialog(
 	gtx layout.Context,
 	theme *material.Theme,
