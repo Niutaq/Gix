@@ -34,7 +34,7 @@ func FetchC1(url, currency string) (ScrapeResult, error) {
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-
+			fmt.Printf("Error closing response body: %v\n", err)
 		}
 	}(resp.Body)
 
@@ -71,7 +71,7 @@ func FetchC2(url, currency string) (ScrapeResult, error) {
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-
+			fmt.Printf("Error closing response body: %v\n", err)
 		}
 	}(resp.Body)
 
@@ -123,7 +123,7 @@ func FetchC3(url, currency string) (ScrapeResult, error) {
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-
+			fmt.Printf("Error closing response body: %v\n", err)
 		}
 	}(resp.Body)
 
