@@ -1,0 +1,16 @@
+* text=auto eol=lf
+
+*.go text
+*.md text
+*.json text
+*.yml text
+*.toml text
+*.xml text
+*.svg text
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.ttf binary
