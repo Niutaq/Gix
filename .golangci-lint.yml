@@ -1,6 +1,6 @@
 run:
   timeout: 3m
-  go: 1.24.2
+  go: 1.25
 
 linters:
   enable:
@@ -10,6 +10,12 @@ linters:
     - revive
     - errcheck
     - unused
+
+    - goimports
+    - ineffassign
+    - goconst
+    - gocritic
+    - gosimple
 
 issues:
   exclude-dirs:
@@ -30,4 +36,4 @@ issues:
 
 linters-settings:
   staticcheck:
-    go: '1.24.2'
+    go: '1.25'

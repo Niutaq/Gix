@@ -1,0 +1,37 @@
+# Go binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+gix
+main
+
+# Build output directories
+/outputDir/
+/tmp/
+
+# IDE config files
+/.idea/
+/.history
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.vshost.*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+cantorsInfo.txt
+appicon.xcf
+
+
+# Docker data volumes (best practice to keep this name out)
+gix-db-data/

@@ -1,17 +1,17 @@
 /*
-					__'                     ',:'/¯/`:,             __        '        _  '
-			,.·:'´::::::::`'·-.             /:/_/::::/';'      .:'´:::::/`:·.          /.;/';°
-			'/::::::::::::::::::';           /:'     '`:/::;‘   '/::::::::/:::::/`:,     /::/:`'; °
-		/;:· '´ ¯¯  `' ·-:::/'           ;         ';:';‘  /· '´ ¯¯ `'~·./:::::`;:´¯'`:;:/'
-		/.'´      _         ';/' ‘          |         'i::i   '`·.             `·:;:'/      ,'/' '  ‚
-	,:     ,:'´::;'`·.,_.·'´.,    ‘       ';        ;'::i       `·.            '`'      ,·' '  '  ‚
-	/     /':::::/;::::_::::::::;‘        'i        'i::i'          ';              .,·'´   °
-	,'     ;':::::'/·´¯     ¯'`·;:::¦‘        ;       'i::;'       ,·´               i:';
-	'i     ';::::::'\             ';:';‘        ';       i:/'     ,·´      ,           ';::'`:., °
-	;      '`·:;:::::`'*;:'´      |/'          ';     ;/ °    ,'      ,':´';           ';::::::'`:*;'
-	\          '`*^*'´         /'  ‘          ';   / °      i      ';::/ '`·,         '`·:;:::::/
-		`·.,               ,.-·´                `'´       °  ';      ';/     '`·.,          '`*;/
-			'`*^~·~^*'´                       ‘            '`~-·'´            `*^·–·^*'´
+               __'                     ',:'/¯/`:,             __        '        _  '
+         ,.·:'´::::::::`'·-.             /:/_/::::/';'      .:'´:::::/`:·.          /.;/';°
+         '/::::::::::::::::::';           /:'     '`:/::;‘   '/::::::::/:::::/`:,     /::/:`'; °
+      /;:· '´ ¯¯  `' ·-:::/'           ;         ';:';‘  /· '´ ¯¯ `'~·./:::::`;:´¯'`:;:/'
+      /.'´      _         ';/' ‘          |         'i::i   '`·.             `·:;:'/      ,'/' '  ‚
+   ,:     ,:'´::;'`·.,_.·'´.,    ‘       ';        ;'::i       `·.            '`'      ,·' '  '  ‚
+   /     /':::::/;::::_::::::::;‘        'i        'i::i'          ';              .,·'´   °
+   ,'     ;':::::'/·´¯     ¯'`·;:::¦‘        ;       'i::;'       ,·´               i:';
+   'i     ';::::::'\             ';:';‘        ';       i:/'     ,·´      ,           ';::'`:., °
+   ;      '`·:;:::::`'*;:'´      |/'          ';     ;/ °    ,'      ,':´';           ';::::::'`:*;'
+   \          '`*^*'´         /'  ‘          ';   / °      i      ';::/ '`·,         '`·:;:::::/
+      `·.,               ,.-·´                `'´       °  ';      ';/     '`·.,          '`*;/
+         '`*^~·~^*'´                       ‘            '`~-·'´            `*^·–·^*'´
 
 */
 
@@ -22,16 +22,18 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"image"
 	_ "image/png"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"sort"
 	"time"
 
 	// Go files
-	"github.com/Niutaq/Gix/pkg/config"
-	"github.com/Niutaq/Gix/pkg/fetching_data"
 	"github.com/Niutaq/Gix/pkg/reading_data"
 	"github.com/Niutaq/Gix/pkg/utilities"
 
@@ -50,11 +52,8 @@ import (
 
 // Global variables
 //
-//go:embed res/background.png
+//go:embed res/background_2k.png
 var backgroundImageFS embed.FS
-
-//go:embed config.json
-var configFS embed.FS
 
 var (
 	originalBackgroundImage  image.Image
@@ -62,14 +61,27 @@ var (
 	backgroundImageLoaded    bool
 )
 
+// Definiujemy stałe dla naszego API
+const (
+	apiBaseURL   = "http://localhost:8080"
+	apiCantors   = apiBaseURL + "/api/v1/cantors"
+	apiRatesBase = apiBaseURL + "/api/v1/rates"
+)
+
+// ApiCantorResponse - a structure for parsing data from /api/v1/cantors
+type ApiCantorResponse struct {
+	ID          int    `json:"id"`
+	DisplayName string `json:"displayName"`
+	Name        string `json:"name"`
+}
+
 // Functions
 // ++++++++++++++++++++ MAIN Function ++++++++++++++++++++
 func main() {
 	window := new(app.Window)
 	window.Option(
 		app.Title("Gix"),
-		app.Size(unit.Dp(1000), unit.Dp(1000)),
-		//app.Decorated(false),
+		app.Size(unit.Dp(1280), unit.Dp(1280)),
 	)
 
 	go func() {
@@ -81,12 +93,12 @@ func main() {
 	app.Main()
 }
 
-// Background image initialization
+// initBackgroundImage - a function for a background image initialization
 func initBackgroundImage() {
 	if backgroundImageLoaded {
 		return
 	}
-	fileData, err := backgroundImageFS.ReadFile("res/background.png")
+	fileData, err := backgroundImageFS.ReadFile("res/background_2k.png")
 	if err != nil {
 		log.Printf("Warning: Failed to read embedded background image: %v", err)
 		return
@@ -104,21 +116,18 @@ func initBackgroundImage() {
 	log.Println("Background image loaded successfully.")
 }
 
-// Font handling
-// Credits: g45t345rt
+// loadFontCollection - a function for font handling
 func loadFontCollection() ([]font.FontFace, error) {
 	var fontCollection []font.FontFace
 
 	fontPaths := []string{
-		"fonts/Kanit-Regular.ttf",
-		"fonts/RubikScribble-Regular.ttf",
 		"fonts/NotoSans-Regular.ttf",
 	}
 
 	for _, path := range fontPaths {
 		face, err := reading_data.LoadAndParseFont(path)
 		if err != nil {
-			return nil, err // Return error to caller
+			return nil, err
 		}
 		fontCollection = append(fontCollection, face)
 	}
@@ -126,7 +135,7 @@ func loadFontCollection() ([]font.FontFace, error) {
 	return fontCollection, nil
 }
 
-// Rendering background
+// renderBackground - a function for rendering background
 func renderBackground(gtx layout.Context, ops *op.Ops) {
 	if backgroundImageLoaded && originalBackgroundImage != nil {
 		imgBounds := originalBackgroundImage.Bounds()
@@ -172,38 +181,71 @@ func renderBackground(gtx layout.Context, ops *op.Ops) {
 	}
 }
 
-// Cantors handling
+// handleCantorClicks - a function that handles clicks on cantors
 func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities.AppState) {
-	for i := range state.Cantors {
-		cantor := state.Cantors[i]
+	cantorKeys := make([]string, 0, len(state.Cantors))
+	for key := range state.Cantors {
+		cantorKeys = append(cantorKeys, key)
+	}
+	sort.Strings(cantorKeys)
+
+	for _, key := range cantorKeys {
+		cantorName := key
+		cantor := state.Cantors[cantorName]
 
 		if cantor.Button.Clicked(gtx) {
-			if state.UI.SelectedCantor == cantor.ID {
+			if state.UI.SelectedCantor == cantorName {
 				state.UI.SelectedCantor = ""
 				state.Vault.LastEntry = nil
 			} else {
-				state.UI.SelectedCantor = cantor.ID
+				state.UI.SelectedCantor = cantorName
 				state.IsLoading.Store(true)
 				state.IsLoadingStart = time.Now()
 				state.Vault.LastEntry = nil
 
 				go func(w *app.Window, cInfo *utilities.CantorInfo, currentCurrency string,
 					currentAppState *utilities.AppState) {
-					ctx, cancel := context.WithTimeout(context.Background(), cInfo.DefaultTimeout)
+
+					ratesURL := fmt.Sprintf(
+						"%s?cantor_id=%d&currency=%s",
+						apiRatesBase,
+						cInfo.ID,
+						currentCurrency,
+					)
+
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 					defer cancel()
 
-					rates, fetchErr := cInfo.Fetcher(ctx, cInfo.URL, currentCurrency, currentAppState)
+					var rates utilities.ExchangeRates
+					var fetchErr error
+
+					req, err := http.NewRequestWithContext(ctx, "GET", ratesURL, nil)
+					if err != nil {
+						fetchErr = fmt.Errorf("err_api_connection") // ZMIANA
+					} else {
+						resp, err := http.DefaultClient.Do(req)
+						if err != nil {
+							fetchErr = fmt.Errorf("err_api_connection") // ZMIANA
+						} else {
+							defer resp.Body.Close()
+							if resp.StatusCode != http.StatusOK {
+								fetchErr = fmt.Errorf("err_api_response") // ZMIANA
+							} else {
+								if err := json.NewDecoder(resp.Body).Decode(&rates); err != nil {
+									fetchErr = fmt.Errorf("err_api_parsing") // ZMIANA
+								}
+							}
+						}
+					}
 
 					currentAppState.Vault.Mu.Lock()
-					if currentAppState.UI.SelectedCantor == cInfo.ID {
+					if currentAppState.UI.SelectedCantor == cantorName {
 						if fetchErr != nil {
 							currentAppState.Vault.LastEntry = &utilities.CantorEntry{
-								URL:   cInfo.URL,
 								Error: fetchErr.Error(),
 							}
 						} else {
 							currentAppState.Vault.LastEntry = &utilities.CantorEntry{
-								URL:  cInfo.URL,
 								Rate: rates,
 							}
 						}
@@ -218,24 +260,10 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 	}
 }
 
-// Event frame
+// handleFrameEvent - a function that handles a frame event
 func handleFrameEvent(gtx layout.Context, window *app.Window, state *utilities.AppState,
 	theme *material.Theme, ops *op.Ops) {
 	renderBackground(gtx, ops)
-
-	// // Set the background color
-	// screenHeight := float32(gtx.Constraints.Max.Y)
-
-	// colorAtMiddle := color.NRGBA{R: 5, G: 5, B: 0, A: 255}
-	// colorAtBottom := utilities.AppColors.Accent1
-
-	// paint.LinearGradientOp{
-	// 	Stop1:  f32.Pt(0, screenHeight*0.99),
-	// 	Stop2:  f32.Pt(0, screenHeight),
-	// 	Color1: colorAtMiddle,
-	// 	Color2: colorAtBottom,
-	// }.Add(gtx.Ops)
-	// paint.PaintOp{}.Add(gtx.Ops)
 
 	state.LastFrameTime = time.Now()
 
@@ -243,53 +271,54 @@ func handleFrameEvent(gtx layout.Context, window *app.Window, state *utilities.A
 		window.Invalidate()
 	}
 
+	// Cantor clicks handling
 	handleCantorClicks(gtx, window, state)
 
 	// UI rendering
 	utilities.LayoutUI(gtx, theme, state)
 }
 
-// Function to handle window input
+// run - a function that runs the app
 func run(window *app.Window) error {
 	// Operations and background image initialization
 	var ops op.Ops
 	initBackgroundImage()
 
-	// Load cantor configurations from config.json
-	configData, err := configFS.ReadFile("config.json")
+	log.Println("Fetching cantor list from API:", apiCantors)
+	resp, err := http.Get(apiCantors)
 	if err != nil {
-		return fmt.Errorf("Failed to read config.json: %w", err)
+		return fmt.Errorf("failed to connect to Gix API server (%s): %w", apiCantors, err)
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+		}
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned non-OK status (%s) for %s", resp.Status, apiCantors)
 	}
 
-	cantorConfigs, err := config.LoadCantorConfigFromBytes(configData)
-	if err != nil {
-		return fmt.Errorf("Failed to load cantor configurations: %w", err)
+	// Parsing a JSON from an API response
+	var apiCantorsList []ApiCantorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiCantorsList); err != nil {
+		return fmt.Errorf("failed to parse API response: %w", err)
+	}
+
+	if len(apiCantorsList) == 0 {
+		return fmt.Errorf("API returned 0 cantors")
 	}
 
 	definedCantors := make(map[string]*utilities.CantorInfo)
-	for _, cfg := range cantorConfigs {
-		var fetcher utilities.FetcherFunc
-		switch cfg.ID {
-		case "tadek":
-			fetcher = fetching_data.FetchRatesC1
-		case "kwadrat":
-			fetcher = fetching_data.FetchRatesC2
-		case "supersam":
-			fetcher = fetching_data.FetchRatesC3
-		default:
-			return fmt.Errorf("unknown cantor ID in config: %s", cfg.ID)
+	for _, cfg := range apiCantorsList {
+		definedCantors[cfg.Name] = &utilities.CantorInfo{
+			ID:          cfg.ID,
+			DisplayName: cfg.DisplayName,
 		}
-
-		definedCantors[cfg.ID] = &utilities.CantorInfo{
-			ID:                  cfg.ID,
-			DisplayName:         cfg.DisplayName,
-			URL:                 cfg.URL,
-			Fetcher:             fetcher,
-			DefaultTimeout:      cfg.DefaultTimeout.Duration,
-			NeedsRateFormatting: cfg.NeedsRateFormatting,
-		}
+		log.Printf("Loaded cantor: %s (ID: %d)", cfg.DisplayName, cfg.ID)
 	}
 
+	// State initialization and UI rendering
 	state := &utilities.AppState{
 		Vault:         &utilities.CantorVault{},
 		Cantors:       definedCantors,
