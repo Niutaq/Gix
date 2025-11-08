@@ -1,56 +1,92 @@
-Gix - Instant Gateway to Local Exchange Rates
+# Gix - A Go-Powered Currency Rate Scraper
+
+Gix is a desktop (_for now_) application built with **Gio UI** for monitoring currency exchange rates, powered by a containerized Go backend.
+
+This project evolved from a simple monolith into a modern Client-Server architecture, capable of handling dozens of different, complex scraping strategies.
+
+## Architecture
+
+The system is now split into two core components:
+
+1.  **Frontend (`cmd/gix/main.go`)**: A "thin" client application built with **Gio UI**. It contains no business logic. Its sole purpose is to render the UI and communicate with the backend via a REST API.
+2.  **Backend (`cmd/gix-server/main.go`)**: A **Go REST API** server that manages all business logic, scraping, caching, and database interactions. It is fully containerized by Docker. - _**gRPC** or **other technique** is are planned to be implemented._
+
+Data flow:
+```mermaid
+flowchart TD
+    subgraph "Frontend (Your PC)"
+        A[Gio UI App<br>(cmd/gix/main.go)]
+    end
+
+    subgraph "Backend (Running in Docker)"
+        B(Gix Server / REST API<br>(cmd/gix-server/main.go))
+        C[Redis Cache<br>(60s TTL)]
+        D[TimescaleDB<br>(PostgreSQL)]
+    end
+
+    subgraph "External Cantors"
+        E[Cantor 1 (Tadek)]
+        F[Cantor 2 (Kwadrat)]
+        G[Cantor 3 (Supersam)]
+    end
+
+    A -- HTTP GET --> B[/api/v1/rates?cantor_id=1]
+    B -- 1. Check Cache --> C
+    C -- 2. Cache Hit --> B
+    B -- 3. Cache Miss --> D{Get Strategy<br>from 'cantors' table}
+    D -- 4. 'C1' Strategy --> B
+    B -- 5. Scrape (Goquery) --> E
+    E -- 6. HTML --> B
+    B -- 7. Store in Cache --> C
+    B -- 8. Store in DB (async) --> D[rates table]
+    B -- 9. Return JSON --> A
+```
+
 ---
 
-### Key Features
+## Technology Stack
 
-- **Desktop or Mobile**
-  The app is created for desktop usage but can easily be exported for mobile.
+| Component | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Frontend** | **Go (Gio)** | Renders the native, cross-platform UI. |
+| **Backend** | **Go (net/http)** | Serves the REST API (`/api/v1/cantors`, `/api/v1/rates`). |
+| **Environment** | **Docker & Docker Compose** | Runs the entire backend stack (API, DB, Cache) with one command. |
+| **Database** | **TimescaleDB (PostgreSQL)** | Stores cantor configuration (strategies, URLs) and archives all historical rates. |
+| **Cache** | **Redis** | Caches API responses for 60 seconds to improve performance and reduce scraping. |
+| **Scraping** | **Goquery** | Used via the "Strategy Pattern" in `pkg/scrapers` to parse HTML. |
+| **Dev Workflow** | **Air** | Provides live hot-reloading for the backend server inside its Docker container. |
 
-- **Real-Time Rate Tracking**
-  Get live updates from exchange offices in your area - no more outdated info.
+---
 
-- **User-Friendly Interface**
-  The clean, intuitive design lets you compare rates in seconds. No clutter, just clarity.
+## How to Run (Development)
 
-### Technologies / Tools
+Running the full application now requires two terminals.
 
-+ ==GoLang 1.24+==
-+ ==Gio Framework==
-+ Android SDK (for mobile builds) - iOS is still in development.
-+ Github Actions (CI-CD) connection is added for clean code checks (config file may be changed quite frequently).
+### 1. Run the Backend
 
-## How to run it on a PC/Laptop?
+The backend (API, Database, Cache) is managed by Docker Compose.
 
-1. Go to the location in the folder where _main.go_ is located
-2. Run terminal and type: `go build main.go`
+```bash
+# This command starts the Go API server (with Air hot-reload),
+# the TimescaleDB database, and the Redis cache.
+docker-compose up
+```
+The API server will be available at `http://localhost:8080`.
 
-## How to run it locally on mobile?
+### 2. Run the Frontend (GUI)
 
-Connect to a mobile phone via USB (Activate USB Debugging settings on Android; Search the web for instructions on your specific smartphone).
+In a **second terminal**, run the Gio application.
 
-1. Go to the location in the folder where _main.go_ is located.
-2. Run terminal and type: `go run gioui.org/cmd/gogio -target android -o <path>/<app_name>.apk . -icon <path> .`
-   (Terminal will tell you to download some packages if they are not installed yet)
-3. Hit enter
-4. Add the second command: `<path_to_adb.exe> install -r <path>/<app_name>.apk`
+```bash
+# This starts the desktop app, which will
+# connect to the API server at localhost:8080.
+go run ./cmd/gix/main.go
+```
 
-**What is ADB?**
-It's part of package tools from _Android SDK Command Line Tools_ - search on the web how to install these essential tools and you're good to go.
+---
 
-<div align="center">
-  <img src="demos/gix_demo.gif" alt="Gix Demo" width="300" />
-  <br>
-  <p><strong>Version #1</strong></p>
-</div>
-
-<div align="center">
-  <img src="demos/gix_demo_2.gif" alt="Gix Demo 2" width="300" />
-  <br>
-  <p><strong>Version #2</strong></p>
-</div>
+## Demos
 
 <div align="center">
-  <img src="demos/gix_demo_3.gif" alt="Gix Demo 3" width="300" />
-  <br>
-  <p><strong>Version #3</strong></p>
+  <img src="demos/gix_demo_1.gif" alt="Gix Demo" width="600" />
 </div>
