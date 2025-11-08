@@ -29,9 +29,10 @@ main
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# User's files
 cantorsInfo.txt
 appicon.xcf
-
 
 # Docker data volumes (best practice to keep this name out)
 gix-db-data/
