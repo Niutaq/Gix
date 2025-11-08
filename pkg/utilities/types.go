@@ -1,33 +1,25 @@
 package utilities
 
 import (
-	"context"
 	"sync"
 	"sync/atomic"
-	_ "sync/atomic"
 	"time"
 
 	"gioui.org/widget"
 )
 
 // Types
-// Information for fetching data from cantors
-type FetcherFunc func(ctx context.Context, url, currency string, state *AppState) (ExchangeRates, error)
-
+// CantorInfo holds information about a cantor.
 type CantorInfo struct {
-	ID                  string
-	URL                 string
-	DisplayName         string
-	Fetcher             FetcherFunc
-	DefaultTimeout      time.Duration
-	NeedsRateFormatting bool
-	Button              widget.Clickable
+	ID          int
+	DisplayName string
+	Button      widget.Clickable
 }
 
 // ExchangeRates holds the buy and sell rates for a currency.
 type ExchangeRates struct {
-	BuyRate  string
-	SellRate string
+	BuyRate  string `json:"buyRate"`
+	SellRate string `json:"sellRate"`
 }
 
 // CantorEntry represents data fetched from a single cantor.
@@ -53,9 +45,6 @@ type AppState struct {
 	LastFrameTime  time.Time
 	IsLoadingStart time.Time
 	IsLoading      atomic.Bool
-
-	// Additional widgets
-	// GradientOffset float32
 
 	UI UIState
 }
