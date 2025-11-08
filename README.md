@@ -1,129 +1,95 @@
-# Gix - A Go-Powered Currency Rate Scraper
-
-Gix is a desktop application (built with **Gio UI**) for monitoring currency exchange rates, powered by a fully scalable, containerized Go backend.
-
-This project evolved from a simple monolith into a modern Client-Server architecture, capable of handling dozens of different, complex scraping strategies.
-
 ## Architecture
 
-The system is now split into two core components:
-
-1.  **Frontend (`cmd/gix/main.go`)**: A "thin" client application built with **Gio UI**. It contains no business logic. Its sole purpose is to render the UI and communicate with the backend via a REST API.
-2.  **Backend (`cmd/gix-server/main.go`)**: A **Go REST API** server that manages all business logic, scraping, caching, and database interactions. It is fully containerized by Docker.
-
-Here is the data flow:
 ```mermaid
-flowchart TB
-    subgraph Frontend["💻 Frontend - Your PC"]
-        A["Gio UI App(cmd/gix/main.go)"]
-    end
-    
-    subgraph Backend["🐳 Backend - Docker Container"]
-        B["Gix ServerREST API(cmd/gix-server/main.go)"]
-        C[("Redis CacheTTL: 60s")]
-        D[("TimescaleDBPostgreSQL")]
-    end
-    
-    subgraph External["🌐 External Cantors"]
-        E["Cantor 1Strategy: C1"]
-        F["Cantor 2Strategy: C2"]
-        G["Cantor 3Strategy: C3"]
-    end
+flowchart LR
+    A["💻 Gio UI App<br/>(Frontend)"]
+    B["🔧 Gix Server<br/>(Backend API)"]
+    C[("⚡ Redis<br/>Cache")]
+    D[("💾 TimescaleDB<br/>PostgreSQL")]
+    E["🌐 Cantor 1<br/>(C1)"]
+    F["🌐 Cantor 2<br/>(C2)"]
+    G["🌐 Cantor 3<br/>(C3)"]
     
     A -->|"① GET /api/v1/rates"| B
-    B -->|"② Check cache"| C
-    C -.->|"③a Hit: Return"| B
-    C -.->|"③b Miss: Query"| D
-    D -.->|"④ Get strategy"| B
-    B -->|"⑤ Scrape HTML"| E
-    B -->|"⑤ Scrape HTML"| F
-    B -->|"⑤ Scrape HTML"| G
-    E -->|"⑥ HTML data"| B
-    F -->|"⑥ HTML data"| B
-    G -->|"⑥ HTML data"| B
-    B -->|"⑦ Store"| C
-    B -->|"⑧ Archive"| D
-    B -->|"⑨ JSON response"| A
+    B -->|"② Check"| C
+    C -.->|"③ Hit"| B
+    C -->|"③ Miss"| D
+    D -->|"④ Strategy"| B
+    B -->|"⑤ Scrape"| E
+    B -->|"⑤ Scrape"| F
+    B -->|"⑤ Scrape"| G
+    E -->|"⑥ HTML"| B
+    F -->|"⑥ HTML"| B
+    G -->|"⑥ HTML"| B
+    B -->|"⑦ Cache"| C
+    B -->|"⑧ Store"| D
+    B -->|"⑨ JSON"| A
     
-    classDef frontendStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    classDef backendStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    classDef dbStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
-    classDef externalStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef frontend fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
+    classDef backend fill:#fff3e0,stroke:#f57c00,stroke-width:3px
+    classDef db fill:#e8f5e9,stroke:#388e3c,stroke-width:3px
+    classDef external fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     
-    class A frontendStyle
-    class B backendStyle
-    class C,D dbStyle
-    class E,F,G externalStyle
+    class A frontend
+    class B backend
+    class C,D db
+    class E,F,G external
 ```
 
----
+**Alternative: Simplified Version** (if above is still messy)
 
-## Technology Stack
+```mermaid
+graph LR
+    A[💻 Frontend] -->|① Request| B[🔧 API Server]
+    B -->|② Check| C[(⚡ Cache)]
+    C -->|③ Miss| D[(💾 Database)]
+    D -->|④ Strategy| B
+    B -->|⑤ Scrape| E[🌐 Cantors]
+    E -->|⑥ Data| B
+    B -->|⑦ Store| C
+    B -->|⑧ Archive| D
+    B -->|⑨ Response| A
+    
+    style A fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
+    style B fill:#fff3e0,stroke:#f57c00,stroke-width:3px
+    style C fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style D fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style E fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+```
+
+### Data Flow
+
+| Step | Action | Description |
+|------|--------|-------------|
+| **①** | **Request** | Frontend → API: `GET /api/v1/rates?cantor_id=1&currency=EUR` |
+| **②** | **Cache Check** | API checks Redis for cached rates (60s TTL) |
+| **③** | **Cache Result** | Hit: Return immediately / Miss: Query database |
+| **④** | **Get Strategy** | Database returns scraping strategy (C1, C2, or C3) |
+| **⑤** | **Scrape** | API executes strategy-specific scraper using Goquery |
+| **⑥** | **HTML Response** | External cantor returns exchange rate data |
+| **⑦** | **Cache Update** | Store fresh data in Redis (60s expiry) |
+| **⑧** | **Archive** | Async save to TimescaleDB for historical analysis |
+| **⑨** | **JSON Response** | API → Frontend: Return formatted exchange rates |
+
+### Technology Stack
 
 | Component | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Frontend** | **Go (Gio)** | Renders the native, cross-platform UI. |
-| **Backend** | **Go (net/http)** | Serves the REST API (`/api/v1/cantors`, `/api/v1/rates`). |
-| **Environment** | **Docker & Docker Compose** | Runs the entire backend stack (API, DB, Cache) with one command. |
-| **Database** | **TimescaleDB (PostgreSQL)** | Stores cantor configuration (strategies, URLs) and archives all historical rates. |
-| **Cache** | **Redis** | Caches API responses for 60 seconds to improve performance and reduce scraping. |
-| **Scraping** | **Goquery** | Used via the "Strategy Pattern" in `pkg/scrapers` to parse HTML. |
-| **Dev Workflow** | **Air** | Provides live hot-reloading for the backend server inside its Docker container. |
-| **i18n** | **Go (maps)** | Built-in translation system for the UI, including friendly error messages. |
+|-----------|-----------|---------|
+| **Frontend** | Go + Gio UI | Native cross-platform desktop app |
+| **Backend** | Go + net/http | REST API server with hot-reload (Air) |
+| **Cache** | Redis | 60-second TTL for rate limiting scraping |
+| **Database** | TimescaleDB | Time-series optimized PostgreSQL |
+| **Scraping** | Goquery | Strategy Pattern for different cantor layouts |
+| **Container** | Docker Compose | Single-command dev environment |
 
----
-
-## How to Run (Development)
-
-Running the full application now requires two terminals.
-
-### 1. Run the Backend
-
-The backend (API, Database, Cache) is managed by Docker Compose.
+### Quick Start
 
 ```bash
-# This command starts the Go API server (with Air hot-reload),
-# the TimescaleDB database, and the Redis cache.
+# Terminal 1: Start backend (API + DB + Cache)
 docker-compose up
-```
-The API server will be available at `http://localhost:8080`.
 
-### 2. Run the Frontend (GUI)
-
-In a **second terminal**, run the Gio application.
-
-```bash
-# This starts the desktop app, which will
-# connect to the API server at localhost:8080.
+# Terminal 2: Start frontend
 go run ./cmd/gix/main.go
 ```
 
----
-
-## The Scraping Strategy Pattern
-
-This project solves the "Sysiphean task" of scraping. Instead of simple selectors, it uses a **Strategy Pattern** to handle different website layouts:
-
-1.  The `cantors` table in the database stores a **strategy name** (e.g., `C1`, `C2`, `C3`) for each cantor.
-2.  The frontend asks the API for rates: `GET /api/v1/rates?cantor_id=1&currency=USD`.
-3.  The backend server (`gix-server`) looks up `cantor_id=1` and finds its strategy is `C1`.
-4.  The server's "dispatcher" calls the corresponding function from `pkg/scrapers/`, `scrapers.FetchC1(...)`, which contains the unique scraping logic for that site.
-5.  Rates are cached in Redis and returned to the client.
-
-### How to Add a New Cantor
-
-1.  Write a new `FetchC4` function in `pkg/scrapers/scrapers.go`.
-2.  Add a `case "C4":` to the `switch` block in `handleGetRates` (`cmd/gix-server/main.go`).
-3.  Add a new row to the `cantors` table in your database, setting its `strategy` column to `C4`.
-
-The application will handle the rest automatically.
-
----
-
-## Demos
-
-<div align="center">
-  <img src="demos/gix_demo.gif" alt="Gix Demo" width="300" />
-  <img src="demos/gix_demo_2.gif" alt="Gix Demo 2" width="300" />
-  <img src="demos/gix_demo_3.gif" alt="Gix Demo 3" width="300" />
-</div>
+The API will be available at `http://localhost:8080` and the desktop app will connect automatically.
