@@ -77,16 +77,21 @@ Make sure you have installed:
 - [<img src="https://img.shields.io/badge/Docker_Desktop-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker Desktop"/>](https://www.docker.com/products/docker-desktop/)
 - [<img src="https://img.shields.io/badge/Go_1.25+-00ADD8?style=flat&logo=go&logoColor=white" alt="Go"/>](https://go.dev/doc/install)
 
+
+
 ### Launch
 
-**1.** Start Docker Desktop
+**1.** Clone the project: ```bash git clone https://github.com/Niutaq/Gix.git```
 
-**2.** Run the application:
+**2.** Start Docker Desktop
+
+**3.** Run the application:
 
 ```bash
 # Terminal 1: Start backend (API + DB + Cache)
 docker-compose up
-
+# or
+docker-compose watch   # Docker Desktop 4.24+ for docker-compose watch command
 # Terminal 2: Start frontend
 go run ./cmd/gix/main.go
 ```
