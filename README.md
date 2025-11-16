@@ -83,7 +83,7 @@ Make sure you have installed:
 
 ### Launch
 
-**1.** Clone the project: ```bash git clone https://github.com/Niutaq/Gix.git```
+**1.** Clone the project: ```git clone https://github.com/Niutaq/Gix.git```
 
 **2.** Start Docker Desktop
 
