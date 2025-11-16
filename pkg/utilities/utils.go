@@ -20,16 +20,8 @@ import (
 	"gioui.org/widget/material"
 )
 
-// Abs returns the absolute value of a float32.
-func Abs(x float32) float32 {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
 // DrawProgressBar renders a progress bar based on the loading state in AppState.
-func DrawProgressBar(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+func DrawProgressBar(gtx layout.Context, state *AppState) layout.Dimensions {
 	elapsed := time.Since(state.IsLoadingStart).Seconds()
 
 	var totalDuration float32 = 10.0
@@ -135,7 +127,6 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 		return layout.Center.Layout(gtx, errorText.Layout)
 	}
 
-	// ... (reszta kodu wyświetlania bez zmian) ...
 	buyLabel := GetTranslation(state.UI.Language, "buyLabel")
 	sellLabel := GetTranslation(state.UI.Language, "sellLabel")
 
@@ -171,157 +162,20 @@ func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState
 func LayoutUI(gtx layout.Context, theme *material.Theme, state *AppState) {
 	layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical, Spacing: layout.SpaceAround, Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(layout.Spacer{Height: unit.Dp(30)}.Layout),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					title := material.H1(theme, GetTranslation(state.UI.Language, "title"))
-					title.Alignment = text.Middle
-					title.TextSize = unit.Sp(140)
-					title.Font.Weight = font.Bold
-					title.Color = AppColors.Title
-					return title.Layout(gtx)
-				}),
-				layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					info := material.Body1(theme, GetTranslation(state.UI.Language, "info"))
-					info.Alignment = text.Middle
-					info.TextSize = unit.Sp(17)
-					info.Color = AppColors.Text
-					info.Font.Weight = font.Normal
-					if state.UI.Language == "UA" || state.UI.Language == "BU" {
-						info.Font.Weight = font.SemiBold
-					}
-					return info.Layout(gtx)
-				}),
-				layout.Rigid(layout.Spacer{Height: unit.Dp(15)}.Layout),
-
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layout.Flex{
-						Axis:      layout.Horizontal,
-						Spacing:   layout.SpaceAround,
-						Alignment: layout.Middle,
-					}.Layout(gtx,
-						// Language button
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-
-							btn := material.Button(theme, &state.UI.LangModalButton, state.UI.Language)
-							btn.Color = AppColors.Accent1
-							btn.Background = color.NRGBA{A: 0}
-							btn.CornerRadius = unit.Dp(6)
-							btn.TextSize = unit.Sp(16)
-							btn.Inset = layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8),
-								Right: unit.Dp(8)}
-							if state.UI.LangModalButton.Clicked(gtx) {
-								state.UI.ModalOpen = "language"
-							}
-							return btn.Layout(gtx)
-						}),
-
-						// Currency button
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-
-							btn := material.Button(theme, &state.UI.CurrencyModalButton, state.UI.Currency)
-							btn.Color = AppColors.Accent1
-							btn.Background = color.NRGBA{A: 0}
-							btn.CornerRadius = unit.Dp(6)
-							btn.TextSize = unit.Sp(16)
-							btn.Inset = layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8),
-								Right: unit.Dp(8)}
-							if state.UI.CurrencyModalButton.Clicked(gtx) {
-								state.UI.ModalOpen = "currency"
-							}
-							return btn.Layout(gtx)
-						}),
-					)
-				}),
-				layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
-			)
+			return layoutHeader(gtx, theme, state)
 		}),
-
-		// Section for Cantor selection
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			list := widget.List{}
-			list.Axis = layout.Vertical
-
-			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				maxWidth := gtx.Dp(unit.Dp(400))
-				if maxWidth > gtx.Constraints.Max.X-gtx.Dp(unit.Dp(20)) {
-					maxWidth = gtx.Constraints.Max.X - gtx.Dp(unit.Dp(20))
-				}
-				gtx.Constraints.Max.X = maxWidth
-
-				cantorIDs := make([]string, 0, len(state.Cantors))
-				for id := range state.Cantors {
-					cantorIDs = append(cantorIDs, id)
-				}
-				sort.Strings(cantorIDs)
-
-				return material.List(theme, &list).Layout(gtx, len(cantorIDs),
-					func(gtx layout.Context, i int) layout.Dimensions {
-						cantorKey := cantorIDs[i]
-						cantor := state.Cantors[cantorKey]
-
-						displayName := GetTranslation(state.UI.Language, cantor.DisplayName)
-
-						return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
-							func(gtx layout.Context) layout.Dimensions {
-								gtx.Constraints.Min.X = gtx.Constraints.Max.X
-
-								button := material.Button(theme, &cantor.Button, displayName)
-								button.Background = color.NRGBA{R: 25, G: 25, B: 25, A: 50}
-								button.Color = AppColors.Text
-								button.TextSize = unit.Sp(16)
-								button.Inset = layout.UniformInset(unit.Dp(12))
-								button.CornerRadius = unit.Dp(8)
-
-								if state.UI.SelectedCantor == cantorKey {
-									return widget.Border{
-										Color:        AppColors.Accent1,
-										Width:        unit.Dp(2.5),
-										CornerRadius: button.CornerRadius,
-									}.Layout(gtx, button.Layout)
-								}
-								return button.Layout(gtx)
-							})
-					})
-			})
+			return layoutCantorSelection(gtx, theme, state)
 		}),
-
-		// Section for loading progress bar
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			if state.IsLoading.Load() && state.UI.SelectedCantor != "" {
-				return layout.Inset{Top: unit.Dp(15), Bottom: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return DrawProgressBar(gtx, theme, state)
-					})
-				})
-			}
-			return layout.Dimensions{}
+			return layoutLoadingBar(gtx, state)
 		}),
-
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return LayoutVaultLinks(gtx, theme, state)
-			})
+			return layoutVaultSection(gtx, theme, state)
 		}),
 	)
 
-	if state.UI.ModalOpen != "" {
-		var modalContent layout.Widget
-		switch state.UI.ModalOpen {
-		case "language":
-			modalContent = func(gtx layout.Context) layout.Dimensions {
-				return LanguageModal(gtx, theme, state)
-			}
-		case "currency":
-			modalContent = func(gtx layout.Context) layout.Dimensions {
-				return CurrencyModal(gtx, theme, state)
-			}
-		}
-		if modalContent != nil {
-			modalContent(gtx)
-		}
-	}
+	layoutModal(gtx, theme, state)
 }
 
 // LanguageModal - Modal for language selection
@@ -385,10 +239,7 @@ func ModalOverlay(gtx layout.Context, state *AppState, content layout.Widget) la
 
 				var modalMaxWidth, modalMaxHeight int
 				switch state.UI.ModalOpen {
-				case "language":
-					modalMaxWidth = gtx.Dp(unit.Dp(350))
-					modalMaxHeight = gtx.Dp(unit.Dp(500))
-				case "currency":
+				case "language", "currency":
 					modalMaxWidth = gtx.Dp(unit.Dp(350))
 					modalMaxHeight = gtx.Dp(unit.Dp(500))
 				default:
@@ -496,4 +347,189 @@ func ModalDialog(
 			})
 		}),
 	)
+}
+
+func layoutHeader(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+	return layout.Flex{
+		Axis:      layout.Vertical,
+		Spacing:   layout.SpaceAround,
+		Alignment: layout.Middle,
+	}.Layout(gtx,
+		layout.Rigid(layout.Spacer{Height: unit.Dp(30)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			title := material.H1(theme, GetTranslation(state.UI.Language, "title"))
+			title.Alignment = text.Middle
+			title.TextSize = unit.Sp(140)
+			title.Font.Weight = font.Bold
+			title.Color = AppColors.Title
+			return title.Layout(gtx)
+		}),
+		layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			info := material.Body1(theme, GetTranslation(state.UI.Language, "info"))
+			info.Alignment = text.Middle
+			info.TextSize = unit.Sp(17)
+			info.Color = AppColors.Text
+			info.Font.Weight = font.Normal
+			if state.UI.Language == "UA" || state.UI.Language == "BU" {
+				info.Font.Weight = font.SemiBold
+			}
+			return info.Layout(gtx)
+		}),
+		layout.Rigid(layout.Spacer{Height: unit.Dp(15)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layoutLanguageCurrencyRow(gtx, theme, state)
+		}),
+		layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
+	)
+}
+
+func layoutLanguageCurrencyRow(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+	return layout.Flex{
+		Axis:      layout.Horizontal,
+		Spacing:   layout.SpaceAround,
+		Alignment: layout.Middle,
+	}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layoutLanguageButton(gtx, theme, state)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layoutCurrencyButton(gtx, theme, state)
+		}),
+	)
+}
+
+func layoutLanguageButton(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+	btn := material.Button(theme, &state.UI.LangModalButton, state.UI.Language)
+	btn.Color = AppColors.Accent1
+	btn.Background = color.NRGBA{A: 0}
+	btn.CornerRadius = unit.Dp(6)
+	btn.TextSize = unit.Sp(16)
+	btn.Inset = layout.Inset{
+		Top:    unit.Dp(6),
+		Bottom: unit.Dp(6),
+		Left:   unit.Dp(8),
+		Right:  unit.Dp(8),
+	}
+	if state.UI.LangModalButton.Clicked(gtx) {
+		state.UI.ModalOpen = "language"
+	}
+	return btn.Layout(gtx)
+}
+
+func layoutCurrencyButton(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+	btn := material.Button(theme, &state.UI.CurrencyModalButton, state.UI.Currency)
+	btn.Color = AppColors.Accent1
+	btn.Background = color.NRGBA{A: 0}
+	btn.CornerRadius = unit.Dp(6)
+	btn.TextSize = unit.Sp(16)
+	btn.Inset = layout.Inset{
+		Top:    unit.Dp(6),
+		Bottom: unit.Dp(6),
+		Left:   unit.Dp(8),
+		Right:  unit.Dp(8),
+	}
+	if state.UI.CurrencyModalButton.Clicked(gtx) {
+		state.UI.ModalOpen = "currency"
+	}
+	return btn.Layout(gtx)
+}
+
+func layoutCantorSelection(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+	list := widget.List{}
+	list.Axis = layout.Vertical
+
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		maxWidth := gtx.Dp(unit.Dp(400))
+		if maxWidth > gtx.Constraints.Max.X-gtx.Dp(unit.Dp(20)) {
+			maxWidth = gtx.Constraints.Max.X - gtx.Dp(unit.Dp(20))
+		}
+		gtx.Constraints.Max.X = maxWidth
+
+		cantorIDs := make([]string, 0, len(state.Cantors))
+		for id := range state.Cantors {
+			cantorIDs = append(cantorIDs, id)
+		}
+		sort.Strings(cantorIDs)
+
+		return material.List(theme, &list).Layout(gtx, len(cantorIDs),
+			func(gtx layout.Context, i int) layout.Dimensions {
+				return layoutCantorItem(gtx, theme, state, cantorIDs, i)
+			})
+	})
+}
+
+func layoutCantorItem(
+	gtx layout.Context,
+	theme *material.Theme,
+	state *AppState,
+	cantorIDs []string,
+	i int,
+) layout.Dimensions {
+	cantorKey := cantorIDs[i]
+	cantor := state.Cantors[cantorKey]
+	displayName := GetTranslation(state.UI.Language, cantor.DisplayName)
+
+	return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
+		func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min.X = gtx.Constraints.Max.X
+
+			button := material.Button(theme, &cantor.Button, displayName)
+			button.Background = color.NRGBA{R: 25, G: 25, B: 25, A: 50}
+			button.Color = AppColors.Text
+			button.TextSize = unit.Sp(16)
+			button.Inset = layout.UniformInset(unit.Dp(12))
+			button.CornerRadius = unit.Dp(8)
+
+			if state.UI.SelectedCantor == cantorKey {
+				return widget.Border{
+					Color:        AppColors.Accent1,
+					Width:        unit.Dp(2.5),
+					CornerRadius: button.CornerRadius,
+				}.Layout(gtx, button.Layout)
+			}
+			return button.Layout(gtx)
+		})
+}
+
+func layoutLoadingBar(gtx layout.Context, state *AppState) layout.Dimensions {
+	if !state.IsLoading.Load() || state.UI.SelectedCantor == "" {
+		return layout.Dimensions{}
+	}
+
+	return layout.Inset{Top: unit.Dp(15), Bottom: unit.Dp(10)}.Layout(gtx,
+		func(gtx layout.Context) layout.Dimensions {
+			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return DrawProgressBar(gtx, state)
+			})
+		})
+}
+
+func layoutVaultSection(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+	return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return LayoutVaultLinks(gtx, theme, state)
+	})
+}
+
+func layoutModal(gtx layout.Context, theme *material.Theme, state *AppState) {
+	if state.UI.ModalOpen == "" {
+		return
+	}
+
+	var modalContent layout.Widget
+
+	switch state.UI.ModalOpen {
+	case "language":
+		modalContent = func(gtx layout.Context) layout.Dimensions {
+			return LanguageModal(gtx, theme, state)
+		}
+	case "currency":
+		modalContent = func(gtx layout.Context) layout.Dimensions {
+			return CurrencyModal(gtx, theme, state)
+		}
+	}
+
+	if modalContent != nil {
+		modalContent(gtx)
+	}
 }
