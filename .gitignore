@@ -34,5 +34,6 @@ Thumbs.db
 cantorsInfo.txt
 appicon.xcf
 
-# Docker data volumes (best practice to keep this name out)
+# Docker data volumes
 gix-db-data/
+.env
