@@ -8,7 +8,6 @@ import (
 	"gioui.org/widget"
 )
 
-// Types
 // CantorInfo holds information about a cantor.
 type CantorInfo struct {
 	ID          int

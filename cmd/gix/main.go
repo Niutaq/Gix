@@ -136,7 +136,7 @@ func loadFontCollection() ([]font.FontFace, error) {
 }
 
 // renderBackground - a function for rendering background
-func renderBackground(gtx layout.Context, ops *op.Ops) {
+func renderBackground(gtx layout.Context) {
 	if backgroundImageLoaded && originalBackgroundImage != nil {
 		imgBounds := originalBackgroundImage.Bounds()
 		imgWidth := float32(imgBounds.Dx())
@@ -263,9 +263,8 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 }
 
 // handleFrameEvent - a function that handles a frame event
-func handleFrameEvent(gtx layout.Context, window *app.Window, state *utilities.AppState,
-	theme *material.Theme, ops *op.Ops) {
-	renderBackground(gtx, ops)
+func handleFrameEvent(gtx layout.Context, window *app.Window, state *utilities.AppState, theme *material.Theme) {
+	renderBackground(gtx)
 
 	state.LastFrameTime = time.Now()
 
@@ -360,7 +359,7 @@ func run(window *app.Window) error {
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, e)
 
-			handleFrameEvent(gtx, window, state, theme, &ops)
+			handleFrameEvent(gtx, window, state, theme)
 
 			e.Frame(gtx.Ops)
 		}

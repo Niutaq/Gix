@@ -16,7 +16,7 @@ CMD ["air", "-c", ".air.toml"]
 FROM base AS prod
 COPY . .
 RUN CGO_ENABLED=0 go build -o /gix-server ./cmd/gix-server/main.go
-FROM alpine:latest
+FROM alpine:3.20.2
 WORKDIR /
 COPY --from=prod /gix-server /gix-server
 COPY --from=prod /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/

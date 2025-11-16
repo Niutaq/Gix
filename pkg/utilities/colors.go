@@ -2,7 +2,7 @@ package utilities
 
 import "image/color"
 
-// Colors
+// AppColors Colors
 // It defines the color palette used throughout the application.
 var AppColors = struct {
 	Background  color.NRGBA
