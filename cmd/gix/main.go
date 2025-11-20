@@ -23,6 +23,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"image"
 	_ "image/png"
@@ -61,13 +62,6 @@ var (
 	backgroundImageLoaded    bool
 )
 
-// Definiujemy stałe dla naszego API
-const (
-	apiBaseURL   = "http://localhost:8080"
-	apiCantors   = apiBaseURL + "/api/v1/cantors"
-	apiRatesBase = apiBaseURL + "/api/v1/rates"
-)
-
 // ApiCantorResponse - a structure for parsing data from /api/v1/cantors
 type ApiCantorResponse struct {
 	ID          int    `json:"id"`
@@ -75,9 +69,29 @@ type ApiCantorResponse struct {
 	Name        string `json:"name"`
 }
 
+// AppConfig - a structure for storing app configuration
+type AppConfig struct {
+	APICantorsURL string
+	APIRatesURL   string
+}
+
 // Functions
 // ++++++++++++++++++++ MAIN Function ++++++++++++++++++++
 func main() {
+
+	apiBase := flag.String("api", "http://localhost:8080", "API base URL")
+	flag.Parse()
+
+	cleanBase := *apiBase
+	if len(cleanBase) > 0 && cleanBase[len(cleanBase)-1] == '/' {
+		cleanBase = cleanBase[:len(cleanBase)-1]
+	}
+
+	config := AppConfig{
+		APICantorsURL: cleanBase + "/api/v1/cantors",
+		APIRatesURL:   cleanBase + "/api/v1/rates",
+	}
+
 	window := new(app.Window)
 	window.Option(
 		app.Title("Gix"),
@@ -85,7 +99,7 @@ func main() {
 	)
 
 	go func() {
-		if err := run(window); err != nil {
+		if err := run(window, config); err != nil {
 			log.Fatal(err)
 		}
 		os.Exit(0)
@@ -182,7 +196,7 @@ func renderBackground(gtx layout.Context) {
 }
 
 // handleCantorClicks - a function that handles clicks on cantors
-func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities.AppState) {
+func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities.AppState, config AppConfig) {
 	cantorKeys := make([]string, 0, len(state.Cantors))
 	for key := range state.Cantors {
 		cantorKeys = append(cantorKeys, key)
@@ -204,11 +218,11 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 				state.Vault.LastEntry = nil
 
 				go func(w *app.Window, cInfo *utilities.CantorInfo, currentCurrency string,
-					currentAppState *utilities.AppState) {
+					currentAppState *utilities.AppState, apiRatesURL string) {
 
 					ratesURL := fmt.Sprintf(
 						"%s?cantor_id=%d&currency=%s",
-						apiRatesBase,
+						apiRatesURL,
 						cInfo.ID,
 						currentCurrency,
 					)
@@ -221,20 +235,20 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 
 					req, err := http.NewRequestWithContext(ctx, "GET", ratesURL, nil)
 					if err != nil {
-						fetchErr = fmt.Errorf("err_api_connection") // ZMIANA
+						fetchErr = fmt.Errorf("err_api_connection")
 					} else {
 						resp, err := http.DefaultClient.Do(req)
 						if err != nil {
-							fetchErr = fmt.Errorf("err_api_connection") // ZMIANA
+							fetchErr = fmt.Errorf("err_api_connection")
 						} else {
 							defer func(Body io.ReadCloser) {
 								_ = Body.Close()
 							}(resp.Body)
 							if resp.StatusCode != http.StatusOK {
-								fetchErr = fmt.Errorf("err_api_response") // ZMIANA
+								fetchErr = fmt.Errorf("err_api_response")
 							} else {
 								if err := json.NewDecoder(resp.Body).Decode(&rates); err != nil {
-									fetchErr = fmt.Errorf("err_api_parsing") // ZMIANA
+									fetchErr = fmt.Errorf("err_api_parsing")
 								}
 							}
 						}
@@ -256,14 +270,15 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 
 					currentAppState.IsLoading.Store(false)
 					w.Invalidate()
-				}(window, cantor, state.UI.Currency, state)
+				}(window, cantor, state.UI.Currency, state, config.APIRatesURL)
 			}
 		}
 	}
 }
 
 // handleFrameEvent - a function that handles a frame event
-func handleFrameEvent(gtx layout.Context, window *app.Window, state *utilities.AppState, theme *material.Theme) {
+func handleFrameEvent(gtx layout.Context, window *app.Window, state *utilities.AppState,
+	theme *material.Theme, config AppConfig) {
 	renderBackground(gtx)
 
 	state.LastFrameTime = time.Now()
@@ -273,22 +288,23 @@ func handleFrameEvent(gtx layout.Context, window *app.Window, state *utilities.A
 	}
 
 	// Cantor clicks handling
-	handleCantorClicks(gtx, window, state)
+	handleCantorClicks(gtx, window, state, config)
 
 	// UI rendering
 	utilities.LayoutUI(gtx, theme, state)
 }
 
 // run - a function that runs the app
-func run(window *app.Window) error {
+func run(window *app.Window, config AppConfig) error {
 	// Operations and background image initialization
 	var ops op.Ops
 	initBackgroundImage()
 
-	log.Println("Fetching cantor list from API:", apiCantors)
-	resp, err := http.Get(apiCantors)
+	log.Println("Fetching cantor list from API:", config.APICantorsURL)
+	resp, err := http.Get(config.APICantorsURL)
+
 	if err != nil {
-		return fmt.Errorf("failed to connect to Gix API server (%s): %w", apiCantors, err)
+		return fmt.Errorf("failed to connect to Gix API server (%s): %w", config.APICantorsURL, err)
 	}
 	defer func(Body io.ReadCloser) {
 		if err := Body.Close(); err != nil {
@@ -297,7 +313,7 @@ func run(window *app.Window) error {
 	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("API returned non-OK status (%s) for %s", resp.Status, apiCantors)
+		return fmt.Errorf("API returned non-OK status (%s) for %s", resp.Status, config.APICantorsURL)
 	}
 
 	// Parsing a JSON from an API response
@@ -359,7 +375,7 @@ func run(window *app.Window) error {
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, e)
 
-			handleFrameEvent(gtx, window, state, theme)
+			handleFrameEvent(gtx, window, state, theme, config)
 
 			e.Frame(gtx.Ops)
 		}
