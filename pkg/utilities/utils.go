@@ -12,6 +12,7 @@ import (
 
 	"gioui.org/font"
 	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/text"
@@ -20,7 +21,7 @@ import (
 	"gioui.org/widget/material"
 )
 
-// DrawProgressBar renders a progress bar based on the loading state in AppState.
+// DrawProgressBar - renders a progress bar based on the loading state in AppState.
 func DrawProgressBar(gtx layout.Context, state *AppState) layout.Dimensions {
 	elapsed := time.Since(state.IsLoadingStart).Seconds()
 
@@ -75,7 +76,7 @@ func DrawProgressBar(gtx layout.Context, state *AppState) layout.Dimensions {
 	}
 }
 
-// LayoutVaultLinks displays the fetched exchange rates or an error message from the CantorVault.
+// LayoutVaultLinks - displays the fetched exchange rates or an error message from the CantorVault.
 func LayoutVaultLinks(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	state.Vault.Mu.Lock()
 	entry := state.Vault.LastEntry
@@ -287,6 +288,7 @@ func ModalOverlay(gtx layout.Context, state *AppState, content layout.Widget) la
 	return result
 }
 
+// ModalDialog - Modal dialog with list of options
 func ModalDialog(
 	gtx layout.Context,
 	theme *material.Theme,
@@ -349,6 +351,7 @@ func ModalDialog(
 	)
 }
 
+// layoutHeader - a function that renders the header section
 func layoutHeader(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	return layout.Flex{
 		Axis:      layout.Vertical,
@@ -384,6 +387,7 @@ func layoutHeader(gtx layout.Context, theme *material.Theme, state *AppState) la
 	)
 }
 
+// layoutLanguageCurrencyRow - a function that renders a language and currency row
 func layoutLanguageCurrencyRow(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	return layout.Flex{
 		Axis:      layout.Horizontal,
@@ -399,6 +403,7 @@ func layoutLanguageCurrencyRow(gtx layout.Context, theme *material.Theme, state 
 	)
 }
 
+// layoutLanguageButton - a function that renders a language button
 func layoutLanguageButton(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	btn := material.Button(theme, &state.UI.LangModalButton, state.UI.Language)
 	btn.Color = AppColors.Accent1
@@ -417,6 +422,7 @@ func layoutLanguageButton(gtx layout.Context, theme *material.Theme, state *AppS
 	return btn.Layout(gtx)
 }
 
+// layoutCurrencyButton - a function that renders a currency button
 func layoutCurrencyButton(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	btn := material.Button(theme, &state.UI.CurrencyModalButton, state.UI.Currency)
 	btn.Color = AppColors.Accent1
@@ -435,6 +441,7 @@ func layoutCurrencyButton(gtx layout.Context, theme *material.Theme, state *AppS
 	return btn.Layout(gtx)
 }
 
+// layoutCantorSelection - a function that renders cantor selection
 func layoutCantorSelection(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	list := widget.List{}
 	list.Axis = layout.Vertical
@@ -459,6 +466,7 @@ func layoutCantorSelection(gtx layout.Context, theme *material.Theme, state *App
 	})
 }
 
+// layoutCantorItem - a function that renders a cantor item
 func layoutCantorItem(
 	gtx layout.Context,
 	theme *material.Theme,
@@ -492,6 +500,7 @@ func layoutCantorItem(
 		})
 }
 
+// layoutLoadingBar - a function that renders a loading bar
 func layoutLoadingBar(gtx layout.Context, state *AppState) layout.Dimensions {
 	if !state.IsLoading.Load() || state.UI.SelectedCantor == "" {
 		return layout.Dimensions{}
@@ -505,12 +514,14 @@ func layoutLoadingBar(gtx layout.Context, state *AppState) layout.Dimensions {
 		})
 }
 
+// layoutVaultSection - a function that renders the vault section
 func layoutVaultSection(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return LayoutVaultLinks(gtx, theme, state)
 	})
 }
 
+// layoutModal - a function that renders a modal window
 func layoutModal(gtx layout.Context, theme *material.Theme, state *AppState) {
 	if state.UI.ModalOpen == "" {
 		return
@@ -532,4 +543,68 @@ func layoutModal(gtx layout.Context, theme *material.Theme, state *AppState) {
 	if modalContent != nil {
 		modalContent(gtx)
 	}
+}
+
+// ShowToast - a function that shows a toast notification
+func ShowToast(state *AppState, message string, notifType string) {
+	state.Notifications = &Notification{
+		Message: message,
+		Type:    notifType,
+		Timeout: time.Now().Add(2 * time.Second),
+	}
+}
+
+// LayoutNotification - a function that renders a toast notification
+func LayoutNotification(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+	if state.Notifications == nil {
+		return layout.Dimensions{}
+	}
+
+	// Check if notification is expired
+	if time.Now().After(state.Notifications.Timeout) {
+		state.Notifications = nil
+		return layout.Dimensions{}
+	}
+
+	notif := state.Notifications
+
+	var bgColor color.NRGBA
+	switch notif.Type {
+	case "error":
+		bgColor = color.NRGBA{R: 200, G: 40, B: 40, A: 240}
+	case "success":
+		bgColor = color.NRGBA{R: 40, G: 180, B: 40, A: 240}
+	default:
+		bgColor = color.NRGBA{R: 50, G: 50, B: 50, A: 240}
+	}
+
+	return layout.S.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{Bottom: unit.Dp(50), Left: unit.Dp(20),
+			Right: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+
+			gtx.Constraints.Min = image.Point{}
+
+			if maxWidth := gtx.Dp(unit.Dp(400)); gtx.Constraints.Max.X > maxWidth {
+				gtx.Constraints.Max.X = maxWidth
+			}
+
+			macro := op.Record(gtx.Ops)
+			dims := layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				msg := material.Body1(theme, notif.Message)
+				msg.Color = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
+				msg.Alignment = text.Middle
+				return msg.Layout(gtx)
+			})
+			call := macro.Stop()
+
+			paint.FillShape(gtx.Ops, bgColor, clip.UniformRRect(
+				image.Rectangle{Max: dims.Size},
+				gtx.Dp(8),
+			).Op(gtx.Ops))
+
+			call.Add(gtx.Ops)
+
+			return dims
+		})
+	})
 }

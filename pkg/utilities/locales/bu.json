@@ -1,0 +1,20 @@
+{
+  "info": "Изберете език и валута",
+  "title": "Gix",
+  "languageLabel": "Език",
+  "buyLabel": "Купете",
+  "sellLabel": "Продавам",
+  "loadingText": "Зареждане...",
+  "errorPrefix": "Грешка",
+  "cantor_c1": "Обменно бюро Tadek (Stalowa Wola / Rzeszow)",
+  "cantor_c2": "Обменно бюро Exchange (Rzeszow)",
+  "cantor_c3": "Обменно бюро SuperSam (Rzeszow)",
+  "err_creating_request": "Грешка при създаване на заявка",
+  "err_fetching_data": "Грешка при извличане на данни",
+  "err_parsing_response": "Грешка при анализ на отговор",
+  "err_rates_not_found_for": "Курсове не са намерени за",
+  "err_api_connection": "Не може да се свърже със сървъра. Моля, проверете интернет връзката си.",
+  "err_api_response": "Сървърът отговори с грешка. Моля, опитайте отново по-късно.",
+  "err_api_parsing": "Неуспешно разбиране на отговора на сървъра.",
+  "err_unknown": "Възникна неизвестна грешка."
+}

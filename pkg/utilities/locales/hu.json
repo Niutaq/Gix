@@ -1,0 +1,20 @@
+{
+  "info": "Válasszon nyelvet és valutát",
+  "title": "Gix",
+  "languageLabel": "Nyelv",
+  "buyLabel": "Vásárlás",
+  "sellLabel": "Eladás",
+  "loadingText": "Betöltés...",
+  "errorPrefix": "Hiba",
+  "cantor_c1": "Tadek Pénzváltó (Stalowa Wola / Rzeszow)",
+  "cantor_c2": "Exchange Pénzváltó (Rzeszow)",
+  "cantor_c3": "SuperSam Pénzváltó (Rzeszow)",
+  "err_creating_request": "Hiba a kérés létrehozásakor",
+  "err_fetching_data": "Hiba az adatok lekérésekor",
+  "err_parsing_response": "Hiba a válasz feldolgozásakor",
+  "err_rates_not_found_for": "Árfolyamok nem találhatók ehhez:",
+  "err_api_connection": "Nem sikerült csatlakozni a szerverhez. Kérjük, ellenőrizze az internetkapcsolatát.",
+  "err_api_response": "A szerver hibával válaszolt. Kérjük, próbálja újra később.",
+  "err_api_parsing": "Nem sikerült értelmezni a szerver válaszát.",
+  "err_unknown": "Ismeretlen hiba történt."
+}

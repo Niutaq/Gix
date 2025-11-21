@@ -1,0 +1,20 @@
+{
+  "info": "Sélectionnez la langue et la devise",
+  "title": "Gix",
+  "languageLabel": "Langue",
+  "buyLabel": "Acheter",
+  "sellLabel": "Vendre",
+  "loadingText": "Chargement...",
+  "errorPrefix": "Erreur",
+  "cantor_c1": "Bureau de change Tadek (Stalowa Wola / Rzeszow)",
+  "cantor_c2": "Bureau de change Exchange (Rzeszow)",
+  "cantor_c3": "Bureau de change SuperSam (Rzeszow)",
+  "err_creating_request": "Erreur lors de la création de la requête",
+  "err_fetching_data": "Erreur lors de la récupération des données",
+  "err_parsing_response": "Erreur lors de l'analyse de la réponse",
+  "err_rates_not_found_for": "Taux non trouvés pour",
+  "err_api_connection": "Impossible de se connecter au serveur. Veuillez vérifier votre connexion Internet.",
+  "err_api_response": "Le serveur a répondu par une erreur. Veuillez réessayer plus tard.",
+  "err_api_parsing": "Impossible de comprendre la réponse du serveur.",
+  "err_unknown": "Une erreur inconnue est survenue."
+}
