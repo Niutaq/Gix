@@ -1,0 +1,20 @@
+{
+  "info": "Veldu tungumál og gjaldmiðil",
+  "title": "Gix",
+  "languageLabel": "Tungumál",
+  "buyLabel": "Kaupa",
+  "sellLabel": "Selja",
+  "loadingText": "Hleð...",
+  "errorPrefix": "Villa",
+  "cantor_c1": "Tadek Gjaldeyrisskipti (Stalowa Wola / Rzeszow)",
+  "cantor_c2": "Kwadrat Gjaldeyrisskipti (Rzeszow)",
+  "cantor_c3": "SuperSam Gjaldeyrisskipti (Rzeszow)",
+  "err_creating_request": "Villa við að búa til beiðni",
+  "err_fetching_data": "Villa við að sækja gögn",
+  "err_parsing_response": "Villa við að þátta svar",
+  "err_rates_not_found_for": "Gengi fannst ekki fyrir",
+  "err_api_connection": "Ekki tókst að tengjast þjóninum. Vinsamlegast athugaðu nettenginguna þína.",
+  "err_api_response": "Þjónninn svaraði með villu. Vinsamlegast reyndu aftur síðar.",
+  "err_api_parsing": "Ekki tókst að skilja svar þjónsins.",
+  "err_unknown": "Óþekkt villa kom upp."
+}

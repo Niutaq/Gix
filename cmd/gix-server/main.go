@@ -72,6 +72,40 @@ type processedRates struct {
 	Sell float64
 }
 
+// initSchema - a function for initializing the database schema
+func initSchema(ctx context.Context, db *pgxpool.Pool) error {
+	const schema = `
+	CREATE EXTENSION IF NOT EXISTS timescaledb;
+	
+	CREATE TABLE IF NOT EXISTS cantors (
+		id SERIAL PRIMARY KEY,
+		name VARCHAR(50) NOT NULL UNIQUE,
+		display_name VARCHAR(100) NOT NULL,
+		base_url TEXT NOT NULL,
+		strategy VARCHAR(10) NOT NULL,
+		units INTEGER DEFAULT 1,
+		created_at TIMESTAMP DEFAULT NOW()
+	);
+	
+	CREATE TABLE IF NOT EXISTS rates (
+		time TIMESTAMPTZ NOT NULL,
+		cantor_id INTEGER NOT NULL REFERENCES cantors(id),
+		currency VARCHAR(3) NOT NULL,
+		buy_rate NUMERIC(10, 4) NOT NULL,
+		sell_rate NUMERIC(10, 4) NOT NULL,
+	
+		UNIQUE (time, cantor_id, currency)
+	);
+    `
+
+	log.Println("Verifying database schema...")
+	_, err := db.Exec(ctx, schema)
+
+	_, _ = db.Exec(ctx, "SELECT create_hypertable('rates', 'time', if_not_exists => TRUE);")
+
+	return err
+}
+
 // ++++++++++++++++++++ MAIN Function ++++++++++++++++++++
 func main() {
 	log.Println("Launching Gix server...")
@@ -91,6 +125,10 @@ func main() {
 	}
 	defer dbpool.Close()
 	log.Println("Successfully connected to database.")
+
+	if err := initSchema(ctx, dbpool); err != nil {
+		log.Fatalf("Can't initialize database schema: %v\n", err)
+	}
 
 	rdb, err := connectToRedis(ctx, redisURL)
 	if err != nil {
@@ -210,8 +248,13 @@ func handleCantorsList(app *AppState) http.HandlerFunc {
 
 		w.Header().Set(contentTypeText, contentTypeJSON)
 		w.WriteHeader(http.StatusOK)
-		_, err = w.Write(buf.Bytes())
-		if err != nil {
+		//_, err = w.Write(buf.Bytes())
+		//if err != nil {
+		//	return
+		//}
+
+		if err := json.NewEncoder(w).Encode(cantors); err != nil {
+			log.Printf("Error encoding cantors list to JSON: %v\n", err)
 			return
 		}
 	}

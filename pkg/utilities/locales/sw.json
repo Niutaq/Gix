@@ -1,0 +1,20 @@
+{
+  "info": "Välj språk och valuta",
+  "title": "Gix",
+  "languageLabel": "Språk",
+  "buyLabel": "Köp",
+  "sellLabel": "Sälj",
+  "loadingText": "Laddar...",
+  "errorPrefix": "Fel",
+  "cantor_c1": "Tadek Växlingskontor (Stalowa Wola / Rzeszow)",
+  "cantor_c2": "Exchange Växlingskontor (Rzeszow)",
+  "cantor_c3": "SuperSam Växlingskontor (Rzeszow)",
+  "err_creating_request": "Fel vid skapande av begäran",
+  "err_fetching_data": "Fel vid hämtning av data",
+  "err_parsing_response": "Fel vid tolkning av svar",
+  "err_rates_not_found_for": "Kurser hittades inte för",
+  "err_api_connection": "Kunde inte ansluta till servern. Kontrollera din internetanslutning.",
+  "err_api_response": "Servern svarade med ett fel. Försök igen senare.",
+  "err_api_parsing": "Kunde inte förstå serverns svar.",
+  "err_unknown": "Ett okänt fel inträffade."
+}

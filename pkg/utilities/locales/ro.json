@@ -1,0 +1,20 @@
+{
+  "info": "Selectați limba și moneda",
+  "title": "Gix",
+  "languageLabel": "Limba",
+  "buyLabel": "Cumpără",
+  "sellLabel": "Vând",
+  "loadingText": "Se încarcă...",
+  "errorPrefix": "Eroare",
+  "cantor_c1": "Casa de schimb Tadek (Stalowa Wola / Rzeszow)",
+  "cantor_c2": "Casa de schimb Exchange (Rzeszow)",
+  "cantor_c3": "Casa de schimb SuperSam (Rzeszow)",
+  "err_creating_request": "Eroare la crearea cererii",
+  "err_fetching_data": "Eroare la preluarea datelor",
+  "err_parsing_response": "Eroare la analizarea răspunsului",
+  "err_rates_not_found_for": "Cursuri valutare negăsite pentru",
+  "err_api_connection": "Conexiunea la server a eșuat. Verificați conexiunea la internet.",
+  "err_api_response": "Serverul a răspuns cu o eroare. Vă rugăm să încercați din nou mai târziu.",
+  "err_api_parsing": "Nu s-a putut înțelege răspunsul serverului.",
+  "err_unknown": "A apărut o eroare necunoscută."
+}

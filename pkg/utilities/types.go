@@ -34,20 +34,6 @@ type CantorVault struct {
 	LastEntry *CantorEntry
 }
 
-// AppState holds the overall state of the application.
-type AppState struct {
-	// Main Vault
-	Vault *CantorVault
-
-	// Cantor(s) information
-	Cantors        map[string]*CantorInfo
-	LastFrameTime  time.Time
-	IsLoadingStart time.Time
-	IsLoading      atomic.Bool
-
-	UI UIState
-}
-
 // UIState holds UI-specific state and widgets.
 type UIState struct {
 	ModalOpen             string
@@ -65,4 +51,27 @@ type UIState struct {
 	Language              string
 	Currency              string
 	IsLoading             time.Time
+}
+
+type Notification struct {
+	Message string
+	Type    string
+	Timeout time.Time
+}
+
+// AppState holds the overall state of the application.
+type AppState struct {
+	// Main Vault
+	Vault *CantorVault
+
+	// Cantor(s) information
+	Cantors        map[string]*CantorInfo
+	LastFrameTime  time.Time
+	IsLoadingStart time.Time
+	IsLoading      atomic.Bool
+
+	// Notifications
+	Notifications *Notification
+
+	UI UIState
 }

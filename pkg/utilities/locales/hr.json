@@ -1,0 +1,20 @@
+{
+  "info": "Odaberite jezik i valutu",
+  "title": "Gix",
+  "languageLabel": "Jezik",
+  "buyLabel": "Kupi",
+  "sellLabel": "Prodaja",
+  "loadingText": "Učitavanje...",
+  "errorPrefix": "Greška",
+  "cantor_c1": "Mjenjačnica Tadek (Stalowa Wola / Rzeszow)",
+  "cantor_c2": "Mjenjačnica Exchange (Rzeszow)",
+  "cantor_c3": "Mjenjačnica SuperSam (Rzeszow)",
+  "err_creating_request": "Pogreška pri izradi zahtjeva",
+  "err_fetching_data": "Pogreška pri dohvaćanju podataka",
+  "err_parsing_response": "Pogreška pri parsiranju odgovora",
+  "err_rates_not_found_for": "Tečajevi nisu pronađeni za",
+  "err_api_connection": "Nije moguće povezivanje sa poslužiteljem. Provjerite internetsku vezu.",
+  "err_api_response": "Poslužitelj je odgovorio greškom. Molimo pokušajte ponovo kasnije.",
+  "err_api_parsing": "Nije uspjelo razumijevanje odgovora poslužitelja.",
+  "err_unknown": "Došlo je do nepoznate pogreške."
+}

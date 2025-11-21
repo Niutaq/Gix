@@ -3,6 +3,7 @@ package scrapers
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -83,32 +84,29 @@ func FetchC2(url, currency string) (ScrapeResult, error) {
 		return ScrapeResult{}, err
 	}
 
+	log.Printf("DEBUG: --- Starting C2 Analysis for %s ---", url)
+
 	var buyRate, sellRate string
 	targetCurrency := strings.ToUpper(strings.TrimSpace(currency))
 
-	doc.Find("table#AutoNumber2 tbody tr").EachWithBreak(func(i int, s *goquery.Selection) bool {
-		if i == 0 {
-			return true
-		} // Pomiń nagłówek
+	doc.Find(".offerItem").EachWithBreak(func(i int, s *goquery.Selection) bool {
+		text := strings.ToUpper(s.Text())
 
-		currencyCell := s.Find("td").Eq(1)
-		fullText := strings.TrimSpace(currencyCell.Find("b").Text())
-		parts := strings.Fields(fullText)
-		currentSymbol := ""
-		if len(parts) > 0 {
-			currentSymbol = strings.ToUpper(parts[len(parts)-1])
-		}
+		if strings.Contains(text, targetCurrency) {
 
-		if currentSymbol == targetCurrency {
-			buyRate = strings.TrimSpace(s.Find("td").Eq(2).Find("b").Text())
-			sellRate = strings.TrimSpace(s.Find("td").Eq(3).Find("b").Text())
-			return false
+			buyRate = strings.TrimSpace(s.Find(".offerItem__exchangeBuy").Text())
+			sellRate = strings.TrimSpace(s.Find(".offerItem__exchangeSell").Text())
+
+			if buyRate != "" && sellRate != "" {
+				log.Printf("DEBUG: Hit for %s! Buy: %s, Sell: %s", currency, buyRate, sellRate)
+				return false
+			}
 		}
 		return true
 	})
 
 	if buyRate == "" || sellRate == "" {
-		return ScrapeResult{}, fmt.Errorf(errorNotFoundRates, currency)
+		return ScrapeResult{}, fmt.Errorf("not found rates for: %s", currency)
 	}
 	return ScrapeResult{BuyRate: buyRate, SellRate: sellRate}, nil
 }

@@ -1,0 +1,20 @@
+{
+  "info": "Wybierz język oraz walutę",
+  "title": "Gix",
+  "languageLabel": "Język",
+  "buyLabel": "Kupno",
+  "sellLabel": "Sprzedaż",
+  "loadingText": "Ładowanie...",
+  "errorPrefix": "Błąd",
+  "cantor_c1": "Kantor Tadek (Stalowa Wola / Rzeszów)",
+  "cantor_c2": "Kantor Exchange (Rzeszów)",
+  "cantor_c3": "Kantor SuperSam (Rzeszów)",
+  "err_creating_request": "Błąd tworzenia zapytania",
+  "err_fetching_data": "Błąd pobierania danych",
+  "err_parsing_response": "Błąd parsowania odpowiedzi",
+  "err_rates_not_found_for": "Nie znaleziono kursów dla",
+  "err_api_connection": "Nie można połączyć się z serwerem. Sprawdź połączenie internetowe.",
+  "err_api_response":         "Serwer odpowiedział błędem. Spróbuj ponownie później.",
+  "err_api_parsing": "Nie udało się przetworzyć odpowiedzi serwera.",
+  "err_unknown": "Wystąpił nieznany błąd."
+}
