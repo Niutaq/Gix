@@ -6,6 +6,6 @@ INSERT INTO cantors (name, display_name, base_url, strategy, units) VALUES
 ('supersam', 'Supersam', 'http://www.kantorsupersam.pl/', 'C3', 1)
 ON CONFLICT (name) DO NOTHING;
 
-SELECT * FROM cantors;
-
-SELECT * FROM rates;
+-- Check results
+-- SELECT * FROM cantors;
+-- SELECT * FROM rates;
