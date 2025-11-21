@@ -1,0 +1,20 @@
+{
+  "info": "Vyberte jazyk a měnu",
+  "title": "Gix",
+  "languageLabel": "Jazyk",
+  "buyLabel": "Koupit",
+  "sellLabel": "Prodat",
+  "loadingText": "Načítání...",
+  "errorPrefix": "Chyba",
+  "cantor_c1": "Směnárna Tadek (Stalowa Wola / Rzeszow)",
+  "cantor_c2": "Směnárna Exchange (Rzeszow)",
+  "cantor_c3": "Směnárna SuperSam (Rzeszow)",
+  "err_creating_request": "Chyba při vytváření požadavku",
+  "err_fetching_data": "Chyba při načítání dat",
+  "err_parsing_response": "Chyba při parsování odpovědi",
+  "err_rates_not_found_for": "Směnné kurzy nenalezeny pro",
+  "err_api_connection": "Nelze se připojit k serveru. Zkontrolujte prosím své internetové připojení.",
+  "err_api_response": "Server odpověděl chybou. Zkuste to prosím později.",
+  "err_api_parsing": "Nepodařilo se porozumět odpovědi serveru.",
+  "err_unknown": "Vyskytla se neznámá chyba."
+}

@@ -257,6 +257,14 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 					currentAppState.Vault.Mu.Lock()
 					if currentAppState.UI.SelectedCantor == cantorName {
 						if fetchErr != nil {
+							errMsg := "Couldn't download rates from API.\n" +
+								currentAppState.UI.Currency + " is not available."
+							if fetchErr.Error() == "err_api_parsing" {
+								errMsg = "No rates found for this cantor."
+							}
+
+							utilities.ShowToast(currentAppState, errMsg, "error")
+
 							currentAppState.Vault.LastEntry = &utilities.CantorEntry{
 								Error: fetchErr.Error(),
 							}
@@ -269,7 +277,13 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 					currentAppState.Vault.Mu.Unlock()
 
 					currentAppState.IsLoading.Store(false)
+
 					w.Invalidate()
+
+					go func() {
+						time.Sleep(2 * time.Second)
+						w.Invalidate()
+					}()
 				}(window, cantor, state.UI.Currency, state, config.APIRatesURL)
 			}
 		}
@@ -292,6 +306,9 @@ func handleFrameEvent(gtx layout.Context, window *app.Window, state *utilities.A
 
 	// UI rendering
 	utilities.LayoutUI(gtx, theme, state)
+
+	// Notification rendering
+	utilities.LayoutNotification(gtx, theme, state)
 }
 
 // run - a function that runs the app
@@ -299,6 +316,9 @@ func run(window *app.Window, config AppConfig) error {
 	// Operations and background image initialization
 	var ops op.Ops
 	initBackgroundImage()
+
+	// Translation initialization
+	utilities.InitTranslations()
 
 	log.Println("Fetching cantor list from API:", config.APICantorsURL)
 	resp, err := http.Get(config.APICantorsURL)

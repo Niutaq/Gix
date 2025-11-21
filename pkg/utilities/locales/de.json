@@ -1,0 +1,20 @@
+{
+  "info": "Wählen Sie die Sprache und die Währung",
+  "title": "Gix",
+  "languageLabel": "Sprache",
+  "buyLabel": "Kaufen",
+  "sellLabel": "Verkaufen",
+  "loadingText": "Laden...",
+  "errorPrefix": "Fehler",
+  "cantor_c1": "Tadek Wechselstube (Stalowa Wola / Rzeszow)",
+  "cantor_c2": "Exchange Wechselstube (Rzeszow)",
+  "cantor_c3": "SuperSam Wechselstube (Rzeszow)",
+  "err_creating_request": "Fehler beim Erstellen der Anfrage",
+  "err_fetching_data": "Fehler beim Abrufen der Daten",
+  "err_parsing_response": "Fehler beim Parsen der Antwort",
+  "err_rates_not_found_for":"Kurse nicht gefunden für",
+  "err_api_connection": "Keine Verbindung zum Server möglich. Bitte überprüfen Sie Ihre Internetverbindung.",
+  "err_api_response": "Der Server hat einen Fehler gemeldet. Bitte versuchen Sie es später erneut.",
+  "err_api_parsing": "Die Antwort des Servers konnte nicht verstanden werden.",
+  "err_unknown": "Ein unbekannter Fehler ist aufgetreten."
+}

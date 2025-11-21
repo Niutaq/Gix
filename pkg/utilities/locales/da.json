@@ -1,0 +1,20 @@
+{
+  "info":"Vælg sprog og valuta",
+  "title": "Gix",
+  "languageLabel": "Sprog",
+  "buyLabel": "Køb",
+  "sellLabel": "Sælg",
+  "loadingText": "Indlæser...",
+  "errorPrefix": "Fejl",
+  "cantor_c1": "Tadek Valutaveksling (Stalowa Wola / Rzeszow)",
+  "cantor_c2": "Exchange Valutaveksling (Rzeszow)",
+  "cantor_c3": "SuperSam Valutaveksling (Rzeszow)",
+  "err_creating_request": "Fejl ved oprettelse af anmodning",
+  "err_fetching_data": "Fejl ved hentning af data",
+  "err_parsing_response": "Fejl ved fortolkning af svar",
+  "err_rates_not_found_for": "Kurser ikke fundet for",
+  "err_api_connection": "Kunne ikke oprette forbindelse til serveren. Tjek venligst din internetforbindelse.",
+  "err_api_response": "Serveren svarede med en fejl. Prøv venligst igen senere.",
+  "err_api_parsing": "Kunne ikke forstå serverens svar.",
+  "err_unknown": "Der opstod en ukendt fejl."
+}

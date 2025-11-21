@@ -1,363 +1,72 @@
 package utilities
 
-// GetTranslation - a function for getting translations
+import (
+	"embed"
+	"encoding/json"
+	"log"
+	"strings"
+	"sync"
+)
+
+//go:embed locales/*.json
+var localesFS embed.FS
+
+var translationsMap map[string]map[string]string
+var once sync.Once
+
+// InitTranslations - a function for initializing translations
+func InitTranslations() {
+	once.Do(func() {
+		translationsMap = make(map[string]map[string]string)
+
+		langs := []string{
+			"en", "pl", "de", "da", "no", "fr", "sw", "cz",
+			"hr", "hu", "ua", "bu", "ro", "al", "tr", "ic",
+		}
+
+		for _, lang := range langs {
+			filename := "locales/" + lang + ".json"
+			data, err := localesFS.ReadFile(filename)
+			if err != nil {
+				if lang == "en" || lang == "pl" {
+					log.Printf("Warning: Could not load core language file %s: %v", filename, err)
+				}
+				continue
+			}
+
+			var content map[string]string
+			if err := json.Unmarshal(data, &content); err != nil {
+				log.Printf("Error parsing JSON for %s: %v", lang, err)
+				continue
+			}
+
+			translationsMap[strings.ToUpper(lang)] = content
+		}
+		log.Println("Translations loaded successfully.")
+	})
+}
+
+// GetTranslation - a function for getting translation for a given key
 func GetTranslation(lang, key string) string {
-	if langMap, ok := translations[lang]; ok {
+	if translationsMap == nil {
+		InitTranslations()
+	}
+
+	lang = strings.ToUpper(lang)
+
+	if langMap, ok := translationsMap[lang]; ok {
 		if val, ok := langMap[key]; ok {
-			// if len(params) > 0 {
-			//     return fmt.Sprintf(val, params...)
-			// }
 			return val
 		}
 	}
 
 	if lang != "EN" {
-		if langMapEN, ok := translations["EN"]; ok {
-			if val, ok := langMapEN[key]; ok {
+		if enMap, ok := translationsMap["EN"]; ok {
+			if val, ok := enMap[key]; ok {
 				return val
 			}
 		}
 	}
+
 	return key
-}
-
-// Language options
-// It is used for internationalization (i18n) of the application's UI text.
-var translations = map[string]map[string]string{
-	"EN": {
-		"info":                    "Select the language and the currency",
-		"title":                   "Gix",
-		"languageLabel":           "Language",
-		"buyLabel":                "Buy",
-		"sellLabel":               "Sell",
-		"loadingText":             "Loading...",
-		"errorPrefix":             "Error",
-		"cantor_c1":               "Tadek Exchange (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Kwadrat Exchange (Rzeszow)",
-		"cantor_c3":               "SuperSam Exchange (Rzeszow)",
-		"err_creating_request":    "Error creating request",
-		"err_fetching_data":       "Error fetching data",
-		"err_parsing_response":    "Error parsing response",
-		"err_rates_not_found_for": "Rates not found for",
-
-		"err_api_connection": "Could not connect to the server. Please check your internet connection.",
-		"err_api_response":   "The server responded with an error. Please try again later.",
-		"err_api_parsing":    "Failed to understand the server's response.",
-		"err_unknown":        "An unknown error occurred.",
-	},
-	"PL": {
-		"info":                    "Wybierz język oraz walutę",
-		"title":                   "Gix",
-		"languageLabel":           "Język",
-		"buyLabel":                "Kupno",
-		"sellLabel":               "Sprzedaż",
-		"loadingText":             "Ładowanie...",
-		"errorPrefix":             "Błąd",
-		"cantor_c1":               "Kantor Tadek (Stalowa Wola / Rzeszów)",
-		"cantor_c2":               "Kantor Kwadrat (Rzeszów)",
-		"cantor_c3":               "Kantor SuperSam (Rzeszów)",
-		"err_creating_request":    "Błąd tworzenia zapytania",
-		"err_fetching_data":       "Błąd pobierania danych",
-		"err_parsing_response":    "Błąd parsowania odpowiedzi",
-		"err_rates_not_found_for": "Nie znaleziono kursów dla",
-
-		"err_api_connection": "Nie można połączyć się z serwerem. Sprawdź połączenie internetowe.",
-		"err_api_response":   "Serwer odpowiedział błędem. Spróbuj ponownie później.",
-		"err_api_parsing":    "Nie udało się przetworzyć odpowiedzi serwera.",
-		"err_unknown":        "Wystąpił nieznany błąd.",
-	},
-	"DE": {
-		"info":                    "Wählen Sie die Sprache und die Währung",
-		"title":                   "Gix",
-		"languageLabel":           "Sprache",
-		"buyLabel":                "Kaufen",
-		"sellLabel":               "Verkaufen",
-		"loadingText":             "Laden...",
-		"errorPrefix":             "Fehler",
-		"cantor_c1":               "Tadek Wechselstube (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Kwadrat Wechselstube (Rzeszow)",
-		"cantor_c3":               "SuperSam Wechselstube (Rzeszow)",
-		"err_creating_request":    "Fehler beim Erstellen der Anfrage",
-		"err_fetching_data":       "Fehler beim Abrufen der Daten",
-		"err_parsing_response":    "Fehler beim Parsen der Antwort",
-		"err_rates_not_found_for": "Kurse nicht gefunden für",
-
-		"err_api_connection": "Keine Verbindung zum Server möglich. Bitte überprüfen Sie Ihre Internetverbindung.",
-		"err_api_response":   "Der Server hat einen Fehler gemeldet. Bitte versuchen Sie es später erneut.",
-		"err_api_parsing":    "Die Antwort des Servers konnte nicht verstanden werden.",
-		"err_unknown":        "Ein unbekannter Fehler ist aufgetreten.",
-	},
-	"DA": {
-		"info":                    "Vælg sprog og valuta",
-		"title":                   "Gix",
-		"languageLabel":           "Sprog",
-		"buyLabel":                "Køb",
-		"sellLabel":               "Sælg",
-		"loadingText":             "Indlæser...",
-		"errorPrefix":             "Fejl",
-		"cantor_c1":               "Tadek Valutaveksling (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Kwadrat Valutaveksling (Rzeszow)",
-		"cantor_c3":               "SuperSam Valutaveksling (Rzeszow)",
-		"err_creating_request":    "Fejl ved oprettelse af anmodning",
-		"err_fetching_data":       "Fejl ved hentning af data",
-		"err_parsing_response":    "Fejl ved fortolkning af svar",
-		"err_rates_not_found_for": "Kurser ikke fundet for",
-
-		"err_api_connection": "Kunne ikke oprette forbindelse til serveren. Tjek venligst din internetforbindelse.",
-		"err_api_response":   "Serveren svarede med en fejl. Prøv venligst igen senere.",
-		"err_api_parsing":    "Kunne ikke forstå serverens svar.",
-		"err_unknown":        "Der opstod en ukendt fejl.",
-	},
-	"NO": {
-		"info":                    "Velg språk og valuta",
-		"title":                   "Gix",
-		"languageLabel":           "Språk",
-		"buyLabel":                "Kjøp",
-		"sellLabel":               "Selg",
-		"loadingText":             "Laster...",
-		"errorPrefix":             "Feil",
-		"cantor_c1":               "Tadek Valutaveksling (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Kwadrat Valutaveksling (Rzeszow)",
-		"cantor_c3":               "SuperSam Valutaveksling (Rzeszow)",
-		"err_creating_request":    "Feil ved oppretting av forespørsel",
-		"err_fetching_data":       "Feil ved henting av data",
-		"err_parsing_response":    "Feil ved parsing av respons",
-		"err_rates_not_found_for": "Valutakurser ikke funnet for",
-
-		"err_api_connection": "Kunne ikke koble til serveren. Vennligst sjekk internettforbindelsen din.",
-		"err_api_response":   "Serveren svarte med en feil. Vennligst prøv igjen senere.",
-		"err_api_parsing":    "Klarte ikke å forstå serverens svar.",
-		"err_unknown":        "En ukjent feil oppstod.",
-	},
-	"FR": {
-		"info":                    "Sélectionnez la langue et la devise",
-		"title":                   "Gix",
-		"languageLabel":           "Langue",
-		"buyLabel":                "Acheter",
-		"sellLabel":               "Vendre",
-		"loadingText":             "Chargement...",
-		"errorPrefix":             "Erreur",
-		"cantor_c1":               "Bureau de change Tadek (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Bureau de change Kwadrat (Rzeszow)",
-		"cantor_c3":               "Bureau de change SuperSam (Rzeszow)",
-		"err_creating_request":    "Erreur lors de la création de la requête",
-		"err_fetching_data":       "Erreur lors de la récupération des données",
-		"err_parsing_response":    "Erreur lors de l'analyse de la réponse",
-		"err_rates_not_found_for": "Taux non trouvés pour",
-
-		"err_api_connection": "Impossible de se connecter au serveur. Veuillez vérifier votre connexion Internet.",
-		"err_api_response":   "Le serveur a répondu par une erreur. Veuillez réessayer plus tard.",
-		"err_api_parsing":    "Impossible de comprendre la réponse du serveur.",
-		"err_unknown":        "Une erreur inconnue est survenue.",
-	},
-	"SW": {
-		"info":                    "Välj språk och valuta",
-		"title":                   "Gix",
-		"languageLabel":           "Språk",
-		"buyLabel":                "Köp",
-		"sellLabel":               "Sälj",
-		"loadingText":             "Laddar...",
-		"errorPrefix":             "Fel",
-		"cantor_c1":               "Tadek Växlingskontor (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Kwadrat Växlingskontor (Rzeszow)",
-		"cantor_c3":               "SuperSam Växlingskontor (Rzeszow)",
-		"err_creating_request":    "Fel vid skapande av begäran",
-		"err_fetching_data":       "Fel vid hämtning av data",
-		"err_parsing_response":    "Fel vid tolkning av svar",
-		"err_rates_not_found_for": "Kurser hittades inte för",
-
-		"err_api_connection": "Kunde inte ansluta till servern. Kontrollera din internetanslutning.",
-		"err_api_response":   "Servern svarade med ett fel. Försök igen senare.",
-		"err_api_parsing":    "Kunde inte förstå serverns svar.",
-		"err_unknown":        "Ett okänt fel inträffade.",
-	},
-	"CZ": {
-		"info":                    "Vyberte jazyk a měnu",
-		"title":                   "Gix",
-		"languageLabel":           "Jazyk",
-		"buyLabel":                "Koupit",
-		"sellLabel":               "Prodat",
-		"loadingText":             "Načítání...",
-		"errorPrefix":             "Chyba",
-		"cantor_c1":               "Směnárna Tadek (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Směnárna Kwadrat (Rzeszow)",
-		"cantor_c3":               "Směnárna SuperSam (Rzeszow)",
-		"err_creating_request":    "Chyba při vytváření požadavku",
-		"err_fetching_data":       "Chyba při načítání dat",
-		"err_parsing_response":    "Chyba při parsování odpovědi",
-		"err_rates_not_found_for": "Směnné kurzy nenalezeny pro",
-
-		"err_api_connection": "Nelze se připojit k serveru. Zkontrolujte prosím své internetové připojení.",
-		"err_api_response":   "Server odpověděl chybou. Zkuste to prosím později.",
-		"err_api_parsing":    "Nepodařilo se porozumět odpovědi serveru.",
-		"err_unknown":        "Vyskytla se neznámá chyba.",
-	},
-	"HR": {
-		"info":                    "Odaberite jezik i valutu",
-		"title":                   "Gix",
-		"languageLabel":           "Jezik",
-		"buyLabel":                "Kupi",
-		"sellLabel":               "Prodaja",
-		"loadingText":             "Učitavanje...",
-		"errorPrefix":             "Greška",
-		"cantor_c1":               "Mjenjačnica Tadek (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Mjenjačnica Kwadrat (Rzeszow)",
-		"cantor_c3":               "Mjenjačnica SuperSam (Rzeszow)",
-		"err_creating_request":    "Pogreška pri izradi zahtjeva",
-		"err_fetching_data":       "Pogreška pri dohvaćanju podataka",
-		"err_parsing_response":    "Pogreška pri parsiranju odgovora",
-		"err_rates_not_found_for": "Tečajevi nisu pronađeni za",
-
-		"err_api_connection": "Nije moguće povezivanje sa poslužiteljem. Provjerite internetsku vezu.",
-		"err_api_response":   "Poslužitelj je odgovorio greškom. Molimo pokušajte ponovo kasnije.",
-		"err_api_parsing":    "Nije uspjelo razumijevanje odgovora poslužitelja.",
-		"err_unknown":        "Došlo je do nepoznate pogreške.",
-	},
-	"HU": {
-		"info":                    "Válasszon nyelvet és valutát",
-		"title":                   "Gix",
-		"languageLabel":           "Nyelv",
-		"buyLabel":                "Vásárlás",
-		"sellLabel":               "Eladás",
-		"loadingText":             "Betöltés...",
-		"errorPrefix":             "Hiba",
-		"cantor_c1":               "Tadek Pénzváltó (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Kwadrat Pénzváltó (Rzeszow)",
-		"cantor_c3":               "SuperSam Pénzváltó (Rzeszow)",
-		"err_creating_request":    "Hiba a kérés létrehozásakor",
-		"err_fetching_data":       "Hiba az adatok lekérésekor",
-		"err_parsing_response":    "Hiba a válasz feldolgozásakor",
-		"err_rates_not_found_for": "Árfolyamok nem találhatók ehhez:",
-
-		"err_api_connection": "Nem sikerült csatlakozni a szerverhez. Kérjük, ellenőrizze az internetkapcsolatát.",
-		"err_api_response":   "A szerver hibával válaszolt. Kérjük, próbálja újra később.",
-		"err_api_parsing":    "Nem sikerült értelmezni a szerver válaszát.",
-		"err_unknown":        "Ismeretlen hiba történt.",
-	},
-	"UA": {
-		"info":                    "Виберіть мову та валюту",
-		"title":                   "Gix",
-		"languageLabel":           "Мова",
-		"buyLabel":                "Купити",
-		"sellLabel":               "Продати",
-		"loadingText":             "Завантаження...",
-		"errorPrefix":             "Помилка",
-		"cantor_c1":               "Обмінний пункт Tadek (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Обмінний пункт Kwadrat (Rzeszow)",
-		"cantor_c3":               "Обмінний пункт SuperSam (Rzeszow)",
-		"err_creating_request":    "Помилка створення запиту",
-		"err_fetching_data":       "Помилка отримання даних",
-		"err_parsing_response":    "Помилка розбору відповіді",
-		"err_rates_not_found_for": "Курси не знайдено для",
-
-		"err_api_connection": "Не вдалося підключитися до сервера. Будь ласка, перевірте підключення до Інтернету.",
-		"err_api_response":   "Сервер відповів помилкою. Будь ласка, спробуйте пізніше.",
-		"err_api_parsing":    "Не вдалося розпізнати відповідь сервера.",
-		"err_unknown":        "Сталася невідома помилка.",
-	},
-	"BU": {
-		"info":                    "Изберете език и валута",
-		"title":                   "Gix",
-		"languageLabel":           "Език",
-		"buyLabel":                "Купете",
-		"sellLabel":               "Продавам",
-		"loadingText":             "Зареждане...",
-		"errorPrefix":             "Грешка",
-		"cantor_c1":               "Обменно бюро Tadek (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Обменно бюро Kwadrat (Rzeszow)",
-		"cantor_c3":               "Обменно бюро SuperSam (Rzeszow)",
-		"err_creating_request":    "Грешка при създаване на заявка",
-		"err_fetching_data":       "Грешка при извличане на данни",
-		"err_parsing_response":    "Грешка при анализ на отговор",
-		"err_rates_not_found_for": "Курсове не са намерени за",
-
-		"err_api_connection": "Не може да се свърже със сървъра. Моля, проверете интернет връзката си.",
-		"err_api_response":   "Сървърът отговори с грешка. Моля, опитайте отново по-късно.",
-		"err_api_parsing":    "Неуспешно разбиране на отговора на сървъра.",
-		"err_unknown":        "Възникна неизвестна грешка.",
-	},
-	"RO": {
-		"info":                    "Selectați limba și moneda",
-		"title":                   "Gix",
-		"languageLabel":           "Limba",
-		"buyLabel":                "Cumpără",
-		"sellLabel":               "Vând",
-		"loadingText":             "Se încarcă...",
-		"errorPrefix":             "Eroare",
-		"cantor_c1":               "Casa de schimb Tadek (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Casa de schimb Kwadrat (Rzeszow)",
-		"cantor_c3":               "Casa de schimb SuperSam (Rzeszow)",
-		"err_creating_request":    "Eroare la crearea cererii",
-		"err_fetching_data":       "Eroare la preluarea datelor",
-		"err_parsing_response":    "Eroare la analizarea răspunsului",
-		"err_rates_not_found_for": "Cursuri valutare negăsite pentru",
-
-		"err_api_connection": "Conexiunea la server a eșuat. Verificați conexiunea la internet.",
-		"err_api_response":   "Serverul a răspuns cu o eroare. Vă rugăm să încercați din nou mai târziu.",
-		"err_api_parsing":    "Nu s-a putut înțelege răspunsul serverului.",
-		"err_unknown":        "A apărut o eroare necunoscută.",
-	},
-	"AL": {
-		"info":                    "Zgjidh gjuhën dhe monedhën",
-		"title":                   "Gix",
-		"languageLabel":           "Gjuha",
-		"buyLabel":                "Bli",
-		"sellLabel":               "Shitet",
-		"loadingText":             "Duke u ngarkuar...",
-		"errorPrefix":             "Gabim",
-		"cantor_c1":               "Këmbimore Tadek (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Këmbimore Kwadrat (Rzeszow)",
-		"cantor_c3":               "Këmbimore SuperSam (Rzeszow)",
-		"err_creating_request":    "Gabim gjatë krijimit të kërkesës",
-		"err_fetching_data":       "Gabim gjatë marrjes së të dhënave",
-		"err_parsing_response":    "Gabim gjatë analizimit të përgjigjes",
-		"err_rates_not_found_for": "Kurset nuk u gjetën për",
-
-		"err_api_connection": "Nuk mund të lidhej me serverin. Ju lutemi kontrolloni lidhjen tuaj të internetit.",
-		"err_api_response":   "Serveri u përgjigj me një gabim. Ju lutemi provoni përsëri më vonë.",
-		"err_api_parsing":    "Dështoi në kuptimin e përgjigjes së serverit.",
-		"err_unknown":        "Ndodhi një gabim i panjohur.",
-	},
-	"TR": {
-		"info":                    "Dil ve para birimini seçin",
-		"title":                   "Gix",
-		"languageLabel":           "Dil",
-		"buyLabel":                "Satın Al",
-		"sellLabel":               "Sat",
-		"loadingText":             "Yükleniyor...",
-		"errorPrefix":             "Hata",
-		"cantor_c1":               "Tadek Döviz Bürosu (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Kwadrat Döviz Bürosu (Rzeszow)",
-		"cantor_c3":               "SuperSam Döviz Bürosu (Rzeszow)",
-		"err_creating_request":    "İstek oluşturulurken hata oluştu",
-		"err_fetching_data":       "Veri alınırken hata oluştu",
-		"err_parsing_response":    "Yanıt ayrıştırılırken hata oluştu",
-		"err_rates_not_found_for": "Kurlar bulunamadı:",
-
-		"err_api_connection": "Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.",
-		"err_api_response":   "Sunucu bir hatayla yanıt verdi. Lütfen daha sonra tekrar deneyin.",
-		"err_api_parsing":    "Sunucunun yanıtı anlaşılamadı.",
-		"err_unknown":        "Bilinmeyen bir hata oluştu.",
-	},
-	"IC": {
-		"info":                    "Veldu tungumál og gjaldmiðil",
-		"title":                   "Gix",
-		"languageLabel":           "Tungumál",
-		"buyLabel":                "Kaupa",
-		"sellLabel":               "Selja",
-		"loadingText":             "Hleð...",
-		"errorPrefix":             "Villa",
-		"cantor_c1":               "Tadek Gjaldeyrisskipti (Stalowa Wola / Rzeszow)",
-		"cantor_c2":               "Kwadrat Gjaldeyrisskipti (Rzeszow)",
-		"cantor_c3":               "SuperSam Gjaldeyrisskipti (Rzeszow)",
-		"err_creating_request":    "Villa við að búa til beiðni",
-		"err_fetching_data":       "Villa við að sækja gögn",
-		"err_parsing_response":    "Villa við að þátta svar",
-		"err_rates_not_found_for": "Gengi fannst ekki fyrir",
-
-		"err_api_connection": "Ekki tókst að tengjast þjóninum. Vinsamlegast athugaðu nettenginguna þína.",
-		"err_api_response":   "Þjónninn svaraði með villu. Vinsamlegast reyndu aftur síðar.",
-		"err_api_parsing":    "Ekki tókst að skilja svar þjónsins.",
-		"err_unknown":        "Óþekkt villa kom upp.",
-	},
 }
