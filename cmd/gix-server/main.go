@@ -23,7 +23,6 @@ import (
 // Constants
 const (
 	// Content-Type headers
-	contentTypeText = "text/plain"
 	contentTypeJSON = "application/json"
 
 	// Error messages
@@ -58,12 +57,6 @@ type RatesResponse struct {
 	SellRate string `json:"sellRate"`
 	CantorID int    `json:"cantorID"`
 	Currency string `json:"currency"`
-}
-
-// rateParams - a struct for holding parameters from the URL
-type rateParams struct {
-	CantorID int
-	Currency string
 }
 
 // processedRates - a struct for holding the final rates after processing
@@ -156,7 +149,7 @@ func handleCantorsList(app *AppState) gin.HandlerFunc {
 		rows, err := app.DB.Query(c.Request.Context(), "SELECT id, display_name, name FROM cantors")
 		if err != nil {
 			log.Printf("DB Error: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": internalServerError})
 			return
 		}
 		defer rows.Close()
@@ -166,7 +159,7 @@ func handleCantorsList(app *AppState) gin.HandlerFunc {
 			var cr CantorListResponse
 			if err := rows.Scan(&cr.ID, &cr.DisplayName, &cr.Name); err != nil {
 				log.Printf("Scan Error: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": internalServerError})
 				return
 			}
 			cantors = append(cantors, cr)
@@ -197,7 +190,7 @@ func handleGetRates(app *AppState) gin.HandlerFunc {
 		cacheKey := fmt.Sprintf("rates:%d:%s", cantorID, currency)
 
 		if cachedVal, err := app.Cache.Get(ctx, cacheKey).Result(); err == nil {
-			c.Data(http.StatusOK, "application/json", []byte(cachedVal))
+			c.Data(http.StatusOK, contentTypeJSON, []byte(cachedVal))
 			return
 		}
 
