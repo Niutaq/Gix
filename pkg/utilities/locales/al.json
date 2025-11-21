@@ -1,0 +1,20 @@
+{
+  "info": "Zgjidh gjuhën dhe monedhën",
+  "title": "Gix",
+  "languageLabel": "Gjuha",
+  "buyLabel": "Bli",
+  "sellLabel": "Shitet",
+  "loadingText": "Duke u ngarkuar...",
+  "errorPrefix": "Gabim",
+  "cantor_c1": "Këmbimore Tadek (Stalowa Wola / Rzeszow)",
+  "cantor_c2": "Këmbimore Exchange (Rzeszow)",
+  "cantor_c3": "Këmbimore SuperSam (Rzeszow)",
+  "err_creating_request": "Gabim gjatë krijimit të kërkesës",
+  "err_fetching_data": "Gabim gjatë marrjes së të dhënave",
+  "err_parsing_response": "Gabim gjatë analizimit të përgjigjes",
+  "err_rates_not_found_for": "Kurset nuk u gjetën për",
+  "err_api_connection": "Nuk mund të lidhej me serverin. Ju lutemi kontrolloni lidhjen tuaj të internetit.",
+  "err_api_response": "Serveri u përgjigj me një gabim. Ju lutemi provoni përsëri më vonë.",
+  "err_api_parsing": "Dështoi në kuptimin e përgjigjes së serverit.",
+  "err_unknown": "Ndodhi një gabim i panjohur."
+}
