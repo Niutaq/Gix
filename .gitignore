@@ -37,3 +37,8 @@ appicon.xcf
 # Docker data volumes
 gix-db-data/
 .env
+
+# Digital Ocean and K8s sensitives
+digital_ocean_api_token.txt
+kubectl
+kubectl.sha256
