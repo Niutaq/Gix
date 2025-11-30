@@ -14,7 +14,7 @@
   "err_parsing_response": "Błąd parsowania odpowiedzi",
   "err_rates_not_found_for": "Nie znaleziono kursów dla",
   "err_api_connection": "Nie można połączyć się z serwerem. Sprawdź połączenie internetowe.",
-  "err_api_response":         "Serwer odpowiedział błędem. Spróbuj ponownie później.",
+  "err_api_response":"Serwer odpowiedział błędem. Spróbuj ponownie później.",
   "err_api_parsing": "Nie udało się przetworzyć odpowiedzi serwera.",
   "err_unknown": "Wystąpił nieznany błąd."
 }

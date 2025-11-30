@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	// Go files
@@ -235,7 +236,7 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 
 					req, err := http.NewRequestWithContext(ctx, "GET", ratesURL, nil)
 					if err != nil {
-						fetchErr = fmt.Errorf("err_api_connection")
+						fetchErr = fmt.Errorf("err_creating_request")
 					} else {
 						resp, err := http.DefaultClient.Do(req)
 						if err != nil {
@@ -244,11 +245,19 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 							defer func(Body io.ReadCloser) {
 								_ = Body.Close()
 							}(resp.Body)
-							if resp.StatusCode != http.StatusOK {
-								fetchErr = fmt.Errorf("err_api_response")
-							} else {
+
+							if resp.StatusCode == http.StatusOK {
 								if err := json.NewDecoder(resp.Body).Decode(&rates); err != nil {
 									fetchErr = fmt.Errorf("err_api_parsing")
+								}
+							} else {
+								var errorResponse struct {
+									Error string `json:"error"`
+								}
+								if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err == nil && errorResponse.Error != "" {
+									fetchErr = fmt.Errorf(errorResponse.Error)
+								} else {
+									fetchErr = fmt.Errorf("err_api_response")
 								}
 							}
 						}
@@ -257,10 +266,14 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 					currentAppState.Vault.Mu.Lock()
 					if currentAppState.UI.SelectedCantor == cantorName {
 						if fetchErr != nil {
-							errMsg := "Couldn't download rates from API.\n" +
-								currentAppState.UI.Currency + " is not available."
-							if fetchErr.Error() == "err_api_parsing" {
-								errMsg = "No rates found for this cantor."
+							lang := currentAppState.UI.Language
+							var errMsg string
+
+							if fetchErr.Error() == "err_api_parsing" || strings.Contains(fetchErr.Error(), "not found rates") {
+								prefix := utilities.GetTranslation(lang, "err_rates_not_found_for")
+								errMsg = fmt.Sprintf("%s %s", prefix, currentAppState.UI.Currency)
+							} else {
+								errMsg = utilities.GetTranslation(lang, "err_api_connection")
 							}
 
 							utilities.ShowToast(currentAppState, errMsg, "error")
