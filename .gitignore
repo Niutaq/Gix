@@ -42,3 +42,4 @@ gix-db-data/
 digital_ocean_api_token.txt
 kubectl
 kubectl.sha256
+k8s/.secrets.yaml
