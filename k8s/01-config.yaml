@@ -7,13 +7,3 @@ data:
   POSTGRES_DB: "gix_rates"
   POSTGRES_USER: "gixuser"
   REDIS_URL: "redis://gix-redis:6379/0"
-
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: gix-secrets
-type: Opaque
-stringData:
-  POSTGRES_PASSWORD: "jeUy4K8YrdbxX4KsguFrebN5gffFAa"
-  DATABASE_URL: "postgres://gixuser:jeUy4K8YrdbxX4KsguFrebN5gffFAa@gix-db:5432/gix_rates?sslmode=disable"
