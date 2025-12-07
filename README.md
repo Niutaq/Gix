@@ -90,12 +90,24 @@ Make sure you have installed:
 **3.** Run the application:
 
 ```bash
+# METHOD 1: Run with Docker Compose
+
+# DISCLAIMER: Need of .env file with database credentials (see .env.example) 
 # Terminal 1: Start backend (API + DB + Cache)
 docker-compose up
 # or
 docker-compose watch   # Docker Desktop 4.24+ for docker-compose watch command
+
 # Terminal 2: Start frontend
 go run ./cmd/gix/main.go
+
+
+
+# METHOD 2: Run using api link
+# Hosted backend
+# Start backend (API + DB + Cache)
+go run cmd/gix/main.go -api "http://165.227.246.100:8080"
+
 ```
 
 ---

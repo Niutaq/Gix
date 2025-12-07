@@ -255,7 +255,7 @@ func handleCantorClicks(gtx layout.Context, window *app.Window, state *utilities
 									Error string `json:"error"`
 								}
 								if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err == nil && errorResponse.Error != "" {
-									fetchErr = fmt.Errorf(errorResponse.Error)
+									fetchErr = fmt.Errorf("%s", errorResponse.Error)
 								} else {
 									fetchErr = fmt.Errorf("err_api_response")
 								}
