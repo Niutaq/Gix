@@ -14,7 +14,22 @@
   "err_parsing_response": "Błąd parsowania odpowiedzi",
   "err_rates_not_found_for": "Nie znaleziono kursów dla",
   "err_api_connection": "Nie można połączyć się z serwerem. Sprawdź połączenie internetowe.",
-  "err_api_response":         "Serwer odpowiedział błędem. Spróbuj ponownie później.",
+  "err_api_response":"Serwer odpowiedział błędem. Spróbuj ponownie później.",
   "err_api_parsing": "Nie udało się przetworzyć odpowiedzi serwera.",
-  "err_unknown": "Wystąpił nieznany błąd."
+  "err_unknown": "Wystąpił nieznany błąd.",
+
+  "market_title": "Rynek Walutowy",
+  "market_subtitle": "Analiza w czasie rzeczywistym",
+  "search_placeholder": "Szukaj kantoru...",
+  "no_cantor_found": "Nie znaleziono kantoru...",
+  "buy_col": "Skup",
+  "sell_col": "Sprzedaż",
+  "ai_title": "Analiza",
+  "ai_subtitle": "Predykcje trendów",
+  "ai_chart_placeholder": "[ WYKRES]",
+  "ai_desc": "Moduł w budowie. Tutaj pojawią się sugestie oparte o TimescaleDB.",
+  "error_label": "Błąd",
+  "select_lang_title": "Wybierz język",
+  "no_rate_label": "Brak kursu",
+  "sidebar_currency_label": "Waluty"
 }
