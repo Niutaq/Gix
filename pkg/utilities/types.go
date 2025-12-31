@@ -94,3 +94,18 @@ type ApiCantorResponse struct {
 	DisplayName string `json:"displayName"`
 	Name        string `json:"name"`
 }
+
+// ModalConfig represents the configuration for a modal UI component.
+type ModalConfig struct {
+	Title    string
+	Options  []string
+	Buttons  []widget.Clickable
+	OnSelect func(string)
+}
+
+// CantorRowConfig groups data required to render a single cantor row
+type CantorRowConfig struct {
+	CantorID string
+	BestBuy  float64
+	BestSell float64
+}

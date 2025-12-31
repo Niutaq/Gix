@@ -104,7 +104,7 @@ func LayoutUI(gtx layout.Context, window *app.Window, theme *material.Theme, sta
 	)
 }
 
-// fetchAllRates retrieves exchange rates for all cantors and updates the application state asynchronously.
+// fetchAllRates retrieves exchange rates for all cantors asynchronously
 func fetchAllRates(window *app.Window, state *AppState, config AppConfig) {
 	if config.APIRatesURL == "" {
 		return
@@ -117,72 +117,65 @@ func fetchAllRates(window *app.Window, state *AppState, config AppConfig) {
 	state.Vault.Rates = make(map[string]*CantorEntry)
 	state.Vault.Mu.Unlock()
 
-	currency := state.UI.Currency
-
 	sem := make(chan struct{}, 8)
 
-	go func() {
-		for id, cantor := range state.Cantors {
-			sem <- struct{}{}
+	go runFetchLoop(window, state, config, sem)
+}
 
-			cantorID := cantor.ID
-			cantorKey := id
+// runFetchLoop concurrently fetches exchange rates for all cantors and updates the application state accordingly.
+func runFetchLoop(window *app.Window, state *AppState, config AppConfig, sem chan struct{}) {
+	currency := state.UI.Currency
 
-			go func(cID int, cKey string) {
-				defer func() { <-sem }()
+	for id, cantor := range state.Cantors {
+		sem <- struct{}{}
+		go fetchSingleCantor(window, state, config, sem, cantor.ID, id, currency)
+	}
 
-				url := fmt.Sprintf("%s?cantor_id=%d&currency=%s", config.APIRatesURL, cID, currency)
-				client := http.Client{Timeout: 5 * time.Second}
-				resp, err := client.Get(url)
-
-				var entry *CantorEntry
-
-				if err != nil {
-					entry = &CantorEntry{Error: "err_api_connection", LoadedAt: time.Now()}
-
-					//if state.Notifications == nil {
-					//	ShowToast(state, window, GetTranslation(state.UI.Language, "err_api_connection"), "error")
-					//} - disabled for now
-				} else {
-					defer func(Body io.ReadCloser) { _ = Body.Close() }(resp.Body)
-					if resp.StatusCode == http.StatusOK {
-						var rates ExchangeRates
-						if err := json.NewDecoder(resp.Body).Decode(&rates); err == nil {
-							entry = &CantorEntry{Rate: rates, LoadedAt: time.Now()}
-						} else {
-							entry = &CantorEntry{Error: "err_api_parsing", LoadedAt: time.Now()}
-
-							//if state.Notifications == nil {
-							//	ShowToast(state, window, GetTranslation(state.UI.Language, "err_api_parsing"), "error")
-							//} - disabled for now
-						}
-					} else {
-						entry = &CantorEntry{Error: "err_api_response", LoadedAt: time.Now()}
-
-						//if state.Notifications == nil {
-						//	ShowToast(state, window, GetTranslation(state.UI.Language, "err_api_response"), "error")
-						//} - disabled for now
-					}
-				}
-
-				state.Vault.Mu.Lock()
-				state.Vault.Rates[cKey] = entry
-				state.Vault.Mu.Unlock()
-
-				window.Invalidate()
-			}(cantorID, cantorKey)
+	// Wait loop
+	for {
+		if len(sem) == 0 {
+			state.IsLoading.Store(false)
+			window.Invalidate()
+			break
 		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
 
-		// Wait loop
-		for {
-			if len(sem) == 0 {
-				state.IsLoading.Store(false)
-				window.Invalidate()
-				break
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}()
+// fetchSingleCantor fetches exchange rates from a specific cantor, updates the application state, and invalidates the window.
+func fetchSingleCantor(window *app.Window, state *AppState, config AppConfig, sem chan struct{}, cID int, cKey, currency string) {
+	defer func() { <-sem }()
+
+	url := fmt.Sprintf("%s?cantor_id=%d&currency=%s", config.APIRatesURL, cID, currency)
+	client := http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
+
+	entry := handleCantorResponse(resp, err)
+
+	state.Vault.Mu.Lock()
+	state.Vault.Rates[cKey] = entry
+	state.Vault.Mu.Unlock()
+
+	window.Invalidate()
+}
+
+// handleCantorResponse processes the HTTP response and error to construct a CantorEntry with exchange rates or error details.
+func handleCantorResponse(resp *http.Response, err error) *CantorEntry {
+	if err != nil {
+		return &CantorEntry{Error: "err_api_connection", LoadedAt: time.Now()}
+	}
+	defer func(Body io.ReadCloser) { _ = Body.Close() }(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return &CantorEntry{Error: "err_api_response", LoadedAt: time.Now()}
+	}
+
+	var rates ExchangeRates
+	if err := json.NewDecoder(resp.Body).Decode(&rates); err != nil {
+		return &CantorEntry{Error: "err_api_parsing", LoadedAt: time.Now()}
+	}
+
+	return &CantorEntry{Rate: rates, LoadedAt: time.Now()}
 }
 
 // LayoutVerticalCurrencyBar creates a vertical sidebar for currency selection with a given layout, window, theme, state, and config.
@@ -274,40 +267,12 @@ func parseRate(s string) float64 {
 }
 
 // layoutCantorSelection creates and displays a filtered list of cantors, with Best Buy/sell rate highlights, based on search input.
-func layoutCantorSelection(
-	gtx layout.Context, window *app.Window,
-	theme *material.Theme, state *AppState) layout.Dimensions {
-	list := &state.UI.CantorsList
-	list.Axis = layout.Vertical
-
-	searchText := strings.ToLower(state.UI.SearchText)
-	var filteredIDs []string
-
-	var bestBuyRate = -1.0
-	var bestSellRate = 999999.0
-
+func layoutCantorSelection(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
 	state.Vault.Mu.Lock()
-	for _, entry := range state.Vault.Rates {
-		if entry != nil && entry.Rate.BuyRate != "" {
-			buy := parseRate(entry.Rate.BuyRate)
-			sell := parseRate(entry.Rate.SellRate)
-			if buy > bestBuyRate {
-				bestBuyRate = buy
-			}
-			if sell > 0 && sell < bestSellRate {
-				bestSellRate = sell
-			}
-		}
-	}
-
-	for id, cantor := range state.Cantors {
-		displayName := GetTranslation(state.UI.Language, cantor.DisplayName)
-		if searchText == "" || strings.Contains(strings.ToLower(id), searchText) ||
-			strings.Contains(strings.ToLower(displayName), searchText) {
-			filteredIDs = append(filteredIDs, id)
-		}
-	}
+	bestBuy, bestSell := calculateBestRates(state.Vault.Rates)
+	filteredIDs := filterCantorList(state, state.UI.SearchText)
 	state.Vault.Mu.Unlock()
+
 	sort.Strings(filteredIDs)
 
 	if len(filteredIDs) == 0 {
@@ -320,20 +285,61 @@ func layoutCantorSelection(
 		})
 	}
 
+	list := &state.UI.CantorsList
+	list.Axis = layout.Vertical
+
 	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return material.List(theme, list).Layout(gtx, len(filteredIDs),
 			func(gtx layout.Context, i int) layout.Dimensions {
-				return layoutCantorItem(gtx, window, theme, state, filteredIDs, i, bestBuyRate, bestSellRate)
+				rowCfg := CantorRowConfig{
+					CantorID: filteredIDs[i],
+					BestBuy:  bestBuy,
+					BestSell: bestSell}
+				return layoutCantorItem(gtx, window, theme, state, rowCfg)
 			})
 	})
 }
 
-// layoutCantorItem - Renders a single cantor row with name and rates
+// calculateBestRates determines the highest buy rate and lowest sell rate from the provided exchange rates map.
+func calculateBestRates(rates map[string]*CantorEntry) (float64, float64) {
+	bestBuy := -1.0
+	bestSell := 999999.0
+
+	for _, entry := range rates {
+		if entry != nil && entry.Rate.BuyRate != "" {
+			buy := parseRate(entry.Rate.BuyRate)
+			sell := parseRate(entry.Rate.SellRate)
+			if buy > bestBuy {
+				bestBuy = buy
+			}
+			if sell > 0 && sell < bestSell {
+				bestSell = sell
+			}
+		}
+	}
+	return bestBuy, bestSell
+}
+
+// filterCantorList filters and returns a list of cantor IDs from the state based on a case-insensitive search query.
+func filterCantorList(state *AppState, searchText string) []string {
+	searchText = strings.ToLower(searchText)
+	var ids []string
+	for id, cantor := range state.Cantors {
+		displayName := GetTranslation(state.UI.Language, cantor.DisplayName)
+		if searchText == "" ||
+			strings.Contains(strings.ToLower(id), searchText) ||
+			strings.Contains(strings.ToLower(displayName), searchText) {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+// layoutCantorItem lays out a single Cantor item, displaying its name, buy/sell rates, and applying animations and styles.
 func layoutCantorItem(
-	gtx layout.Context, window *app.Window,
-	theme *material.Theme, state *AppState,
-	cantorIDs []string, i int, bestBuy, bestSell float64) layout.Dimensions {
-	cantorKey := cantorIDs[i]
+	gtx layout.Context, window *app.Window, theme *material.Theme,
+	state *AppState, cfg CantorRowConfig) layout.Dimensions {
+	cantorKey := cfg.CantorID
 	cantor := state.Cantors[cantorKey]
 	displayName := GetTranslation(state.UI.Language, cantor.DisplayName)
 
@@ -341,57 +347,11 @@ func layoutCantorItem(
 	entry := state.Vault.Rates[cantorKey]
 	state.Vault.Mu.Unlock()
 
-	buyVal := "---"
-	sellVal := "---"
+	alpha := getAnimationAlpha(window, entry)
 
-	baseBuyColor := color.NRGBA{R: 150, G: 150, B: 160, A: 255}
-	baseSellColor := color.NRGBA{R: 150, G: 150, B: 160, A: 255}
+	buyVal, sellVal, buyColor, sellColor := getCantorDisplayData(state, entry, cfg.BestBuy, cfg.BestSell)
 
-	var alpha uint8 = 255
-
-	if entry != nil {
-		if !entry.LoadedAt.IsZero() {
-			const animDuration = 600 * time.Millisecond
-			elapsed := time.Since(entry.LoadedAt)
-
-			if elapsed < animDuration {
-				progress := float32(elapsed) / float32(animDuration)
-				progress = 1.0 - (1.0-progress)*(1.0-progress)
-				alpha = uint8(255 * progress)
-
-				window.Invalidate()
-			}
-		}
-
-		if entry.Error != "" {
-			noRateText := GetTranslation(state.UI.Language, "no_rate_label")
-			buyVal = noRateText
-			sellVal = noRateText
-			baseBuyColor = AppColors.Error
-			baseSellColor = AppColors.Error
-		} else {
-			buyVal = entry.Rate.BuyRate + " zł"
-			sellVal = entry.Rate.SellRate + " zł"
-
-			currentBuy := parseRate(entry.Rate.BuyRate)
-			currentSell := parseRate(entry.Rate.SellRate)
-
-			if currentBuy >= bestBuy && bestBuy > 0 {
-				baseBuyColor = AppColors.Accent1
-			} else {
-				baseBuyColor = AppColors.Text
-			}
-			if currentSell <= bestSell && bestSell > 0 {
-				baseSellColor = AppColors.Accent1
-			} else {
-				baseSellColor = AppColors.Text
-			}
-		}
-	}
-
-	buyColor := baseBuyColor
 	buyColor.A = alpha
-	sellColor := baseSellColor
 	sellColor.A = alpha
 
 	return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -409,8 +369,7 @@ func layoutCantorItem(
 				}),
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 					return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return layout.Flex{Axis: layout.Horizontal,
-							Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
+						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
 							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 								lbl := material.Body1(theme, displayName)
 								lbl.Color = AppColors.Text
@@ -435,6 +394,54 @@ func layoutCantorItem(
 			)
 		})
 	})
+}
+
+// getAnimationAlpha calculates the alpha transparency for a smooth fade-in animation based on the entry's load time.
+func getAnimationAlpha(window *app.Window, entry *CantorEntry) uint8 {
+	if entry == nil || entry.LoadedAt.IsZero() {
+		return 255
+	}
+	const animDuration = 600 * time.Millisecond
+	elapsed := time.Since(entry.LoadedAt)
+
+	if elapsed < animDuration {
+		progress := float32(elapsed) / float32(animDuration)
+		progress = 1.0 - (1.0-progress)*(1.0-progress) // Ease-out
+		window.Invalidate()
+		return uint8(255 * progress)
+	}
+	return 255
+}
+
+// getCantorDisplayData generates formatted buy/sell rates and corresponding colors based on the current state and thresholds.
+func getCantorDisplayData(
+	state *AppState, entry *CantorEntry, bestBuy, bestSell float64) (string, string, color.NRGBA, color.NRGBA) {
+	defColor := color.NRGBA{R: 150, G: 150, B: 160, A: 255}
+	if entry == nil {
+		return "---", "---", defColor, defColor
+	}
+
+	if entry.Error != "" {
+		errTxt := GetTranslation(state.UI.Language, "no_rate_label")
+		return errTxt, errTxt, AppColors.Error, AppColors.Error
+	}
+
+	buyVal := entry.Rate.BuyRate + " zł"
+	sellVal := entry.Rate.SellRate + " zł"
+	buyColor := AppColors.Text
+	sellColor := AppColors.Text
+
+	currentBuy := parseRate(entry.Rate.BuyRate)
+	currentSell := parseRate(entry.Rate.SellRate)
+
+	if currentBuy >= bestBuy && bestBuy > 0 {
+		buyColor = AppColors.Accent1
+	}
+	if currentSell <= bestSell && bestSell > 0 {
+		sellColor = AppColors.Accent1
+	}
+
+	return buyVal, sellVal, buyColor, sellColor
 }
 
 // layoutHeader renders a header layout with a title, subtitle, and a language selection button, styled using the provided theme.
@@ -643,84 +650,89 @@ func ModalOverlay(
 }
 
 // LanguageModal renders a modal dialog for selecting a language and updates the application state upon selection.
-func LanguageModal(
-	gtx layout.Context, window *app.Window,
-	theme *material.Theme, state *AppState) layout.Dimensions {
-	title := GetTranslation(state.UI.Language, "select_lang_title")
-	return ModalDialog(gtx, window, theme, title,
-		state.UI.LanguageOptions, state.UI.LanguageOptionButtons, func(lang string) {
+func LanguageModal(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+	cfg := ModalConfig{
+		Title:   GetTranslation(state.UI.Language, "select_lang_title"),
+		Options: state.UI.LanguageOptions,
+		Buttons: state.UI.LanguageOptionButtons,
+		OnSelect: func(lang string) {
 			state.UI.Language = lang
 			state.UI.ModalOpen = ""
 			window.Invalidate()
-		}, state)
+		},
+	}
+	return ModalDialog(gtx, window, theme, state, cfg)
 }
 
 // ModalDialog renders a modal dialog with a title, list of options, and action buttons, and executes a callback on selection.
-func ModalDialog(
-	gtx layout.Context, window *app.Window,
-	theme *material.Theme, title string, options []string,
-	buttons []widget.Clickable, onSelect func(string), state *AppState) layout.Dimensions {
+func ModalDialog(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config ModalConfig) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					h6 := material.H6(theme, title)
-					h6.Color = AppColors.Title
-					return layout.Inset{Left: unit.Dp(16), Top: unit.Dp(16), Bottom: unit.Dp(10)}.Layout(gtx, h6.Layout)
-				}),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{} }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					if modalCloseBtn.Clicked(gtx) {
-						state.UI.ModalOpen = ""
-						window.Invalidate()
-					}
-					btn := material.Button(theme, &modalCloseBtn, "x")
-					btn.Background = color.NRGBA{A: 0}
-					btn.Color = AppColors.Accent3
-					btn.Inset = layout.UniformInset(unit.Dp(12))
-					btn.TextSize = unit.Sp(18)
-					return layout.Inset{Right: unit.Dp(8), Top: unit.Dp(8)}.Layout(gtx, btn.Layout)
-				}),
-			)
-		}),
+		layoutModalHeader(window, theme, config.Title, state),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			state.UI.ModalList.Axis = layout.Vertical
 			cols := 3
-			rows := (len(options) + cols - 1) / cols
-			return material.List(theme, &state.UI.ModalList).Layout(
-				gtx, rows, func(gtx layout.Context, row int) layout.Dimensions {
-					return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-						func() []layout.FlexChild {
-							children := make([]layout.FlexChild, cols)
-							for c := 0; c < cols; c++ {
-								idx := row*cols + c
-								if idx < len(options) {
-									children[c] = layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-										return layout.UniformInset(unit.Dp(4)).Layout(
-											gtx, func(gtx layout.Context) layout.Dimensions {
-												if buttons[idx].Clicked(gtx) {
-													onSelect(options[idx])
-												}
-												btn := material.Button(theme, &buttons[idx], options[idx])
-												btn.Background = AppColors.Button
-												btn.Color = AppColors.Text
-												btn.Inset = layout.UniformInset(unit.Dp(10))
-												gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(50))
-												return btn.Layout(gtx)
-											})
-									})
-								} else {
-									children[c] = layout.Flexed(1, func(
-										gtx layout.Context) layout.Dimensions {
-										return layout.Dimensions{}
-									})
-								}
-							}
-							return children
-						}()...,
-					)
-				})
+			rows := (len(config.Options) + cols - 1) / cols
+
+			return material.List(theme, &state.UI.ModalList).Layout(gtx, rows, func(gtx layout.Context, row int) layout.Dimensions {
+				return layoutModalGridRow(gtx, theme, row, cols, config.Options, config.Buttons, config.OnSelect)
+			})
 		}),
+	)
+}
+
+// layoutModalHeader creates a header layout for a modal dialog, including a title and a close button.
+func layoutModalHeader(window *app.Window, theme *material.Theme, title string, state *AppState) layout.FlexChild {
+	return layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				h6 := material.H6(theme, title)
+				h6.Color = AppColors.Title
+				return layout.Inset{Left: unit.Dp(16), Top: unit.Dp(16), Bottom: unit.Dp(10)}.Layout(gtx, h6.Layout)
+			}),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{} }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if modalCloseBtn.Clicked(gtx) {
+					state.UI.ModalOpen = ""
+					window.Invalidate()
+				}
+				btn := material.Button(theme, &modalCloseBtn, "x")
+				btn.Background = color.NRGBA{A: 0}
+				btn.Color = AppColors.Error
+				btn.Inset = layout.UniformInset(unit.Dp(12))
+				btn.TextSize = unit.Sp(18)
+				return layout.Inset{Right: unit.Dp(8), Top: unit.Dp(8)}.Layout(gtx, btn.Layout)
+			}),
+		)
+	})
+}
+
+// layoutModalGridRow arranges a row of buttons in a grid layout within a modal, handling button clicks and triggering a callback.
+func layoutModalGridRow(gtx layout.Context, theme *material.Theme, row, cols int, options []string, buttons []widget.Clickable, onSelect func(string)) layout.Dimensions {
+	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+		func() []layout.FlexChild {
+			children := make([]layout.FlexChild, cols)
+			for c := 0; c < cols; c++ {
+				idx := row*cols + c
+				if idx < len(options) {
+					children[c] = layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+						return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							if buttons[idx].Clicked(gtx) {
+								onSelect(options[idx])
+							}
+							btn := material.Button(theme, &buttons[idx], options[idx])
+							btn.Background = AppColors.Button
+							btn.Color = AppColors.Text
+							btn.Inset = layout.UniformInset(unit.Dp(10))
+							gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(50))
+							return btn.Layout(gtx)
+						})
+					})
+				} else {
+					children[c] = layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{} })
+				}
+			}
+			return children
+		}()...,
 	)
 }
 
