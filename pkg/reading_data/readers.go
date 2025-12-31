@@ -11,6 +11,7 @@ import (
 //go:embed fonts/*
 var fontFiles embed.FS
 
+// LoadAndParseFont loads and parses a font file from the embedded filesystem
 func LoadAndParseFont(fontPath string) (font.FontFace, error) {
 	fontData, err := GetFont(fontPath)
 	if err != nil {
@@ -25,6 +26,7 @@ func LoadAndParseFont(fontPath string) (font.FontFace, error) {
 	return font.FontFace{Font: font.Font{Weight: font.Normal}, Face: parsedFont}, nil
 }
 
+// GetFont reads a font file from the embedded filesystem
 func GetFont(path string) ([]byte, error) {
 	data, err := fontFiles.ReadFile(path)
 
