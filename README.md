@@ -85,15 +85,13 @@ Make sure you have installed:
 
 **1.** Clone the project:
 ```bash
-git clone [https://github.com/Niutaq/Gix.git](https://github.com/Niutaq/Gix.git)
+git clone https://github.com/Niutaq/Gix.git
 cd Gix
 ```
 **2.** Install Task (once):
 ```bash
-# macOS
-brew install go-task/tap/go-task
-# OR using Go
-go install [github.com/go-task/task/v3/cmd/task@latest](https://github.com/go-task/task/v3/cmd/task@latest)
+# using Go
+go install github.com/go-task/task/v3/cmd/task@latest
 ```
 **3.** Run using commands
 
@@ -106,5 +104,11 @@ go install [github.com/go-task/task/v3/cmd/task@latest](https://github.com/go-ta
 | **Build Win** | `task build:windows` | Creates `gix.exe` with icon |
 | **Clean** | `task clean` | Removes build artifacts |
 
-
 ---
+
+## Demo
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/6abe7f18-7c9c-4e21-8a63-d4c2d8e1870c" width="100%" controls autoplay loop muted></video>
+</div>
+
