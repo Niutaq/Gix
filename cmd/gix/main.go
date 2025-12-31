@@ -40,7 +40,7 @@ import (
 	"github.com/Niutaq/Gix/pkg/utilities"
 )
 
-// main is the entry point of the application that initializes configuration, sets up the main window, and starts the app loop.
+// the main is the entry point of the application that initializes configuration, sets up the main window, and starts the app loop.
 func main() {
 	apiBase := flag.String("api", "http://165.227.246.100:8080", "API base URL")
 	flag.Parse()
