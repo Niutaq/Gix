@@ -14,7 +14,7 @@ var localesFS embed.FS
 var translationsMap map[string]map[string]string
 var once sync.Once
 
-// InitTranslations - a function for initializing translations
+// InitTranslations loads the translations from the embedded filesystem and initializes the global translations map.
 func InitTranslations() {
 	once.Do(func() {
 		translationsMap = make(map[string]map[string]string)
@@ -46,7 +46,7 @@ func InitTranslations() {
 	})
 }
 
-// GetTranslation - a function for getting translation for a given key
+// GetTranslation retrieves the translation for a given language and key. Defaults to English or returns the key if unavailable.
 func GetTranslation(lang, key string) string {
 	if translationsMap == nil {
 		InitTranslations()

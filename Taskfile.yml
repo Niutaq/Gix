@@ -1,0 +1,100 @@
+version: '3'
+
+vars:
+  ENTRY_POINT: ./cmd/gix/main.go
+  APP_NAME: Gix
+  ICON: appicon.png
+  API_URL: "http://165.227.246.100:8080"
+
+  OUT_WIN: gix.exe
+  OUT_MAC: Gix.app
+  OUT_LINUX: gix_linux
+
+tasks:
+  default:
+    desc: "Launches an application connected to a remote API"
+    cmds:
+      - task: run
+
+  # --- DEVELOPMENT ---
+  run:
+    desc: "Runs the frontend (Gio) connected to your server"
+    cmds:
+      - go run {{.ENTRY_POINT}} -api "{{.API_URL}}"
+
+  run:local:
+    desc: "Runs the frontend connected to localhost:8080"
+    cmds:
+      - go run {{.ENTRY_POINT}} -api "http://localhost:8080"
+
+  backend:
+    desc: "Starts the backend (Docker Compose)"
+    cmds:
+      - docker-compose up
+
+  # --- UTILITIES ---
+  deps:
+    desc: "Installs required tools (gogio)"
+    cmds:
+      - go install gioui.org/cmd/gogio@latest
+
+  # --- BUILD ---
+  build:windows:
+    desc: "Builds an .exe file for Windows (requires gogio)"
+    deps: [deps]
+    cmds:
+      - gogio -target windows -icon {{.ICON}} -o {{.OUT_WIN}} ./cmd/gix
+
+  build:linux:
+    desc: "Building a Linux binary"
+    cmds:
+      - go build -o {{.OUT_LINUX}} ./cmd/gix
+
+  build:macos:
+    desc: "Builds a valid .app package for macOS (with fonts and signature)"
+    cmds:
+      - rm -rf {{.OUT_MAC}} gix-bin
+      - go build -o gix-bin ./cmd/gix
+      - mkdir -p {{.OUT_MAC}}/Contents/MacOS
+      - mkdir -p {{.OUT_MAC}}/Contents/Resources
+      - mv gix-bin {{.OUT_MAC}}/Contents/MacOS/
+      - cp {{.ICON}} {{.OUT_MAC}}/Contents/Resources/icon.png
+      - cp -r fonts {{.OUT_MAC}}/Contents/MacOS/
+      - |
+        cat <<EOF > {{.OUT_MAC}}/Contents/MacOS/{{.APP_NAME}}
+        #!/bin/bash
+        DIR=\$(cd "\$(dirname "\$0")"; pwd)
+        cd "\$DIR"
+        exec "./gix-bin" "\$@"
+        EOF
+      - |
+        cat <<EOF > {{.OUT_MAC}}/Contents/Info.plist
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>{{.APP_NAME}}</string>
+            <key>CFBundleIconFile</key>
+            <string>icon.png</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.niutaq.gix</string>
+            <key>CFBundleName</key>
+            <string>{{.APP_NAME}}</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.13.0</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+        </dict>
+        </plist>
+        EOF
+      - chmod +x {{.OUT_MAC}}/Contents/MacOS/{{.APP_NAME}}
+      - chmod +x {{.OUT_MAC}}/Contents/MacOS/gix-bin
+      - xattr -cr {{.OUT_MAC}}
+      - codesign --force --deep --sign - {{.OUT_MAC}}
+  clean:
+    desc: "Clean temporary and build files"
+    cmds:
+      - rm -rf {{.OUT_WIN}} {{.OUT_MAC}} {{.OUT_LINUX}} gix-bin trace.out

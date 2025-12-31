@@ -11,6 +11,15 @@ type Duration struct {
 	time.Duration
 }
 
+// CantorConfig represents the static configuration for a single cantor.
+type CantorConfig struct {
+	ID                  string   `json:"id"`
+	DisplayName         string   `json:"displayname"`
+	URL                 string   `json:"url"`
+	DefaultTimeout      Duration `json:"defaultTimeout"`
+	NeedsRateFormatting bool     `json:"needsRateFormatting"`
+}
+
 // UnmarshalJSON implements json.Unmarshaler interface
 func (d *Duration) UnmarshalJSON(b []byte) error {
 	var v interface{}
@@ -31,13 +40,4 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	default:
 		return fmt.Errorf("invalid duration type: %T", value)
 	}
-}
-
-// CantorConfig represents the static configuration for a single cantor.
-type CantorConfig struct {
-	ID                  string   `json:"id"`
-	DisplayName         string   `json:"displayname"`
-	URL                 string   `json:"url"`
-	DefaultTimeout      Duration `json:"defaultTimeout"`
-	NeedsRateFormatting bool     `json:"needsRateFormatting"`
 }

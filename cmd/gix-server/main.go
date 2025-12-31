@@ -2,6 +2,7 @@
 package main
 
 import (
+	// Standard libraries
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	// External libraries
 	"github.com/Niutaq/Gix/pkg/scrapers"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -65,7 +67,7 @@ type processedRates struct {
 	Sell float64
 }
 
-// ++++++++++++++++++++ MAIN Function ++++++++++++++++++++
+// main initializes the application by connecting to the database and Redis, setting up routes, and starting the HTTP server.
 func main() {
 	log.Println("Launching Gix server...")
 
@@ -107,7 +109,6 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		c.Next()
-		//c.Writer.Header().Set(contentTypeText, contentTypeJSON)
 	})
 
 	// Endpoints
@@ -124,8 +125,6 @@ func main() {
 		log.Fatalf("Server error: %v", err)
 	}
 }
-
-// Grupowanie API v1
 
 // --- HTTP handlers ---
 // handleHealthCheck - returns 200 OK if DB and Redis are up
@@ -172,7 +171,6 @@ func handleCantorsList(app *AppState) gin.HandlerFunc {
 // handleGetRates - returns the current exchange rates for a specified cantor and currency
 func handleGetRates(app *AppState) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. Walidacja parametrów
 		cantorID, currency, err := parseRateParams(c)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -182,19 +180,16 @@ func handleGetRates(app *AppState) gin.HandlerFunc {
 		ctx := c.Request.Context()
 		cacheKey := fmt.Sprintf("rates:%d:%s", cantorID, currency)
 
-		// 2. Sprawdzenie Cache (Redis)
 		if respondFromCache(c, app.Cache, cacheKey) {
 			return
 		}
 
-		// 3. Pobranie danych kantoru z Bazy
 		cantorInfo, err := fetchCantorInfo(ctx, app.DB, cantorID)
 		if err != nil {
 			handleDBError(c, err)
 			return
 		}
 
-		// 4. Scrapowanie i Przetwarzanie (Logika Biznesowa)
 		response, rates, err := scrapeAndProcess(cantorInfo, cantorID, currency)
 		if err != nil {
 			log.Printf("Processing Error (%s): %v", cantorInfo.Strategy, err)
@@ -202,14 +197,11 @@ func handleGetRates(app *AppState) gin.HandlerFunc {
 			return
 		}
 
-		// 5. Zapis Cache i Archiwizacja
 		cacheAndArchive(ctx, app, cacheKey, cantorID, currency, response, rates)
 
 		c.JSON(http.StatusOK, response)
 	}
 }
-
-// --- Helpers ---
 
 // parseRateParams - a helper function to parse rate params from the query string
 func parseRateParams(c *gin.Context) (int, string, error) {
