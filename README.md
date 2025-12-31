@@ -5,7 +5,7 @@
 
 # GIX
 
-*Real-time Currency Exchange Monitor*
+*Real-time Currency Exchange Monitor (PLN-based)*
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com)
@@ -83,27 +83,32 @@ Make sure you have installed:
 
 ### Launch
 
-**1.** Clone the project: ```git clone https://github.com/Niutaq/Gix.git```
-
-**2.** Start Docker Desktop
-
-**3.** Run the application:
-
+**1.** Clone the project:
 ```bash
-# Terminal 1: Start backend (API + DB + Cache)
-docker-compose up
-# or
-docker-compose watch   # Docker Desktop 4.24+ for docker-compose watch command
-# Terminal 2: Start frontend
-go run ./cmd/gix/main.go
+git clone https://github.com/Niutaq/Gix.git
+cd Gix
 ```
+**2.** Install Task (once):
+```bash
+# using Go
+go install github.com/go-task/task/v3/cmd/task@latest
+```
+**3.** Run using commands
+
+| Action | Command | Description |
+| :--- | :--- | :--- |
+| **Run App** | `task run` | Runs frontend connected to live API |
+| **Run Local** | `task run:local` | Runs frontend connected to localhost |
+| **Backend** | `task backend` | Starts Docker services |
+| **Build Mac** | `task build:macos` | Creates `Gix.app` (fixes fonts & signing) |
+| **Build Win** | `task build:windows` | Creates `gix.exe` with icon |
+| **Clean** | `task clean` | Removes build artifacts |
 
 ---
 
 ## Demo
 
 <div align="center">
-
-![Demo Video](demos/gix_demo_1.gif)
-
+  <video src="https://github.com/user-attachments/assets/6abe7f18-7c9c-4e21-8a63-d4c2d8e1870c" width="100%" controls autoplay loop muted></video>
 </div>
+

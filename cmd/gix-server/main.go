@@ -2,6 +2,7 @@
 package main
 
 import (
+	// Standard libraries
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	// External libraries
 	"github.com/Niutaq/Gix/pkg/scrapers"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -65,7 +67,7 @@ type processedRates struct {
 	Sell float64
 }
 
-// ++++++++++++++++++++ MAIN Function ++++++++++++++++++++
+// main initializes the application by connecting to the database and Redis, setting up routes, and starting the HTTP server.
 func main() {
 	log.Println("Launching Gix server...")
 
@@ -107,7 +109,6 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		c.Next()
-		//c.Writer.Header().Set(contentTypeText, contentTypeJSON)
 	})
 
 	// Endpoints
@@ -124,8 +125,6 @@ func main() {
 		log.Fatalf("Server error: %v", err)
 	}
 }
-
-// Grupowanie API v1
 
 // --- HTTP handlers ---
 // handleHealthCheck - returns 200 OK if DB and Redis are up
@@ -172,72 +171,111 @@ func handleCantorsList(app *AppState) gin.HandlerFunc {
 // handleGetRates - returns the current exchange rates for a specified cantor and currency
 func handleGetRates(app *AppState) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cantorIDStr := c.Query("cantor_id")
-		currency := c.Query("currency")
-
-		if cantorIDStr == "" || currency == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "missing cantor_id or currency"})
-			return
-		}
-
-		cantorID, err := strconv.Atoi(cantorIDStr)
+		cantorID, currency, err := parseRateParams(c)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cantor_id"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
 		ctx := c.Request.Context()
 		cacheKey := fmt.Sprintf("rates:%d:%s", cantorID, currency)
 
-		if cachedVal, err := app.Cache.Get(ctx, cacheKey).Result(); err == nil {
-			c.Data(http.StatusOK, contentTypeJSON, []byte(cachedVal))
+		if respondFromCache(c, app.Cache, cacheKey) {
 			return
 		}
 
-		var ci CantorInfo
-		err = app.DB.QueryRow(ctx, "SELECT base_url, strategy, units FROM cantors where id = $1", cantorID).
-			Scan(&ci.BaseURL, &ci.Strategy, &ci.Units)
-
+		cantorInfo, err := fetchCantorInfo(ctx, app.DB, cantorID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				c.JSON(http.StatusNotFound, gin.H{"error": "Cantor not found"})
-			} else {
-				log.Printf("DB Error: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
-			}
+			handleDBError(c, err)
 			return
 		}
 
-		scrapeResult, err := runScrapeStrategy(ci, currency)
+		response, rates, err := scrapeAndProcess(cantorInfo, cantorID, currency)
 		if err != nil {
-			log.Printf("Scraper error (%s): %v", ci.Strategy, err)
+			log.Printf("Processing Error (%s): %v", cantorInfo.Strategy, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
-		rates, err := processRates(scrapeResult, ci.Units)
-		if err != nil {
-			log.Printf("Parsing error: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Rates parsing error"})
-			return
-		}
-
-		response := RatesResponse{
-			BuyRate:  fmt.Sprintf("%.4f", rates.Buy),
-			SellRate: fmt.Sprintf("%.4f", rates.Sell),
-			CantorID: cantorID,
-			Currency: currency,
-		}
-		responseJSON, _ := json.Marshal(response)
-		app.Cache.Set(ctx, cacheKey, responseJSON, 60*time.Second)
-
-		go saveToArchive(app.DB, cantorID, currency, rates.Buy, rates.Sell)
+		cacheAndArchive(ctx, app, cacheKey, cantorID, currency, response, rates)
 
 		c.JSON(http.StatusOK, response)
 	}
 }
 
-// --- Helpers ---
+// parseRateParams - a helper function to parse rate params from the query string
+func parseRateParams(c *gin.Context) (int, string, error) {
+	cantorIDStr := c.Query("cantor_id")
+	currency := c.Query("currency")
+
+	if cantorIDStr == "" || currency == "" {
+		return 0, "", fmt.Errorf("missing cantor_id or currency")
+	}
+
+	cantorID, err := strconv.Atoi(cantorIDStr)
+	if err != nil {
+		return 0, "", fmt.Errorf("invalid cantor_id")
+	}
+
+	return cantorID, currency, nil
+}
+
+// respondFromCache - a helper function to respond from cache if available
+func respondFromCache(c *gin.Context, cache *redis.Client, key string) bool {
+	if cachedVal, err := cache.Get(c.Request.Context(), key).Result(); err == nil {
+		c.Data(http.StatusOK, contentTypeJSON, []byte(cachedVal))
+		return true
+	}
+	return false
+}
+
+// fetchCantorInfo - a helper function to fetch cantor info from the DB
+func fetchCantorInfo(ctx context.Context, db *pgxpool.Pool, id int) (CantorInfo, error) {
+	var ci CantorInfo
+	err := db.QueryRow(ctx, "SELECT base_url, strategy, units FROM cantors where id = $1", id).
+		Scan(&ci.BaseURL, &ci.Strategy, &ci.Units)
+	return ci, err
+}
+
+// handleDBError - a helper function to handle DB errors
+func handleDBError(c *gin.Context, err error) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Cantor not found"})
+	} else {
+		log.Printf("DB Error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+	}
+}
+
+// scrapeAndProcess - a helper function to scrape and process the rates
+func scrapeAndProcess(ci CantorInfo, id int, currency string) (RatesResponse, processedRates, error) {
+	scrapeResult, err := runScrapeStrategy(ci, currency)
+	if err != nil {
+		return RatesResponse{}, processedRates{}, err
+	}
+
+	rates, err := processRates(scrapeResult, ci.Units)
+	if err != nil {
+		return RatesResponse{}, processedRates{}, fmt.Errorf("rates parsing error: %w", err)
+	}
+
+	response := RatesResponse{
+		BuyRate:  fmt.Sprintf("%.4f", rates.Buy),
+		SellRate: fmt.Sprintf("%.4f", rates.Sell),
+		CantorID: id,
+		Currency: currency,
+	}
+
+	return response, rates, nil
+}
+
+// cacheAndArchive - a helper function to cache and archive the response
+func cacheAndArchive(ctx context.Context, app *AppState, key string, id int, curr string, resp RatesResponse, rates processedRates) {
+	if responseJSON, err := json.Marshal(resp); err == nil {
+		app.Cache.Set(ctx, key, responseJSON, 60*time.Second)
+	}
+	go saveToArchive(app.DB, id, curr, rates.Buy, rates.Sell)
+}
 
 // connectToDB - connecting to the database
 func connectToDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
@@ -293,6 +331,7 @@ func initSchema(ctx context.Context, db *pgxpool.Pool) error {
 	return err
 }
 
+// runScrapeStrategy - a helper function to run the scrape strategy based on the cantor's strategy'
 func runScrapeStrategy(ci CantorInfo, currency string) (scrapers.ScrapeResult, error) {
 	switch ci.Strategy {
 	case "C1":
@@ -306,6 +345,7 @@ func runScrapeStrategy(ci CantorInfo, currency string) (scrapers.ScrapeResult, e
 	}
 }
 
+// processRates - a helper function to process the rates based on the cantor's units'
 func processRates(result scrapers.ScrapeResult, units int) (processedRates, error) {
 	buyRateF, errB := strconv.ParseFloat(cleanRate(result.BuyRate), 64)
 	sellRateF, errS := strconv.ParseFloat(cleanRate(result.SellRate), 64)
@@ -322,6 +362,7 @@ func processRates(result scrapers.ScrapeResult, units int) (processedRates, erro
 	return processedRates{Buy: buyRateF, Sell: sellRateF}, nil
 }
 
+// cleanRate - a helper function to clean the raw rate string
 func cleanRate(raw string) string {
 	s := strings.ReplaceAll(raw, ",", ".")
 	s = strings.TrimSpace(s)
@@ -334,6 +375,7 @@ func cleanRate(raw string) string {
 	return cleaned.String()
 }
 
+// saveToArchive - a helper function to save the rates to the archive table
 func saveToArchive(db *pgxpool.Pool, cantorID int, currency string, buyRate, sellRate float64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

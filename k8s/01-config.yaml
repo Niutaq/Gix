@@ -1,0 +1,9 @@
+# k8s/01-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gix-config
+data:
+  POSTGRES_DB: "gix_rates"
+  POSTGRES_USER: "gixuser"
+  REDIS_URL: "redis://gix-redis:6379/0"

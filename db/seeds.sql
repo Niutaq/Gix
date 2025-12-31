@@ -5,7 +5,3 @@ INSERT INTO cantors (name, display_name, base_url, strategy, units) VALUES
 ('kantorexchange', 'Exchange', 'https://kantorywalut-rzeszow.pl/kursy-walut', 'C2', 1),
 ('supersam', 'Supersam', 'http://www.kantorsupersam.pl/', 'C3', 1)
 ON CONFLICT (name) DO NOTHING;
-
--- Check results
--- SELECT * FROM cantors;
--- SELECT * FROM rates;

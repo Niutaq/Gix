@@ -1,0 +1,52 @@
+# k8s/04-backend.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gix-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gix-backend
+  template:
+    metadata:
+      labels:
+        app: gix-backend
+    spec:
+      containers:
+        - name: gix-backend
+          image: ttl.sh/image-gix:1h
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gix-secrets
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: gix-config
+                  key: REDIS_URL
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gix-backend-service
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+  selector:
+    app: gix-backend
