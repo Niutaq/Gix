@@ -10,6 +10,7 @@ main
 # Build output directories
 /outputDir/
 /tmp/
+Gix.app/
 
 # IDE config files
 /.idea/

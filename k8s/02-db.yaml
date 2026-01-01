@@ -14,11 +14,20 @@ spec:
       labels:
         app: gix-db
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: timescale
           image: timescale/timescaledb:latest-pg16
           ports:
             - containerPort: 5432
+          resources:
+            requests:
+              cpu: 15m
+              memory: 192Mi
+              ephemeral-storage: 512Mi
+            limits:
+              memory: 512Mi
+              ephemeral-storage: 1Gi
           env:
             - name: POSTGRES_DB
               valueFrom:

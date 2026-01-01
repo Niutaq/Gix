@@ -13,11 +13,20 @@ spec:
       labels:
         app: gix-redis
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: redis
           image: redis:7-alpine
           ports:
             - containerPort: 6379
+          resources:
+            requests:
+              cpu: 5m
+              memory: 32Mi
+              ephemeral-storage: 128Mi
+            limits:
+              memory: 256Mi
+              ephemeral-storage: 512Mi
 
 ---
 apiVersion: v1
