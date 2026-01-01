@@ -36,7 +36,7 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
-	// Gix utilities§
+	// Gix utilities
 	"github.com/Niutaq/Gix/pkg/utilities"
 )
 
@@ -122,11 +122,15 @@ func run(window *app.Window, config utilities.AppConfig) error {
 	fonts, err := utilities.LoadFontCollection()
 	if err != nil {
 		log.Printf("Font load failed: %v", err)
+	} else {
+		log.Println("Font collection loaded successfully.")
 	}
 
 	theme := material.NewTheme()
 	theme.Shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(fonts))
 	theme.FingerSize = 48
+
+	log.Println("Application started.")
 
 	for {
 		switch e := window.Event().(type) {
@@ -139,6 +143,8 @@ func run(window *app.Window, config utilities.AppConfig) error {
 					state.Cantors[c.Name] = &utilities.CantorInfo{
 						ID:          c.ID,
 						DisplayName: c.DisplayName,
+						Latitude:    c.Latitude,
+						Longitude:   c.Longitude,
 					}
 				}
 			default:

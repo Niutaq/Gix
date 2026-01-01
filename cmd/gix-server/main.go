@@ -20,6 +20,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+
+	// Swagger utilities
+	_ "github.com/Niutaq/Gix/docs"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 // Constants
@@ -48,9 +53,11 @@ type CantorInfo struct {
 
 // CantorListResponse - a response struct for the /api/v1/cantors endpoint
 type CantorListResponse struct {
-	ID          int    `json:"id"`
-	DisplayName string `json:"displayName"`
-	Name        string `json:"name"`
+	ID          int     `json:"id"`
+	DisplayName string  `json:"displayName"`
+	Name        string  `json:"name"`
+	Latitude    float64 `json:"latitude"`
+	Longitude   float64 `json:"longitude"`
 }
 
 // RatesResponse - a response struct for the /api/v1/rates endpoint
@@ -66,6 +73,21 @@ type processedRates struct {
 	Buy  float64
 	Sell float64
 }
+
+// @title           Gix API
+// @version         1.0
+// @description     This is the backend API for the Gix exchange rate application.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.url    http://www.swagger.io/support
+// @contact.email  support@swagger.io
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      165.227.246.100:8080
+// @BasePath  /api/v1
 
 // main initializes the application by connecting to the database and Redis, setting up routes, and starting the HTTP server.
 func main() {
@@ -120,6 +142,9 @@ func main() {
 		v1.GET("/rates", handleGetRates(appState))
 	}
 
+	// Swagger route
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	log.Println("Gin API listens at port :8080...")
 	if err := r.Run(":8080"); err != nil {
 		log.Fatalf("Server error: %v", err)
@@ -127,7 +152,15 @@ func main() {
 }
 
 // --- HTTP handlers ---
-// handleHealthCheck - returns 200 OK if DB and Redis are up
+
+// handleHealthCheck godoc
+// @Summary      Health Check
+// @Description  Checks if the server, database, and Redis are running correctly.
+// @Tags         health
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      503  {object}  map[string]string
+// @Router       /healthz [get]
 func handleHealthCheck(app *AppState) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := app.DB.Ping(c.Request.Context()); err != nil {
@@ -142,10 +175,17 @@ func handleHealthCheck(app *AppState) gin.HandlerFunc {
 	}
 }
 
-// handleCantorsList - returns a list of all cantors
+// handleCantorsList godoc
+// @Summary      List Cantors
+// @Description  Returns a list of all available cantors with their geolocations.
+// @Tags         cantors
+// @Produce      json
+// @Success      200  {array}   CantorListResponse
+// @Failure      500  {object}  map[string]string
+// @Router       /cantors [get]
 func handleCantorsList(app *AppState) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		rows, err := app.DB.Query(c.Request.Context(), "SELECT id, display_name, name FROM cantors")
+		rows, err := app.DB.Query(c.Request.Context(), "SELECT id, display_name, name, latitude, longitude FROM cantors")
 		if err != nil {
 			log.Printf("DB Error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": internalServerError})
@@ -156,7 +196,7 @@ func handleCantorsList(app *AppState) gin.HandlerFunc {
 		var cantors []CantorListResponse
 		for rows.Next() {
 			var cr CantorListResponse
-			if err := rows.Scan(&cr.ID, &cr.DisplayName, &cr.Name); err != nil {
+			if err := rows.Scan(&cr.ID, &cr.DisplayName, &cr.Name, &cr.Latitude, &cr.Longitude); err != nil {
 				log.Printf("Scan Error: %v", err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": internalServerError})
 				return
@@ -168,7 +208,18 @@ func handleCantorsList(app *AppState) gin.HandlerFunc {
 	}
 }
 
-// handleGetRates - returns the current exchange rates for a specified cantor and currency
+// handleGetRates godoc
+// @Summary      Get Rates
+// @Description  Returns the buy and sell rates for a specific cantor and currency. Scrapes data in real-time if not cached.
+// @Tags         rates
+// @Produce      json
+// @Param        cantor_id  query     int     true  "Cantor ID"
+// @Param        currency   query     string  true  "Currency Code (e.g., EUR, USD)"
+// @Success      200  {object}  RatesResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /rates [get]
 func handleGetRates(app *AppState) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cantorID, currency, err := parseRateParams(c)
@@ -315,7 +366,9 @@ func initSchema(ctx context.Context, db *pgxpool.Pool) error {
         display_name VARCHAR(100) NOT NULL,
         base_url TEXT NOT NULL,
         strategy VARCHAR(10) NOT NULL,
-        units INTEGER DEFAULT 1
+        units INTEGER DEFAULT 1,
+        latitude DECIMAL(9,6) DEFAULT 0,
+        longitude DECIMAL(9,6) DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS rates (
         time TIMESTAMPTZ NOT NULL,

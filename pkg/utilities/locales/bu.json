@@ -22,6 +22,9 @@
   "market_subtitle": "Мониторинг в реално време",
   "search_placeholder": "Търсене на обменно бюро...",
   "no_cantor_found": "Няма намерени резултати...",
+    "locate_button": "Локализирай",
+
+
   "buy_col": "Купува",
   "sell_col": "Продава",
   "ai_title": "Анализ",

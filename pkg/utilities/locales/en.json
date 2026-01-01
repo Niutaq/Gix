@@ -22,6 +22,8 @@
   "market_subtitle": "Real-time Exchange Monitor",
   "search_placeholder": "Search cantor...",
   "no_cantor_found": "No cantor found...",
+  "locate_button": "Locate",
+
   "buy_col": "Buy",
   "sell_col": "Sell",
   "ai_title": "Analysis",

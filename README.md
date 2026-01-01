@@ -98,8 +98,6 @@ go install github.com/go-task/task/v3/cmd/task@latest
 | Action | Command | Description |
 | :--- | :--- | :--- |
 | **Run App** | `task run` | Runs frontend connected to live API |
-| **Run Local** | `task run:local` | Runs frontend connected to localhost |
-| **Backend** | `task backend` | Starts Docker services |
 | **Build Mac** | `task build:macos` | Creates `Gix.app` (fixes fonts & signing) |
 | **Build Win** | `task build:windows` | Creates `gix.exe` with icon |
 | **Clean** | `task clean` | Removes build artifacts |

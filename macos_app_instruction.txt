@@ -1,0 +1,59 @@
+# 1. Sprzątanie
+rm -rf Gix.app
+rm -f gix
+
+# 2. Budowanie właściwej binarki (nazwiemy ją gix-bin, żeby nie mylić ze skryptem)
+go build -o gix-bin ./cmd/gix
+
+# 3. Tworzenie struktury folderów macOS
+mkdir -p Gix.app/Contents/MacOS
+mkdir -p Gix.app/Contents/Resources
+
+# 4. Przenoszenie plików (Binarka, Ikona, Fonty)
+# Przenosimy binarkę jako gix-bin
+mv gix-bin Gix.app/Contents/MacOS/
+cp appicon.png Gix.app/Contents/Resources/icon.png
+
+# Kopiujemy fonty do tego samego folderu co binarka
+cp -r fonts Gix.app/Contents/MacOS/
+
+# 5. TWORZENIE SKRYPTU STARTOWEGO
+cat <<EOF > Gix.app/Contents/MacOS/gix
+#!/bin/bash
+DIR=\$(cd "\$(dirname "\$0")"; pwd)
+cd "\$DIR"
+exec "./gix-bin" "\$@"
+EOF
+
+# 6. Tworzenie Info.plist
+cat <<EOF > Gix.app/Contents/Info.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>gix</string>
+    <key>CFBundleIconFile</key>
+    <string>icon.png</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.niutaq.gix</string>
+    <key>CFBundleName</key>
+    <string>Gix</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.13.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>
+EOF
+
+# 7. Uprawnienia i Podpis
+# Nadajemy prawa wykonywania zarówno skryptowi, jak i binarce
+chmod +x Gix.app/Contents/MacOS/gix
+chmod +x Gix.app/Contents/MacOS/gix-bin
+
+# Usuwamy kwarantannę (Gatekeeper) i podpisujemy
+xattr -cr Gix.app
+codesign --force --deep --sign - Gix.app

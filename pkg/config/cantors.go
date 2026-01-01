@@ -1,6 +1,7 @@
 package config
 
 import (
+	// Standard libraries
 	"encoding/json"
 	"fmt"
 	"time"
@@ -18,6 +19,8 @@ type CantorConfig struct {
 	URL                 string   `json:"url"`
 	DefaultTimeout      Duration `json:"defaultTimeout"`
 	NeedsRateFormatting bool     `json:"needsRateFormatting"`
+	Latitude            float64  `json:"latitude"`
+	Longitude           float64  `json:"longitude"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler interface

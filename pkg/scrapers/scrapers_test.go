@@ -1,12 +1,14 @@
 package scrapers
 
 import (
+	// Standard libraries
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
+// mockServer - creates a mock server that returns the given body
 func mockServer(body string) *httptest.Server {
 	f := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
