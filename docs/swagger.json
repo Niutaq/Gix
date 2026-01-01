@@ -15,7 +15,7 @@
         },
         "version": "1.0"
     },
-    "host": "165.227.246.100:8080",
+    "host": "localhost:8080",
     "basePath": "/api/v1",
     "paths": {
         "/cantors": {

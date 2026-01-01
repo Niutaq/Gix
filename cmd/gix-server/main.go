@@ -22,7 +22,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	// Swagger utilities
-	_ "github.com/Niutaq/Gix/docs"
+	docs "github.com/Niutaq/Gix/docs"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -86,12 +86,17 @@ type processedRates struct {
 // @license.name  Apache 2.0
 // @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
 
-// @host      165.227.246.100:8080
+// @host      localhost:8080
 // @BasePath  /api/v1
 
 // main initializes the application by connecting to the database and Redis, setting up routes, and starting the HTTP server.
 func main() {
 	log.Println("Launching Gix server...")
+
+	// Swagger dynamic host
+	if envHost := os.Getenv("SWAGGER_HOST"); envHost != "" {
+		docs.SwaggerInfo.Host = envHost
+	}
 
 	ctx := context.Background()
 
