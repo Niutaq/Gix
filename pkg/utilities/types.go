@@ -14,6 +14,8 @@ import (
 type CantorInfo struct {
 	ID          int
 	DisplayName string
+	Latitude    float64
+	Longitude   float64
 	Button      widget.Clickable
 }
 
@@ -50,6 +52,14 @@ type UIState struct {
 	CurrencyList widget.List
 	SearchEditor widget.Editor
 	SearchText   string
+
+	UserLocation struct {
+		Latitude  float64
+		Longitude float64
+		Active    bool
+	}
+	MaxDistance  float64
+	LocateButton widget.Clickable
 
 	SelectedCantor        string
 	SelectedLanguage      string
@@ -90,9 +100,11 @@ type AppConfig struct {
 
 // ApiCantorResponse for parsing JSON
 type ApiCantorResponse struct {
-	ID          int    `json:"id"`
-	DisplayName string `json:"displayName"`
-	Name        string `json:"name"`
+	ID          int     `json:"id"`
+	DisplayName string  `json:"displayName"`
+	Name        string  `json:"name"`
+	Latitude    float64 `json:"latitude"`
+	Longitude   float64 `json:"longitude"`
 }
 
 // ModalConfig represents the configuration for a modal UI component.

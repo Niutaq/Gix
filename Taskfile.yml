@@ -33,6 +33,11 @@ tasks:
       - docker-compose up
 
   # --- UTILITIES ---
+  swagger:
+    desc: "Generates Swagger documentation"
+    cmds:
+      - go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/gix-server/main.go -o docs
+
   deps:
     desc: "Installs required tools (gogio)"
     cmds:
@@ -59,7 +64,6 @@ tasks:
       - mkdir -p {{.OUT_MAC}}/Contents/Resources
       - mv gix-bin {{.OUT_MAC}}/Contents/MacOS/
       - cp {{.ICON}} {{.OUT_MAC}}/Contents/Resources/icon.png
-      - cp -r fonts {{.OUT_MAC}}/Contents/MacOS/
       - |
         cat <<EOF > {{.OUT_MAC}}/Contents/MacOS/{{.APP_NAME}}
         #!/bin/bash

@@ -67,7 +67,7 @@ func LayoutUI(gtx layout.Context, window *app.Window, theme *material.Theme, sta
 								return layoutHeader(gtx, window, theme, state)
 							}),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								return LayoutSearchBar(gtx, theme, state)
+								return LayoutSearchBar(gtx, window, theme, state)
 							}),
 							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 								return layoutCantorSelection(gtx, window, theme, state)
@@ -325,6 +325,18 @@ func filterCantorList(state *AppState, searchText string) []string {
 	searchText = strings.ToLower(searchText)
 	var ids []string
 	for id, cantor := range state.Cantors {
+		if state.UI.UserLocation.Active && state.UI.MaxDistance > 0 {
+			dist := CalculateDistance(
+				state.UI.UserLocation.Latitude,
+				state.UI.UserLocation.Longitude,
+				cantor.Latitude,
+				cantor.Longitude,
+			)
+			if dist > state.UI.MaxDistance {
+				continue
+			}
+		}
+
 		displayName := GetTranslation(state.UI.Language, cantor.DisplayName)
 		if searchText == "" ||
 			strings.Contains(strings.ToLower(id), searchText) ||
@@ -488,37 +500,79 @@ func layoutLanguageButton(gtx layout.Context, window *app.Window, theme *materia
 }
 
 // LayoutSearchBar renders the search bar within a specified layout context using the provided UI state and theme.
-func LayoutSearchBar(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+func LayoutSearchBar(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
 	state.UI.SearchText = state.UI.SearchEditor.Text()
 	gtx.Constraints.Min.X = gtx.Constraints.Max.X
 	return layout.Inset{Bottom: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Stack{}.Layout(gtx,
-			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				bgColor := color.NRGBA{R: 25, G: 25, B: 30, A: 200}
-				shape := clip.UniformRRect(image.Rectangle{Max: gtx.Constraints.Min}, gtx.Dp(14))
-				paint.FillShape(gtx.Ops, bgColor, shape.Op(gtx.Ops))
-				borderColor := color.NRGBA{R: 255, G: 255, B: 255, A: 20}
-				if len(state.UI.SearchText) > 0 {
-					borderColor = AppColors.Accent1
-					borderColor.A = 150
-				}
-				return widget.Border{Color: borderColor, Width: unit.Dp(1), CornerRadius: unit.Dp(14)}.Layout(
-					gtx, func(gtx layout.Context) layout.Dimensions {
-						return layout.Dimensions{Size: gtx.Constraints.Min}
-					})
+		return layout.Flex{Axis: layout.Horizontal, Spacing: layout.SpaceBetween}.Layout(gtx,
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return layout.Stack{}.Layout(gtx,
+					layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+						bgColor := color.NRGBA{R: 25, G: 25, B: 30, A: 200}
+						shape := clip.UniformRRect(image.Rectangle{Max: gtx.Constraints.Min}, gtx.Dp(14))
+						paint.FillShape(gtx.Ops, bgColor, shape.Op(gtx.Ops))
+						borderColor := color.NRGBA{R: 255, G: 255, B: 255, A: 20}
+						if len(state.UI.SearchText) > 0 {
+							borderColor = AppColors.Accent1
+							borderColor.A = 150
+						}
+						return widget.Border{Color: borderColor, Width: unit.Dp(1), CornerRadius: unit.Dp(14)}.Layout(
+							gtx, func(gtx layout.Context) layout.Dimensions {
+								return layout.Dimensions{Size: gtx.Constraints.Min}
+							})
+					}),
+					layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+						return layout.UniformInset(unit.Dp(16)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							hint := GetTranslation(state.UI.Language, "search_placeholder")
+							ed := material.Editor(theme, &state.UI.SearchEditor, hint)
+							ed.Color = AppColors.Text
+							ed.HintColor = color.NRGBA{R: 120, G: 120, B: 130, A: 255}
+							ed.TextSize = unit.Sp(16)
+							return ed.Layout(gtx)
+						})
+					}),
+				)
 			}),
-			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-				return layout.UniformInset(unit.Dp(16)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					hint := GetTranslation(state.UI.Language, "search_placeholder")
-					ed := material.Editor(theme, &state.UI.SearchEditor, hint)
-					ed.Color = AppColors.Text
-					ed.HintColor = color.NRGBA{R: 120, G: 120, B: 130, A: 255}
-					ed.TextSize = unit.Sp(16)
-					return ed.Layout(gtx)
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Left: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layoutLocateButton(gtx, window, theme, state)
 				})
 			}),
 		)
 	})
+}
+
+// layoutLocateButton handles the logic and rendering of the location toggle button.
+func layoutLocateButton(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+	if state.UI.LocateButton.Clicked(gtx) {
+		if !state.UI.UserLocation.Active {
+			// Mock location
+			state.UI.UserLocation.Latitude = 50.0413
+			state.UI.UserLocation.Longitude = 21.9990
+			state.UI.UserLocation.Active = true
+			state.UI.MaxDistance = 30.0
+		} else {
+			state.UI.UserLocation.Active = false
+		}
+		window.Invalidate()
+	}
+	btnText := GetTranslation(state.UI.Language, "locate_button")
+	btn := material.Button(theme, &state.UI.LocateButton, btnText)
+
+	// Match Language Button Style (Default/Inactive)
+	btn.Background = color.NRGBA{R: 255, G: 255, B: 255, A: 10}
+	btn.Color = AppColors.Accent1
+	btn.CornerRadius = unit.Dp(8)
+	btn.Inset = layout.UniformInset(unit.Dp(10))
+	btn.TextSize = unit.Sp(14) // Match language button text size
+
+	// Active State
+	if state.UI.UserLocation.Active {
+		btn.Background = AppColors.Accent1
+		btn.Color = color.NRGBA{R: 20, G: 20, B: 20, A: 255} // Dark text
+	}
+
+	return btn.Layout(gtx)
 }
 
 // LayoutRightPanel lays out the right-side panel of the application, featuring titles, subtitles, charts, and descriptive text.
@@ -579,12 +633,14 @@ func layoutMarketValue(
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Caption(theme, label)
 			l.Color = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
-			l.TextSize = unit.Sp(10)
+			l.TextSize = unit.Sp(12)
 			return l.Layout(gtx)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			v := material.Body2(theme, value)
 			v.Color = txtColor
+			v.TextSize = unit.Sp(18)
+			v.Font.Weight = font.Bold
 			return v.Layout(gtx)
 		}),
 	)
@@ -697,7 +753,7 @@ func layoutModalHeader(window *app.Window, theme *material.Theme, title string, 
 				}
 				btn := material.Button(theme, &modalCloseBtn, "x")
 				btn.Background = color.NRGBA{A: 0}
-				btn.Color = AppColors.Error
+				btn.Color = AppColors.Button
 				btn.Inset = layout.UniformInset(unit.Dp(12))
 				btn.TextSize = unit.Sp(18)
 				return layout.Inset{Right: unit.Dp(8), Top: unit.Dp(8)}.Layout(gtx, btn.Layout)
