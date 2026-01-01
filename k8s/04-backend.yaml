@@ -13,12 +13,21 @@ spec:
       labels:
         app: gix-backend
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: gix-backend
-          image: ttl.sh/image-gix:1h
+          image: niutaq/gix-backend:v1
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+              ephemeral-storage: 128Mi
+            limits:
+              memory: 512Mi
+              ephemeral-storage: 1Gi
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -30,6 +39,8 @@ spec:
                 configMapKeyRef:
                   name: gix-config
                   key: REDIS_URL
+            - name: SWAGGER_HOST
+              value: "165.227.246.100:8080"
           livenessProbe:
             httpGet:
               path: /healthz

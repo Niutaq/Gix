@@ -22,6 +22,8 @@
   "market_subtitle": "Analiza w czasie rzeczywistym",
   "search_placeholder": "Szukaj kantoru...",
   "no_cantor_found": "Nie znaleziono kantoru...",
+  "locate_button": "Lokalizuj",
+
   "buy_col": "Skup",
   "sell_col": "Sprzedaż",
   "ai_title": "Analiza",
