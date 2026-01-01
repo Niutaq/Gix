@@ -24,7 +24,7 @@ definitions:
       sellRate:
         type: string
     type: object
-host: 165.227.246.100:8080
+host: localhost:8080
 info:
   contact:
     email: support@swagger.io
