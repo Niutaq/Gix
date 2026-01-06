@@ -4,7 +4,7 @@ package main
 import (
 	// Standard libraries
 	"context"
-	"encoding/json"
+	//"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -15,14 +15,16 @@ import (
 	"time"
 
 	// External libraries
+	pb "github.com/Niutaq/Gix/api/proto/v1"
 	"github.com/Niutaq/Gix/pkg/scrapers"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/proto"
 
 	// Swagger utilities
-	docs "github.com/Niutaq/Gix/docs"
+	"github.com/Niutaq/Gix/docs"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -30,7 +32,7 @@ import (
 // Constants
 const (
 	// Content-Type headers
-	contentTypeJSON = "application/json"
+	contentTypeProtoBuf = "application/x-protobuf"
 
 	// Error messages
 	internalServerError = "Internal server error"
@@ -61,12 +63,12 @@ type CantorListResponse struct {
 }
 
 // RatesResponse - a response struct for the /api/v1/rates endpoint
-type RatesResponse struct {
-	BuyRate  string `json:"buyRate"`
-	SellRate string `json:"sellRate"`
-	CantorID int    `json:"cantorID"`
-	Currency string `json:"currency"`
-}
+//type RatesResponse struct {
+//	BuyRate  string `json:"buyRate"`
+//	SellRate string `json:"sellRate"`
+//	CantorID int    `json:"cantorID"`
+//	Currency string `json:"currency"`
+//}
 
 // processedRates - a struct for holding the final rates after processing
 type processedRates struct {
@@ -176,7 +178,7 @@ func handleHealthCheck(app *AppState) gin.HandlerFunc {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "service": "cache"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Gix is alive with Gin."})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Gix is alive."})
 	}
 }
 
@@ -234,7 +236,7 @@ func handleGetRates(app *AppState) gin.HandlerFunc {
 		}
 
 		ctx := c.Request.Context()
-		cacheKey := fmt.Sprintf("rates:%d:%s", cantorID, currency)
+		cacheKey := fmt.Sprintf("rates:proto%d:%s", cantorID, currency)
 
 		if respondFromCache(c, app.Cache, cacheKey) {
 			return
@@ -255,7 +257,11 @@ func handleGetRates(app *AppState) gin.HandlerFunc {
 
 		cacheAndArchive(ctx, app, cacheKey, cantorID, currency, response, rates)
 
-		c.JSON(http.StatusOK, response)
+		if c.GetHeader("Accept") == contentTypeProtoBuf {
+			c.ProtoBuf(http.StatusOK, response)
+		} else {
+			c.JSON(http.StatusOK, response)
+		}
 	}
 }
 
@@ -278,9 +284,17 @@ func parseRateParams(c *gin.Context) (int, string, error) {
 
 // respondFromCache - a helper function to respond from cache if available
 func respondFromCache(c *gin.Context, cache *redis.Client, key string) bool {
-	if cachedVal, err := cache.Get(c.Request.Context(), key).Result(); err == nil {
-		c.Data(http.StatusOK, contentTypeJSON, []byte(cachedVal))
-		return true
+	if cachedBytes, err := cache.Get(c.Request.Context(), key).Bytes(); err == nil {
+		var cachedRate pb.RateResponse
+		if err := proto.Unmarshal(cachedBytes, &cachedRate); err == nil {
+			if c.GetHeader("Accept") == contentTypeProtoBuf {
+				c.ProtoBuf(http.StatusOK, &cachedRate)
+			} else {
+				c.JSON(http.StatusOK, &cachedRate)
+			}
+			return true
+		}
+		log.Printf("Unmarshal Error: %v", err)
 	}
 	return false
 }
@@ -304,31 +318,35 @@ func handleDBError(c *gin.Context, err error) {
 }
 
 // scrapeAndProcess - a helper function to scrape and process the rates
-func scrapeAndProcess(ci CantorInfo, id int, currency string) (RatesResponse, processedRates, error) {
+func scrapeAndProcess(ci CantorInfo, id int, currency string) (*pb.RateResponse, processedRates, error) {
 	scrapeResult, err := runScrapeStrategy(ci, currency)
 	if err != nil {
-		return RatesResponse{}, processedRates{}, err
+		return nil, processedRates{}, err
 	}
 
 	rates, err := processRates(scrapeResult, ci.Units)
 	if err != nil {
-		return RatesResponse{}, processedRates{}, fmt.Errorf("rates parsing error: %w", err)
+		return nil, processedRates{}, fmt.Errorf("rates parsing error: %w", err)
 	}
 
-	response := RatesResponse{
-		BuyRate:  fmt.Sprintf("%.4f", rates.Buy),
-		SellRate: fmt.Sprintf("%.4f", rates.Sell),
-		CantorID: id,
-		Currency: currency,
+	response := &pb.RateResponse{
+		BuyRate:   fmt.Sprintf("%.4f", rates.Buy),
+		SellRate:  fmt.Sprintf("%.4f", rates.Sell),
+		CantorId:  int32(id),
+		Currency:  currency,
+		FetchedAt: time.Now().Unix(),
 	}
 
 	return response, rates, nil
 }
 
 // cacheAndArchive - a helper function to cache and archive the response
-func cacheAndArchive(ctx context.Context, app *AppState, key string, id int, curr string, resp RatesResponse, rates processedRates) {
-	if responseJSON, err := json.Marshal(resp); err == nil {
-		app.Cache.Set(ctx, key, responseJSON, 60*time.Second)
+func cacheAndArchive(ctx context.Context, app *AppState, key string, id int, curr string,
+	resp *pb.RateResponse, rates processedRates) {
+	if protoBytes, err := proto.Marshal(resp); err == nil {
+		app.Cache.Set(ctx, key, protoBytes, 60*time.Second)
+	} else {
+		log.Printf("Marshal Error: %v", err)
 	}
 	go saveToArchive(app.DB, id, curr, rates.Buy, rates.Sell)
 }

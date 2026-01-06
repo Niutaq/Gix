@@ -16,7 +16,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: gix-backend
-          image: niutaq/gix-backend:v1
+          image: niutaq/gix-backend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
