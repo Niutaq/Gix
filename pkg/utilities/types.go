@@ -14,9 +14,18 @@ import (
 type CantorInfo struct {
 	ID          int
 	DisplayName string
+	Address     string
 	Latitude    float64
 	Longitude   float64
 	Button      widget.Clickable
+}
+
+// HoverInfo holds data for the dynamic notch display
+type HoverInfo struct {
+	Active   bool
+	Title    string
+	Subtitle string
+	Extra    string
 }
 
 // ExchangeRates holds the buy and sell rates for a currency.
@@ -58,8 +67,17 @@ type UIState struct {
 		Longitude float64
 		Active    bool
 	}
-	MaxDistance  float64
-	LocateButton widget.Clickable
+
+	MaxDistance    float64
+	DistanceSlider widget.Float
+	LocateButton   widget.Clickable
+	HoverInfo      HoverInfo
+	NotchState     struct {
+		CurrentAlpha  float32
+		LastContent   HoverInfo
+		LastTime      time.Time
+		LastHoverTime time.Time
+	}
 
 	SelectedCantor        string
 	SelectedLanguage      string

@@ -1,10 +1,16 @@
 version: '3'
 
+dotenv: ['.env']
+
 vars:
   ENTRY_POINT: ./cmd/gix/main.go
+  SERVER_ENTRY: ./cmd/gix-server/main.go
   APP_NAME: Gix
-  ICON: appicon.png
+  ICON: appicon2.png
+  LOCAL_DB_URL: "postgres://gixuser:{{.DB_PASS}}@localhost:5432/gix_rates?sslmode=disable"
+  LOCAL_REDIS_URL: "redis://localhost:6379/0"
   API_URL: "http://165.227.246.100:8080"
+  PROTO_FILE: api/proto/v1/rates.proto
 
   OUT_WIN: gix.exe
   OUT_MAC: Gix.app
@@ -17,6 +23,18 @@ tasks:
       - task: run
 
   # --- DEVELOPMENT ---
+  proto:
+    desc: "Generates Go code from Protobuf files"
+    cmds:
+      - protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative {{.PROTO_FILE}}
+
+  server:dev:
+    desc: "Runs the backend server locally (no Docker) with hot Proto generation"
+    deps: [ proto ]
+    cmds:
+      - go mod tidy
+      - DATABASE_URL="{{.LOCAL_DB_URL}}" REDIS_URL="{{.LOCAL_REDIS_URL}}" go run {{.SERVER_ENTRY}}
+
   run:
     desc: "Runs the frontend (Gio) connected to your server"
     cmds:
