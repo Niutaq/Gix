@@ -1,7 +1,7 @@
 <div align="center">
 
 <!-- Logo placeholder - replace with your actual logo -->
-<img src="appicon.png" alt="GIX Logo" width="192"/>
+<img src="appicon2.png" alt="GIX Logo" width="192"/>
 
 # GIX
 
