@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package v1;
+
+option go_package = "github.com/Niutaq/Gix/api/proto/v1";
+
+message RateResponse {
+  string buyRate = 1 [json_name = "buyRate"];
+  string sellRate = 2 [json_name = "sellRate"];
+  int32 cantorId = 3 [json_name = "cantorID"];
+  string currency = 4 [json_name = "currency"];
+  int64 fetchedAt = 5 [json_name = "fetchedAt"];
+}

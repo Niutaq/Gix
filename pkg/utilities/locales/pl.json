@@ -17,13 +17,11 @@
   "err_api_response":"Serwer odpowiedział błędem. Spróbuj ponownie później.",
   "err_api_parsing": "Nie udało się przetworzyć odpowiedzi serwera.",
   "err_unknown": "Wystąpił nieznany błąd.",
-
   "market_title": "Rynek Walutowy",
   "market_subtitle": "Analiza w czasie rzeczywistym",
   "search_placeholder": "Szukaj kantoru...",
   "no_cantor_found": "Nie znaleziono kantoru...",
   "locate_button": "Lokalizuj",
-
   "buy_col": "Skup",
   "sell_col": "Sprzedaż",
   "ai_title": "Analiza",
@@ -33,5 +31,10 @@
   "error_label": "Błąd",
   "select_lang_title": "Wybierz język",
   "no_rate_label": "Brak kursu",
-  "sidebar_currency_label": "Waluty"
+  "sidebar_currency_label": "Waluty",
+  "location_unknown": "Lokalizacja nieznana",
+  "notch_lang_title": "Język",
+  "notch_lang_desc": "Zmień język aplikacji",
+  "notch_loc_title": "Filtr Lokalizacji",
+  "notch_loc_desc": "Filtruj kantory po odległości"
 }

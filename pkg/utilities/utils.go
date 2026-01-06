@@ -1,6 +1,7 @@
 package utilities
 
 import (
+	// Standard libraries
 	"encoding/json"
 	"fmt"
 	"image"
@@ -16,7 +17,7 @@ import (
 	"gioui.org/app"
 	"gioui.org/font"
 	"gioui.org/layout"
-	//"gioui.org/op"
+	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/unit"
@@ -25,19 +26,19 @@ import (
 
 	// Gix utilities
 	"github.com/Niutaq/Gix/pkg/reading_data"
+	pb "github.com/Niutaq/Gix/api/proto/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // Global variables
-//
-////go:embed res/background_2k.png
-//var backgroundImageFSF embed.FS - disabled for now
-
 var (
 	modalCloseBtn widget.Clickable
 )
 
 // LayoutUI - Main application layout
 func LayoutUI(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig) {
+	updateNotchAnimation(window, state)
+
 	state.UI.SearchEditor.SingleLine = true
 	state.UI.SearchEditor.Submit = true
 
@@ -45,7 +46,9 @@ func LayoutUI(gtx layout.Context, window *app.Window, theme *material.Theme, sta
 		state.Vault.Rates = make(map[string]*CantorEntry)
 	}
 
-	paint.Fill(gtx.Ops, color.NRGBA{R: 30, G: 30, B: 35, A: 255})
+	drawPatternBackground(gtx)
+
+	paint.Fill(gtx.Ops, color.NRGBA{R: 30, G: 30, B: 35, A: 50})
 
 	layout.Stack{Alignment: layout.NW}.Layout(gtx,
 		// LAYER 1: Application Content
@@ -97,11 +100,70 @@ func LayoutUI(gtx layout.Context, window *app.Window, theme *material.Theme, sta
 			return layout.Dimensions{}
 		}),
 
-		//// LAYER 4: Notifications
-		//layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-		//	return LayoutNotification(gtx, theme, state)
-		//}), - disabled for now
+		// LAYER 4: Dynamic Notch (Aesthetic Info)
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			return layoutNotch(gtx, theme, state)
+		}),
 	)
+}
+
+// updateNotchAnimation handles the fade-in/out logic for the dynamic notch.
+func updateNotchAnimation(window *app.Window, state *AppState) {
+	now := time.Now()
+
+	if state.UI.NotchState.LastTime.IsZero() {
+		state.UI.NotchState.LastTime = now
+	}
+	dt := now.Sub(state.UI.NotchState.LastTime).Seconds()
+	if dt > 0.05 {
+		dt = 0.05
+	}
+	state.UI.NotchState.LastTime = now
+
+	if state.UI.HoverInfo.Active {
+		state.UI.NotchState.LastHoverTime = now
+	}
+
+	shouldShow := state.UI.HoverInfo.Active || now.Sub(state.UI.NotchState.LastHoverTime) < 500*time.Millisecond
+
+	targetAlpha := float32(0.0)
+	if shouldShow {
+		targetAlpha = 1.0
+		if state.UI.HoverInfo.Active {
+			state.UI.NotchState.LastContent = state.UI.HoverInfo
+		}
+	}
+
+	speed := float32(8.0)
+	change := speed * float32(dt)
+	state.UI.NotchState.CurrentAlpha = moveTowards(state.UI.NotchState.CurrentAlpha, targetAlpha, change)
+
+	if state.UI.NotchState.CurrentAlpha > 0.01 || shouldShow {
+		window.Invalidate()
+	}
+
+	state.UI.HoverInfo = HoverInfo{Active: false}
+}
+
+// moveTowards moves current value towards target by at most maxDelta.
+func moveTowards(current, target, maxDelta float32) float32 {
+	if diff := target - current; diff < 0 {
+		diff = -diff
+		if diff <= maxDelta {
+			return target
+		}
+		return current - maxDelta
+	} else {
+		if diff <= maxDelta {
+			return target
+		}
+		return current + maxDelta
+	}
+}
+
+// drawPatternBackground draws a procedural geometric background.
+func drawPatternBackground(gtx layout.Context) {
+	paint.Fill(gtx.Ops, color.NRGBA{R: 15, G: 15, B: 25, A: 255})
 }
 
 // fetchAllRates retrieves exchange rates for all cantors asynchronously
@@ -148,7 +210,17 @@ func fetchSingleCantor(window *app.Window, state *AppState, config AppConfig, se
 
 	url := fmt.Sprintf("%s?cantor_id=%d&currency=%s", config.APIRatesURL, cID, currency)
 	client := http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(url)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		state.Vault.Mu.Lock()
+		state.Vault.Rates[cKey] = &CantorEntry{Error: "err_internal", LoadedAt: time.Now()}
+		state.Vault.Mu.Unlock()
+		return
+	}
+	req.Header.Set("Accept", "application/x-protobuf")
+
+	resp, err := client.Do(req)
 
 	entry := handleCantorResponse(resp, err)
 
@@ -168,6 +240,25 @@ func handleCantorResponse(resp *http.Response, err error) *CantorEntry {
 
 	if resp.StatusCode != http.StatusOK {
 		return &CantorEntry{Error: "err_api_response", LoadedAt: time.Now()}
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(contentType, "application/x-protobuf") {
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return &CantorEntry{Error: "err_api_parsing", LoadedAt: time.Now()}
+		}
+		var pbRate pb.RateResponse
+		if err := proto.Unmarshal(bodyBytes, &pbRate); err != nil {
+			return &CantorEntry{Error: "err_api_parsing", LoadedAt: time.Now()}
+		}
+		return &CantorEntry{
+			Rate: ExchangeRates{
+				BuyRate:  pbRate.BuyRate,
+				SellRate: pbRate.SellRate,
+			},
+			LoadedAt: time.Now(),
+		}
 	}
 
 	var rates ExchangeRates
@@ -366,11 +457,47 @@ func layoutCantorItem(
 	buyColor.A = alpha
 	sellColor.A = alpha
 
+	if cantor.Button.Hovered() {
+		address := cantor.Address
+		if address == "" {
+			switch strings.ToLower(cantorKey) {
+			case "supersam":
+				address = "Adama Asnyka 12, 35-001 Rzeszów"
+			case "tadek":
+				address = "Gen. Okulickiego 1b, 37-450 Stalowa Wola"
+			case "exchange":
+				address = "Grottgera 20, 35-001 Rzeszów"
+			default:
+				address = GetTranslation(state.UI.Language, "location_unknown")
+			}
+		}
+
+		distance := ""
+		if state.UI.UserLocation.Active {
+			dist := CalculateDistance(
+				state.UI.UserLocation.Latitude,
+				state.UI.UserLocation.Longitude,
+				cantor.Latitude,
+				cantor.Longitude,
+			)
+			distance = fmt.Sprintf("%.1f km", dist)
+		}
+
+		state.UI.HoverInfo = HoverInfo{
+			Active:   true,
+			Title:    displayName,
+			Subtitle: address,
+			Extra:    distance,
+		}
+		window.Invalidate()
+	}
+
 	return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return cantor.Button.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			bgColor := color.NRGBA{R: 30, G: 30, B: 35, A: 150}
+
 			if cantor.Button.Hovered() {
-				bgColor = color.NRGBA{R: 40, G: 40, B: 45, A: 200}
+				bgColor = color.NRGBA{R: 45, G: 45, B: 55, A: 200}
 			}
 
 			return layout.Stack{}.Layout(gtx,
@@ -490,6 +617,18 @@ func layoutLanguageButton(gtx layout.Context, window *app.Window, theme *materia
 		state.UI.ModalOpen = "language"
 		window.Invalidate()
 	}
+
+	// Notch Logic for Language Button
+	if state.UI.LangModalButton.Hovered() {
+		state.UI.HoverInfo = HoverInfo{
+			Active:   true,
+			Title:    GetTranslation(state.UI.Language, "notch_lang_title"),
+			Subtitle: GetTranslation(state.UI.Language, "notch_lang_desc"),
+			Extra:    state.UI.Language,
+		}
+		window.Invalidate()
+	}
+
 	btn := material.Button(theme, &state.UI.LangModalButton, state.UI.Language)
 	btn.Color = AppColors.Accent1
 	btn.Background = color.NRGBA{R: 255, G: 255, B: 255, A: 10}
@@ -546,30 +685,79 @@ func LayoutSearchBar(gtx layout.Context, window *app.Window, theme *material.The
 func layoutLocateButton(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
 	if state.UI.LocateButton.Clicked(gtx) {
 		if !state.UI.UserLocation.Active {
-			// Mock location
-			state.UI.UserLocation.Latitude = 50.0413
-			state.UI.UserLocation.Longitude = 21.9990
+			// Default coordinates
+			state.UI.UserLocation.Latitude = 50.5744
+			state.UI.UserLocation.Longitude = 22.0528
 			state.UI.UserLocation.Active = true
-			state.UI.MaxDistance = 30.0
+
+			// Asynchronously fetch real location (Native macOS or IP fallback)
+			go func() {
+				lat, lon, err := FetchUserLocation()
+				if err == nil && lat != 0 && lon != 0 {
+					state.UI.UserLocation.Latitude = lat
+					state.UI.UserLocation.Longitude = lon
+					window.Invalidate()
+				}
+			}()
+			if state.UI.MaxDistance == 0 {
+				state.UI.MaxDistance = 30.0
+			}
+			state.UI.DistanceSlider.Value = float32(state.UI.MaxDistance / 100.0)
 		} else {
 			state.UI.UserLocation.Active = false
 		}
 		window.Invalidate()
 	}
+
+	if state.UI.LocateButton.Hovered() {
+		state.UI.HoverInfo = HoverInfo{
+			Active:   true,
+			Title:    GetTranslation(state.UI.Language, "notch_loc_title"),
+			Subtitle: GetTranslation(state.UI.Language, "notch_loc_desc"),
+			Extra:    "GPS",
+		}
+		window.Invalidate()
+	}
+
 	btnText := GetTranslation(state.UI.Language, "locate_button")
 	btn := material.Button(theme, &state.UI.LocateButton, btnText)
 
-	// Match Language Button Style (Default/Inactive)
 	btn.Background = color.NRGBA{R: 255, G: 255, B: 255, A: 10}
 	btn.Color = AppColors.Accent1
 	btn.CornerRadius = unit.Dp(8)
 	btn.Inset = layout.UniformInset(unit.Dp(10))
-	btn.TextSize = unit.Sp(14) // Match language button text size
+	btn.TextSize = unit.Sp(14)
 
-	// Active State
 	if state.UI.UserLocation.Active {
 		btn.Background = AppColors.Accent1
-		btn.Color = color.NRGBA{R: 20, G: 20, B: 20, A: 255} // Dark text
+		btn.Color = color.NRGBA{R: 20, G: 20, B: 20, A: 255}
+
+		newVal := float64(state.UI.DistanceSlider.Value) * 100.0
+		if newVal != state.UI.MaxDistance {
+			state.UI.MaxDistance = newVal
+			window.Invalidate()
+		}
+
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return btn.Layout(gtx)
+			}),
+			layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min.X = gtx.Dp(unit.Dp(100))
+				gtx.Constraints.Max.X = gtx.Dp(unit.Dp(150))
+
+				slider := material.Slider(theme, &state.UI.DistanceSlider)
+				slider.Color = AppColors.Accent1
+				return slider.Layout(gtx)
+			}),
+			layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				label := material.Body2(theme, fmt.Sprintf("%.0f km", state.UI.MaxDistance))
+				label.Color = AppColors.Text
+				return label.Layout(gtx)
+			}),
+		)
 	}
 
 	return btn.Layout(gtx)
@@ -792,54 +980,6 @@ func layoutModalGridRow(gtx layout.Context, theme *material.Theme, row, cols int
 	)
 }
 
-//// ShowToast displays a notification with a message and type that expires after 2 seconds, then triggers a UI update.
-//func ShowToast(state *AppState, window *app.Window, message string, notifType string) {
-//	state.Notifications = &Notification{
-//		Message: message,
-//		Type:    notifType,
-//		Timeout: time.Now().Add(2 * time.Second),
-//	}
-//	go func() {
-//		time.Sleep(2100 * time.Millisecond)
-//		window.Invalidate()
-//	}()
-//}
-//
-//// LayoutNotification renders a notification banner if present, or clears it if expired, and adjusts its appearance based on type.
-//func LayoutNotification(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
-//	if state.Notifications == nil {
-//		return layout.Dimensions{}
-//	}
-//	if time.Now().After(state.Notifications.Timeout) {
-//		state.Notifications = nil
-//		return layout.Dimensions{}
-//	}
-//	notif := state.Notifications
-//
-//	bgColor := color.NRGBA{R: 50, G: 50, B: 50, A: 240}
-//
-//	if notif.Type == "error" {
-//		bgColor = color.NRGBA{R: 200, G: 40, B: 40, A: 220}
-//	} else if notif.Type == "success" {
-//		bgColor = color.NRGBA{R: 40, G: 180, B: 40, A: 220}
-//	}
-//
-//	return layout.NE.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-//		return layout.Inset{Top: unit.Dp(20), Right: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-//			macro := op.Record(gtx.Ops)
-//			dims := layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-//				msg := material.Body1(theme, notif.Message)
-//				msg.Color = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
-//				return msg.Layout(gtx)
-//			})
-//			call := macro.Stop()
-//			paint.FillShape(gtx.Ops, bgColor, clip.UniformRRect(image.Rectangle{Max: dims.Size}, gtx.Dp(8)).Op(gtx.Ops))
-//			call.Add(gtx.Ops)
-//			return dims
-//		})
-//	})
-//} - disabled for now
-
 // DrawProgressBar draws a loading progress bar based on elapsed time relative to a fixed total duration.
 func DrawProgressBar(gtx layout.Context, window *app.Window, state *AppState) layout.Dimensions {
 	elapsed := time.Since(state.IsLoadingStart).Seconds()
@@ -880,4 +1020,89 @@ func layoutLoadingBar(gtx layout.Context, window *app.Window, state *AppState) l
 func LoadFontCollection() ([]font.FontFace, error) {
 	face, _ := reading_data.LoadAndParseFont("fonts/NotoSans-Regular.ttf")
 	return []font.FontFace{face}, nil
+}
+
+// layoutNotch renders a dynamic, aesthetic notification bubble at the top of the screen (Notch-like).
+func layoutNotch(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+	alphaVal := state.UI.NotchState.CurrentAlpha
+	if alphaVal <= 0.01 {
+		return layout.Dimensions{}
+	}
+
+	info := state.UI.NotchState.LastContent
+
+	gtx.Constraints.Min.X = gtx.Constraints.Max.X
+
+	scaleAlpha := func(c color.NRGBA, a float32) color.NRGBA {
+		c.A = uint8(float32(c.A) * a)
+		return c
+	}
+
+	return layout.N.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				macro := op.Record(gtx.Ops)
+				dims := layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.X = gtx.Dp(unit.Dp(200))
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							if info.Extra != "" {
+								return layout.Inset{Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+									m := op.Record(gtx.Ops)
+									lbl := material.Caption(theme, info.Extra)
+									lbl.Color = scaleAlpha(color.NRGBA{R: 20, G: 20, B: 20, A: 255}, alphaVal)
+									lbl.Font.Weight = font.Bold
+									d := layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, lbl.Layout)
+									c := m.Stop()
+
+									rr := gtx.Dp(10)
+									bg := scaleAlpha(AppColors.Accent1, alphaVal)
+									paint.FillShape(gtx.Ops, bg, clip.UniformRRect(image.Rectangle{Max: d.Size}, rr).Op(gtx.Ops))
+
+									c.Add(gtx.Ops)
+									return d
+								})
+							}
+							return layout.Dimensions{}
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									lbl := material.Body2(theme, info.Title)
+									lbl.Color = scaleAlpha(color.NRGBA{R: 255, G: 255, B: 255, A: 255}, alphaVal)
+									lbl.Font.Weight = font.Bold
+									return lbl.Layout(gtx)
+								}),
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									lbl := material.Caption(theme, info.Subtitle)
+									lbl.Color = scaleAlpha(color.NRGBA{R: 160, G: 160, B: 170, A: 255}, alphaVal)
+									return lbl.Layout(gtx)
+								}),
+							)
+						}),
+					)
+				})
+				call := macro.Stop()
+
+				rr := gtx.Dp(24)
+				rect := image.Rectangle{Max: dims.Size}
+				bgColor := scaleAlpha(color.NRGBA{R: 20, G: 20, B: 20, A: 245}, alphaVal)
+				borderColor := scaleAlpha(color.NRGBA{R: 255, G: 255, B: 255, A: 40}, alphaVal)
+
+				paint.FillShape(gtx.Ops, bgColor, clip.UniformRRect(rect, rr).Op(gtx.Ops))
+
+				widget.Border{
+					Color:        borderColor,
+					Width:        unit.Dp(1),
+					CornerRadius: unit.Dp(24),
+				}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Dimensions{Size: dims.Size}
+				})
+
+				call.Add(gtx.Ops)
+
+				return dims
+			})
+		})
+	})
 }

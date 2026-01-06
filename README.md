@@ -52,7 +52,7 @@ graph LR
 | **⑥** | **HTML Response** | External cantor returns exchange rate data |
 | **⑦** | **Cache Update** | Store fresh data in Redis (60s expiry) |
 | **⑧** | **Archive** | Async save to TimescaleDB for historical analysis |
-| **⑨** | **JSON Response** | API → Frontend: Return formatted exchange rates |
+| **⑨** | **Response** | API → Frontend: Return JSON or Protobuf |
 
 </div>
 
