@@ -17,13 +17,11 @@
   "err_api_response":"Server returned error.",
   "err_api_parsing": "Failed to parse server response.",
   "err_unknown": "Unknown error occurred.",
-
   "market_title": "Currency Market",
   "market_subtitle": "Real-time Exchange Monitor",
   "search_placeholder": "Search cantor...",
   "no_cantor_found": "No cantor found...",
   "locate_button": "Locate",
-
   "buy_col": "Buy",
   "sell_col": "Sell",
   "ai_title": "Analysis",
@@ -33,5 +31,10 @@
   "error_label": "Error",
   "select_lang_title": "Select Language",
   "no_rate_label": "No rate",
-  "sidebar_currency_label": "Currencies"
+  "sidebar_currency_label": "Currencies",
+  "location_unknown": "Location unknown",
+  "notch_lang_title": "Language",
+  "notch_lang_desc": "Change app language",
+  "notch_loc_title": "Location Filter",
+  "notch_loc_desc": "Filter cantors by distance"
 }
