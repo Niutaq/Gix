@@ -8,7 +8,7 @@
   "errorPrefix": "Error",
   "cantor_c1": "Kantor Tadek (Stalowa Wola / Rzeszow)",
   "cantor_c2": "Kantor Exchange (Rzeszow)",
-  "cantor_c3": "Kantor SuperSam (Rzeszow)",
+  "cantor_c3": "Cantor SuperSam (Rzeszow)",
   "err_creating_request": "Error creating request",
   "err_fetching_data": "Error fetching data",
   "err_parsing_response": "Error parsing response",
@@ -36,5 +36,7 @@
   "notch_lang_title": "Language",
   "notch_lang_desc": "Change app language",
   "notch_loc_title": "Location Filter",
-  "notch_loc_desc": "Filter cantors by distance"
+  "notch_loc_desc": "Filter cantors by distance",
+  "chart_7d_ago": "-7 Days",
+  "chart_today": "Today"
 }

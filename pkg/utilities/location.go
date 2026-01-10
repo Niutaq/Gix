@@ -8,8 +8,6 @@ import (
 	"math"
 	"net/http"
 	"os"
-	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -42,15 +40,22 @@ type GeoLocationResponse struct {
 // On macOS, it tries to use CoreLocation via a temporary Swift script.
 // Otherwise, it falls back to an IP-based location.
 func FetchUserLocation() (float64, float64, error) {
-	if runtime.GOOS == "darwin" {
-		lat, lon, err := fetchMacOSLocation()
-		if err == nil {
-			return lat, lon, nil
+	if envCoords := os.Getenv("GIX_DEV_COORDS"); envCoords != "" {
+		parts := strings.Split(envCoords, ",")
+		if len(parts) == 2 {
+			lat, err1 := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+			lon, err2 := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+			if err1 == nil && err2 == nil {
+				return lat, lon, nil
+			}
 		}
-		// If native fetch fails, do NOT fallback to IP as it may be inaccurate (e.g. Kalisz vs Stalowa Wola).
-		// Return the error so the UI keeps the default coordinates.
-		return 0, 0, err
 	}
+
+	lat, lon, err := fetchNativeLocation()
+	if err == nil {
+		return lat, lon, nil
+	}
+	fmt.Printf("Native Location Error: %v\n", err)
 
 	return fetchIPLocation()
 }
@@ -78,85 +83,4 @@ func fetchIPLocation() (float64, float64, error) {
 	}
 
 	return loc.Lat, loc.Lon, nil
-}
-
-// fetchMacOSLocation executes a Swift script to get the location from CoreLocation.
-func fetchMacOSLocation() (float64, float64, error) {
-	const swiftScript = `
-import CoreLocation
-import Foundation
-
-class LocationDelegate: NSObject, CLLocationManagerDelegate {
-    let manager = CLLocationManager()
-    
-    override init() {
-        super.init()
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
-    }
-    
-    func start() {
-        manager.requestWhenInUseAuthorization()
-        manager.startUpdatingLocation()
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        if let location = locations.first {
-            print("\(location.coordinate.latitude),\(location.coordinate.longitude)")
-            exit(0)
-        }
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        exit(1)
-    }
-}
-
-let delegate = LocationDelegate()
-delegate.start()
-RunLoop.main.run(until: Date(timeIntervalSinceNow: 5))
-exit(1)
-`
-	// Create a temp file
-	tmpFile, err := os.CreateTemp("", "gix_loc_*.swift")
-	if err != nil {
-		return 0, 0, err
-	}
-	defer func(name string) {
-		err := os.Remove(name)
-		if err != nil {
-			fmt.Printf("Error removing temp file: %v\n", err)
-		}
-	}(tmpFile.Name())
-
-	if _, err := tmpFile.WriteString(swiftScript); err != nil {
-		return 0, 0, err
-	}
-	if err := tmpFile.Close(); err != nil {
-		return 0, 0, err
-	}
-
-	// Run swift
-	cmd := exec.Command("swift", tmpFile.Name())
-	out, err := cmd.Output()
-	if err != nil {
-		return 0, 0, err
-	}
-
-	// Parse output "lat,lon"
-	parts := strings.Split(strings.TrimSpace(string(out)), ",")
-	if len(parts) != 2 {
-		return 0, 0, fmt.Errorf("invalid output format")
-	}
-
-	lat, err := strconv.ParseFloat(parts[0], 64)
-	if err != nil {
-		return 0, 0, err
-	}
-	lon, err := strconv.ParseFloat(parts[1], 64)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	return lat, lon, nil
 }
