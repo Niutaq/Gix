@@ -107,6 +107,6 @@ go install github.com/go-task/task/v3/cmd/task@latest
 ## Demo
 
 <div align="center">
-  <video src="https://github.com/user-attachments/assets/6abe7f18-7c9c-4e21-8a63-d4c2d8e1870c" width="100%" controls autoplay loop muted></video>
+  <video src="https://github.com/user-attachments/assets/5951e506-e98c-434e-ba29-f09a70355072" width="100%" controls autoplay loop muted></video>
 </div>
 
