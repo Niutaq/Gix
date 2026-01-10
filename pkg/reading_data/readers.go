@@ -1,11 +1,9 @@
 package reading_data
 
 import (
-	// Standard libraries
 	"embed"
 	"fmt"
 
-	// Gio utilities
 	"gioui.org/font"
 	"gioui.org/font/opentype"
 )

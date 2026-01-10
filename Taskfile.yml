@@ -109,6 +109,8 @@ tasks:
             <string>10.13.0</string>
             <key>NSHighResolutionCapable</key>
             <true/>
+            <key>NSLocationWhenInUseUsageDescription</key>
+            <string>Gix needs your location to find the nearest currency exchange offices.</string>
         </dict>
         </plist>
         EOF

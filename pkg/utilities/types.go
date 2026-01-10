@@ -8,6 +8,9 @@ import (
 
 	// Gio utilities
 	"gioui.org/widget"
+
+	// External utilities
+	pb "github.com/Niutaq/Gix/api/proto/v1"
 )
 
 // CantorInfo holds information about a cantor.
@@ -62,6 +65,10 @@ type UIState struct {
 	SearchEditor widget.Editor
 	SearchText   string
 
+	ChartMode        string             // "BUY" or "SELL"
+	ChartModeButtons []widget.Clickable // [0] -> Buy, [1] -> Sell
+	ChartHoverTag    int                // Unique tag for chart input events
+
 	UserLocation struct {
 		Latitude  float64
 		Longitude float64
@@ -103,6 +110,8 @@ type Notification struct {
 type AppState struct {
 	Vault          *CantorVault
 	Cantors        map[string]*CantorInfo
+	History        *pb.HistoryResponse
+	ChartAnimStart time.Time // Tracks when the chart data was last updated for animation
 	LastFrameTime  time.Time
 	IsLoadingStart time.Time
 	IsLoading      atomic.Bool
@@ -114,6 +123,7 @@ type AppState struct {
 type AppConfig struct {
 	APICantorsURL string
 	APIRatesURL   string
+	APIHistoryURL string
 }
 
 // ApiCantorResponse for parsing JSON
