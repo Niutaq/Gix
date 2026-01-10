@@ -5,6 +5,7 @@ package utilities
 import (
 	// Standard libraries
 	"errors"
+	"fmt"
 	"os/exec"
 )
 
