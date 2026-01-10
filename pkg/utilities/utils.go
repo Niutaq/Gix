@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -24,15 +25,15 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
-	// Gix utilities
-	"github.com/Niutaq/Gix/pkg/reading_data"
+	// External utilities
 	pb "github.com/Niutaq/Gix/api/proto/v1"
+	"github.com/Niutaq/Gix/pkg/reading_data"
 	"google.golang.org/protobuf/proto"
 )
 
-// Global variables
 var (
-	modalCloseBtn widget.Clickable
+	modalCloseBtn  widget.Clickable
+	xProtoBufConst = "application/x-protobuf"
 )
 
 // LayoutUI - Main application layout
@@ -47,64 +48,264 @@ func LayoutUI(gtx layout.Context, window *app.Window, theme *material.Theme, sta
 	}
 
 	drawPatternBackground(gtx)
-
 	paint.Fill(gtx.Ops, color.NRGBA{R: 30, G: 30, B: 35, A: 50})
 
 	layout.Stack{Alignment: layout.NW}.Layout(gtx,
-		// LAYER 1: Application Content
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-				// LEFT: Currency bar
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return LayoutVerticalCurrencyBar(gtx, window, theme, state, config)
-				}),
-				// CENTER: Dashboard
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{
-						Left:  unit.Dp(24),
-						Right: unit.Dp(24),
-						Top:   unit.Dp(16),
-					}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								return layoutHeader(gtx, window, theme, state)
-							}),
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								return LayoutSearchBar(gtx, window, theme, state)
-							}),
-							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-								return layoutCantorSelection(gtx, window, theme, state)
-							}),
-						)
-					})
-				}),
-				// RIGHT: Analysis Panel
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return LayoutRightPanel(gtx, theme, state)
-				}),
-			)
+			return layoutContent(gtx, window, theme, state, config)
 		}),
-
-		// LAYER 2: Loading Bar
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return layout.S.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return layoutLoadingBar(gtx, window, state)
-			})
+			return layoutLoadingBar(gtx, window, state)
 		}),
-
-		// LAYER 3: Modal
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			if state.UI.ModalOpen != "" {
-				return layoutModal(gtx, window, theme, state)
-			}
-			return layout.Dimensions{}
+			return layoutModal(gtx, window, theme, state)
 		}),
-
-		// LAYER 4: Dynamic Notch (Aesthetic Info)
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			return layoutNotch(gtx, theme, state)
 		}),
 	)
+}
+
+func layoutContent(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig) layout.Dimensions {
+	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return LayoutVerticalCurrencyBar(gtx, window, theme, state, config)
+		}),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return layoutCenterPanel(gtx, window, theme, state, config)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return LayoutRightPanel(gtx, window, theme, state)
+		}),
+	)
+}
+
+// layoutCenterPanel lays out the main content panel, including the header, search bar, and cantor selection area.
+func layoutCenterPanel(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig) layout.Dimensions {
+	return layout.Inset{
+		Left:  unit.Dp(24),
+		Right: unit.Dp(24),
+		Top:   unit.Dp(16),
+	}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layoutHeader(gtx, window, theme, state)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return LayoutSearchBar(gtx, window, theme, state)
+			}),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return layoutCantorSelection(gtx, window, theme, state, config)
+			}),
+		)
+	})
+}
+
+// LayoutRightPanel lays out the right-side panel of the application.
+func LayoutRightPanel(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+	panelWidth := gtx.Dp(unit.Dp(320))
+	gtx.Constraints.Min.X = panelWidth
+	gtx.Constraints.Max.X = panelWidth
+	gtx.Constraints.Min.Y = gtx.Constraints.Max.Y
+	paint.FillShape(gtx.Ops, color.NRGBA{R: 18, G: 18, B: 22, A: 255}, clip.Rect{Max: gtx.Constraints.Max}.Op())
+
+	return layout.Inset{Top: unit.Dp(20), Left: unit.Dp(20), Right: unit.Dp(20)}.Layout(
+		gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					h := material.H6(theme, GetTranslation(state.UI.Language, "ai_title"))
+					h.Color = AppColors.Accent1
+					h.Font.Weight = font.Bold
+					return h.Layout(gtx)
+				}),
+				layout.Rigid(layout.Spacer{Height: unit.Dp(5)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					txt := material.Caption(theme, GetTranslation(state.UI.Language, "ai_subtitle"))
+					txt.Color = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
+					return txt.Layout(gtx)
+				}),
+				layout.Rigid(layout.Spacer{Height: unit.Dp(15)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layoutChartToggle(gtx, theme, state)
+				}),
+				layout.Rigid(layout.Spacer{Height: unit.Dp(15)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layoutChartSection(gtx, window, theme, state)
+				}),
+				layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					txt := material.Body2(theme, GetTranslation(state.UI.Language, "ai_desc"))
+					txt.Color = color.NRGBA{R: 80, G: 80, B: 90, A: 255}
+					return txt.Layout(gtx)
+				}),
+			)
+		})
+}
+
+// layoutChartSection lays out a chart section with a background and chart data using the provided theme and application state.
+func layoutChartSection(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+	height := gtx.Dp(unit.Dp(200))
+	return layout.Stack{}.Layout(gtx,
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			shape := clip.UniformRRect(image.Rectangle{Max: image.Point{X: gtx.Constraints.Max.X, Y: height}}, 5)
+			paint.FillShape(gtx.Ops, color.NRGBA{R: 25, G: 25, B: 30, A: 255}, shape.Op(gtx.Ops))
+			return layout.Dimensions{Size: image.Point{X: gtx.Constraints.Max.X, Y: height}}
+		}),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			data, startLabel := prepareChartData(state)
+			chart := LineChart{Data: data, StartLabel: startLabel}
+
+			chartAlpha := getChartAlpha(window, state)
+
+			return layout.Inset{
+				Top:    unit.Dp(10),
+				Bottom: unit.Dp(10),
+				Left:   unit.Dp(10),
+				Right:  unit.Dp(10),
+			}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min.Y = height - gtx.Dp(unit.Dp(20))
+				gtx.Constraints.Max.Y = height - gtx.Dp(unit.Dp(20))
+				return chart.Layout(gtx, theme, chartAlpha)
+			})
+		}),
+	)
+}
+
+// prepareChartData processes historical or generated data points for chart rendering, returning the data and a start label.
+func prepareChartData(state *AppState) ([]float64, string) {
+	if state.History != nil && len(state.History.Points) > 1 {
+		return extractHistoryData(state.History, state.UI.ChartMode)
+	}
+
+	basePrice := getBasePrice(state)
+	if basePrice > 0 {
+		return generateMockChartData(state, basePrice)
+	}
+	return nil, ""
+}
+
+func extractHistoryData(history *pb.HistoryResponse, mode string) ([]float64, string) {
+	var data []float64
+	for _, p := range history.Points {
+		if mode == "SELL" {
+			data = append(data, p.SellRate)
+		} else {
+			data = append(data, p.BuyRate)
+		}
+	}
+	startTime := time.Unix(history.Points[0].Time, 0)
+	return data, startTime.Format("02 Jan")
+}
+
+func getBasePrice(state *AppState) float64 {
+	state.Vault.Mu.Lock()
+	defer state.Vault.Mu.Unlock()
+
+	if state.UI.SelectedCantor != "" {
+		if entry, ok := state.Vault.Rates[state.UI.SelectedCantor]; ok {
+			return getRateFromEntry(entry, state.UI.ChartMode)
+		}
+	} else {
+		for _, entry := range state.Vault.Rates {
+			val := getRateFromEntry(entry, state.UI.ChartMode)
+			if val > 0 {
+				return val
+			}
+		}
+	}
+	return 0
+}
+
+func generateMockChartData(state *AppState, basePrice float64) ([]float64, string) {
+	seedStr := state.UI.Currency + state.UI.SelectedCantor + state.UI.ChartMode
+	var seed int64
+	for _, char := range seedStr {
+		seed += int64(char)
+	}
+	return GenerateFakeData(100, basePrice, seed), GetTranslation(state.UI.Language, "chart_7d_ago")
+}
+
+// getRateFromEntry extracts and parses the buy or sell rate from a CantorEntry based on the specified mode ("BUY" or "SELL").
+func getRateFromEntry(entry *CantorEntry, mode string) float64 {
+	if entry == nil {
+		return 0
+	}
+	raw := entry.Rate.BuyRate
+	if mode == "SELL" {
+		raw = entry.Rate.SellRate
+	}
+	clean := strings.ReplaceAll(raw, ",", ".")
+	val, err := strconv.ParseFloat(clean, 64)
+	if err == nil {
+		return val
+	}
+	return 0
+}
+
+func getChartAlpha(window *app.Window, state *AppState) uint8 {
+	if !state.ChartAnimStart.IsZero() {
+		elapsed := time.Since(state.ChartAnimStart)
+		const duration = 600 * time.Millisecond
+		if elapsed < duration {
+			progress := float32(elapsed) / float32(duration)
+			progress = 1.0 - (1.0-progress)*(1.0-progress)
+			window.Invalidate()
+			return uint8(255 * progress)
+		}
+	}
+	return 255
+}
+
+// layoutChartToggle renders the buy/sell toggle buttons.
+func layoutChartToggle(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
+	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layoutToggleButton(gtx, theme, &state.UI.ChartModeButtons[0],
+				GetTranslation(state.UI.Language, "buy_col"),
+				state.UI.ChartMode == "BUY",
+				func() {
+					if state.UI.ChartMode != "BUY" {
+						state.UI.ChartMode = "BUY"
+						state.ChartAnimStart = time.Now()
+					}
+				})
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layoutToggleButton(gtx, theme, &state.UI.ChartModeButtons[1],
+				GetTranslation(state.UI.Language, "sell_col"),
+				state.UI.ChartMode == "SELL",
+				func() {
+					if state.UI.ChartMode != "SELL" {
+						state.UI.ChartMode = "SELL"
+						state.ChartAnimStart = time.Now()
+					}
+				})
+		}),
+	)
+}
+
+// layoutToggleButton creates a toggleable button with specified text and styling based on its active state.
+func layoutToggleButton(gtx layout.Context, theme *material.Theme, btn *widget.Clickable, text string, active bool, onClick func()) layout.Dimensions {
+	if btn.Clicked(gtx) {
+		log.Println("Toggle clicked:", text)
+		onClick()
+	}
+
+	b := material.Button(theme, btn, text)
+	b.TextSize = unit.Sp(10)
+	b.Inset = layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(12), Right: unit.Dp(12)}
+	b.CornerRadius = unit.Dp(4)
+
+	if active {
+		b.Background = AppColors.Accent1
+		b.Color = color.NRGBA{R: 20, G: 20, B: 20, A: 255}
+	} else {
+		b.Background = color.NRGBA{R: 30, G: 30, B: 35, A: 255}
+		b.Color = color.NRGBA{R: 150, G: 150, B: 160, A: 255}
+	}
+
+	return b.Layout(gtx)
 }
 
 // updateNotchAnimation handles the fade-in/out logic for the dynamic notch.
@@ -145,7 +346,7 @@ func updateNotchAnimation(window *app.Window, state *AppState) {
 	state.UI.HoverInfo = HoverInfo{Active: false}
 }
 
-// moveTowards moves current value towards target by at most maxDelta.
+// moveTowards linearly interpolates from the current value toward the target by a maximum change of maxDelta.
 func moveTowards(current, target, maxDelta float32) float32 {
 	if diff := target - current; diff < 0 {
 		diff = -diff
@@ -153,21 +354,20 @@ func moveTowards(current, target, maxDelta float32) float32 {
 			return target
 		}
 		return current - maxDelta
-	} else {
-		if diff <= maxDelta {
-			return target
-		}
-		return current + maxDelta
 	}
+	if diff := target - current; diff <= maxDelta {
+		return target
+	}
+	return current + maxDelta
 }
 
-// drawPatternBackground draws a procedural geometric background.
+// drawPatternBackground fills the background with a dark color for the application UI using the provided layout context.
 func drawPatternBackground(gtx layout.Context) {
 	paint.Fill(gtx.Ops, color.NRGBA{R: 15, G: 15, B: 25, A: 255})
 }
 
-// fetchAllRates retrieves exchange rates for all cantors asynchronously
-func fetchAllRates(window *app.Window, state *AppState, config AppConfig) {
+// FetchAllRates initiates the concurrent fetching of exchange rates.
+func FetchAllRates(window *app.Window, state *AppState, config AppConfig) {
 	if config.APIRatesURL == "" {
 		return
 	}
@@ -182,9 +382,85 @@ func fetchAllRates(window *app.Window, state *AppState, config AppConfig) {
 	sem := make(chan struct{}, 8)
 
 	go runFetchLoop(window, state, config, sem)
+	fetchHistory(window, state, config)
 }
 
-// runFetchLoop concurrently fetches exchange rates for all cantors and updates the application state accordingly.
+// fetchHistory retrieves historical currency data from the API and updates the application's state with the response.
+func fetchHistory(window *app.Window, state *AppState, config AppConfig) {
+	if config.APIHistoryURL == "" {
+		return
+	}
+
+	currency := state.UI.Currency
+	cantorID := getSelectedCantorID(state)
+
+	go performHistoryFetch(window, state, config, currency, cantorID)
+}
+
+func getSelectedCantorID(state *AppState) int {
+	if state.UI.SelectedCantor != "" {
+		if c, ok := state.Cantors[state.UI.SelectedCantor]; ok {
+			return c.ID
+		}
+	}
+	return 0
+}
+
+func performHistoryFetch(window *app.Window, state *AppState, config AppConfig, curr string, cID int) {
+	url := buildHistoryURL(config.APIHistoryURL, curr, cID)
+
+	client := http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Printf("Error creating history request: %v", err)
+		return
+	}
+	req.Header.Set("Accept", xProtoBufConst)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error fetching history: %v", err)
+		return
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Printf("Error closing history response body: %v", err)
+		}
+	}(resp.Body)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error reading history body: %v", err)
+		return
+	}
+
+	var history pb.HistoryResponse
+	if err := proto.Unmarshal(body, &history); err != nil {
+		log.Printf("Error unmarshalling history: %v", err)
+		return
+	}
+
+	if len(history.Points) > 0 {
+		log.Printf("Received %d history points for %s (CantorID: %d)", len(history.Points), history.Currency, cID)
+	} else {
+		log.Printf("Received empty history for %s (CantorID: %d)", history.Currency, cID)
+	}
+
+	state.History = &history
+	state.ChartAnimStart = time.Now()
+	window.Invalidate()
+}
+
+func buildHistoryURL(baseURL, curr string, cID int) string {
+	url := fmt.Sprintf("%s?currency=%s&days=7", baseURL, curr)
+	if cID > 0 {
+		url += fmt.Sprintf("&cantor_id=%d", cID)
+	}
+	return url
+}
+
+// runFetchLoop initiates concurrent fetching of cantor data and updates the app state with the fetched results.
 func runFetchLoop(window *app.Window, state *AppState, config AppConfig, sem chan struct{}) {
 	currency := state.UI.Currency
 
@@ -193,7 +469,6 @@ func runFetchLoop(window *app.Window, state *AppState, config AppConfig, sem cha
 		go fetchSingleCantor(window, state, config, sem, cantor.ID, id, currency)
 	}
 
-	// Wait loop
 	for {
 		if len(sem) == 0 {
 			state.IsLoading.Store(false)
@@ -204,7 +479,7 @@ func runFetchLoop(window *app.Window, state *AppState, config AppConfig, sem cha
 	}
 }
 
-// fetchSingleCantor fetches exchange rates from a specific cantor, updates the application state, and invalidates the window.
+// fetchSingleCantor fetches exchange rate data for a single cantor and updates the application state with the result.
 func fetchSingleCantor(window *app.Window, state *AppState, config AppConfig, sem chan struct{}, cID int, cKey, currency string) {
 	defer func() { <-sem }()
 
@@ -221,7 +496,6 @@ func fetchSingleCantor(window *app.Window, state *AppState, config AppConfig, se
 	req.Header.Set("Accept", "application/x-protobuf")
 
 	resp, err := client.Do(req)
-
 	entry := handleCantorResponse(resp, err)
 
 	state.Vault.Mu.Lock()
@@ -231,19 +505,24 @@ func fetchSingleCantor(window *app.Window, state *AppState, config AppConfig, se
 	window.Invalidate()
 }
 
-// handleCantorResponse processes the HTTP response and error to construct a CantorEntry with exchange rates or error details.
+// handleCantorResponse processes an HTTP response from a cantor API and returns a CantorEntry containing the parsed data.
 func handleCantorResponse(resp *http.Response, err error) *CantorEntry {
 	if err != nil {
 		return &CantorEntry{Error: "err_api_connection", LoadedAt: time.Now()}
 	}
-	defer func(Body io.ReadCloser) { _ = Body.Close() }(resp.Body)
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Printf("Error closing response body: %v", err)
+		}
+	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return &CantorEntry{Error: "err_api_response", LoadedAt: time.Now()}
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	if strings.Contains(contentType, "application/x-protobuf") {
+	if strings.Contains(contentType, xProtoBufConst) {
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return &CantorEntry{Error: "err_api_parsing", LoadedAt: time.Now()}
@@ -303,7 +582,8 @@ func LayoutVerticalCurrencyBar(
 
 						if btn.Clicked(gtx) {
 							state.UI.Currency = currency
-							fetchAllRates(window, state, config)
+							state.ChartAnimStart = time.Now()
+							FetchAllRates(window, state, config)
 							window.Invalidate()
 						}
 
@@ -345,7 +625,7 @@ func LayoutVerticalCurrencyBar(
 	)
 }
 
-// parseRate parses a string containing a numeric value, replaces commas with dots, trims spaces, and converts it to float64.
+// parseRate converts a string representing a rate (e.g., "123,45 zł") to a float64, removing commas, "zł", and whitespace.
 func parseRate(s string) float64 {
 	s = strings.ReplaceAll(s, ",", ".")
 	s = strings.ReplaceAll(s, " zł", "")
@@ -357,8 +637,8 @@ func parseRate(s string) float64 {
 	return f
 }
 
-// layoutCantorSelection creates and displays a filtered list of cantors, with Best Buy/sell rate highlights, based on search input.
-func layoutCantorSelection(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+// layoutCantorSelection renders a filtered and sorted list of cantors, handling animations and layout logic for the UI interface.
+func layoutCantorSelection(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig) layout.Dimensions {
 	state.Vault.Mu.Lock()
 	bestBuy, bestSell := calculateBestRates(state.Vault.Rates)
 	filteredIDs := filterCantorList(state, state.UI.SearchText)
@@ -385,13 +665,14 @@ func layoutCantorSelection(gtx layout.Context, window *app.Window, theme *materi
 				rowCfg := CantorRowConfig{
 					CantorID: filteredIDs[i],
 					BestBuy:  bestBuy,
-					BestSell: bestSell}
-				return layoutCantorItem(gtx, window, theme, state, rowCfg)
+					BestSell: bestSell,
+				}
+				return layoutCantorItem(gtx, window, theme, state, config, rowCfg)
 			})
 	})
 }
 
-// calculateBestRates determines the highest buy rate and lowest sell rate from the provided exchange rates map.
+// calculateBestRates identifies the Best Buy and sell rates from the provided map of CantorEntry data.
 func calculateBestRates(rates map[string]*CantorEntry) (float64, float64) {
 	bestBuy := -1.0
 	bestSell := 999999.0
@@ -411,7 +692,7 @@ func calculateBestRates(rates map[string]*CantorEntry) (float64, float64) {
 	return bestBuy, bestSell
 }
 
-// filterCantorList filters and returns a list of cantor IDs from the state based on a case-insensitive search query.
+// filterCantorList filters a list of cantors based on search text and user location preferences in the application state.
 func filterCantorList(state *AppState, searchText string) []string {
 	searchText = strings.ToLower(searchText)
 	var ids []string
@@ -438,10 +719,10 @@ func filterCantorList(state *AppState, searchText string) []string {
 	return ids
 }
 
-// layoutCantorItem lays out a single Cantor item, displaying its name, buy/sell rates, and applying animations and styles.
+// layoutCantorItem renders a single row representing a cantor item within the layout, including animations and interactions.
 func layoutCantorItem(
 	gtx layout.Context, window *app.Window, theme *material.Theme,
-	state *AppState, cfg CantorRowConfig) layout.Dimensions {
+	state *AppState, config AppConfig, cfg CantorRowConfig) layout.Dimensions {
 	cantorKey := cfg.CantorID
 	cantor := state.Cantors[cantorKey]
 	displayName := GetTranslation(state.UI.Language, cantor.DisplayName)
@@ -451,12 +732,27 @@ func layoutCantorItem(
 	state.Vault.Mu.Unlock()
 
 	alpha := getAnimationAlpha(window, entry)
-
 	buyVal, sellVal, buyColor, sellColor := getCantorDisplayData(state, entry, cfg.BestBuy, cfg.BestSell)
-
 	buyColor.A = alpha
 	sellColor.A = alpha
 
+	handleCantorHover(window, state, cantor, cantorKey, displayName)
+	handleCantorClick(gtx, window, state, config, cantorKey, cantor)
+
+	isSelected := state.UI.SelectedCantor == cantorKey
+	return renderCantorItem(gtx, theme, state, CantorItemArgs{
+		Cantor:      cantor,
+		DisplayName: displayName,
+		BuyVal:      buyVal,
+		SellVal:     sellVal,
+		BuyColor:    buyColor,
+		SellColor:   sellColor,
+		IsSelected:  isSelected,
+	})
+}
+
+// handleCantorHover updates the UI hover information based on cantor hover state, user location, and application language.
+func handleCantorHover(window *app.Window, state *AppState, cantor *CantorInfo, cantorKey, displayName string) {
 	if cantor.Button.Hovered() {
 		address := cantor.Address
 		if address == "" {
@@ -491,12 +787,39 @@ func layoutCantorItem(
 		}
 		window.Invalidate()
 	}
+}
 
+// handleCantorClick handles the click event for a cantor item, toggling its selection and initiating chart data updates.
+func handleCantorClick(gtx layout.Context, window *app.Window, state *AppState, config AppConfig, cantorKey string, cantor *CantorInfo) {
+	if cantor.Button.Clicked(gtx) {
+		if state.UI.SelectedCantor == cantorKey {
+			state.UI.SelectedCantor = ""
+		} else {
+			state.UI.SelectedCantor = cantorKey
+		}
+		state.ChartAnimStart = time.Now()
+		fetchHistory(window, state, config)
+	}
+}
+
+type CantorItemArgs struct {
+	Cantor      *CantorInfo
+	DisplayName string
+	BuyVal      string
+	SellVal     string
+	BuyColor    color.NRGBA
+	SellColor   color.NRGBA
+	IsSelected  bool
+}
+
+// renderCantorItem renders a single interactive UI element to represent a cantor, including labels, values, and highlight state.
+func renderCantorItem(gtx layout.Context, theme *material.Theme, state *AppState, args CantorItemArgs) layout.Dimensions {
 	return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return cantor.Button.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return args.Cantor.Button.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			bgColor := color.NRGBA{R: 30, G: 30, B: 35, A: 150}
-
-			if cantor.Button.Hovered() {
+			if args.IsSelected {
+				bgColor = color.NRGBA{R: 50, G: 50, B: 70, A: 255}
+			} else if args.Cantor.Button.Hovered() {
 				bgColor = color.NRGBA{R: 45, G: 45, B: 55, A: 200}
 			}
 
@@ -510,7 +833,7 @@ func layoutCantorItem(
 					return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
 							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-								lbl := material.Body1(theme, displayName)
+								lbl := material.Body1(theme, args.DisplayName)
 								lbl.Color = AppColors.Text
 								return lbl.Layout(gtx)
 							}),
@@ -518,12 +841,12 @@ func layoutCantorItem(
 								return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										label := GetTranslation(state.UI.Language, "buy_col")
-										return layoutMarketValue(gtx, theme, label, buyVal, buyColor)
+										return layoutMarketValue(gtx, theme, label, args.BuyVal, args.BuyColor)
 									}),
 									layout.Rigid(layout.Spacer{Width: unit.Dp(30)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										label := GetTranslation(state.UI.Language, "sell_col")
-										return layoutMarketValue(gtx, theme, label, sellVal, sellColor)
+										return layoutMarketValue(gtx, theme, label, args.SellVal, args.SellColor)
 									}),
 								)
 							}),
@@ -535,7 +858,7 @@ func layoutCantorItem(
 	})
 }
 
-// getAnimationAlpha calculates the alpha transparency for a smooth fade-in animation based on the entry's load time.
+// getAnimationAlpha calculates an alpha value for animations, based on the entry's load time, with an ease-out effect.
 func getAnimationAlpha(window *app.Window, entry *CantorEntry) uint8 {
 	if entry == nil || entry.LoadedAt.IsZero() {
 		return 255
@@ -552,7 +875,7 @@ func getAnimationAlpha(window *app.Window, entry *CantorEntry) uint8 {
 	return 255
 }
 
-// getCantorDisplayData generates formatted buy/sell rates and corresponding colors based on the current state and thresholds.
+// getCantorDisplayData generates display values for buy and sell rates along with their respective colors based on conditions.
 func getCantorDisplayData(
 	state *AppState, entry *CantorEntry, bestBuy, bestSell float64) (string, string, color.NRGBA, color.NRGBA) {
 	defColor := color.NRGBA{R: 150, G: 150, B: 160, A: 255}
@@ -583,9 +906,29 @@ func getCantorDisplayData(
 	return buyVal, sellVal, buyColor, sellColor
 }
 
-// layoutHeader renders a header layout with a title, subtitle, and a language selection button, styled using the provided theme.
-func layoutHeader(
-	gtx layout.Context, window *app.Window,
+// layoutMarketValue lays out a market value displaying a label and its corresponding value with customizable text color.
+func layoutMarketValue(
+	gtx layout.Context, theme *material.Theme,
+	label, value string, txtColor color.NRGBA) layout.Dimensions {
+	return layout.Flex{Axis: layout.Vertical, Alignment: layout.End}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Caption(theme, label)
+			l.Color = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
+			l.TextSize = unit.Sp(12)
+			return l.Layout(gtx)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			v := material.Body2(theme, value)
+			v.Color = txtColor
+			v.TextSize = unit.Sp(18)
+			v.Font.Weight = font.Bold
+			return v.Layout(gtx)
+		}),
+	)
+}
+
+// layoutHeader renders the application's header, including the market title, subtitle, and a language selection button.
+func layoutHeader(gtx layout.Context, window *app.Window,
 	theme *material.Theme, state *AppState) layout.Dimensions {
 	return layout.Inset{Bottom: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
@@ -611,14 +954,13 @@ func layoutHeader(
 	})
 }
 
-// layoutLanguageButton handles the layout and rendering of the language selection button within the application's UI.
+// layoutLanguageButton renders the language selection button in the header and handles its click and hover actions.
 func layoutLanguageButton(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
 	if state.UI.LangModalButton.Clicked(gtx) {
 		state.UI.ModalOpen = "language"
 		window.Invalidate()
 	}
 
-	// Notch Logic for Language Button
 	if state.UI.LangModalButton.Hovered() {
 		state.UI.HoverInfo = HoverInfo{
 			Active:   true,
@@ -638,7 +980,7 @@ func layoutLanguageButton(gtx layout.Context, window *app.Window, theme *materia
 	return btn.Layout(gtx)
 }
 
-// LayoutSearchBar renders the search bar within a specified layout context using the provided UI state and theme.
+// LayoutSearchBar renders a search bar component with a text editor and a Locate button, styled and responsive to the current state.
 func LayoutSearchBar(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
 	state.UI.SearchText = state.UI.SearchEditor.Text()
 	gtx.Constraints.Min.X = gtx.Constraints.Max.X
@@ -681,19 +1023,36 @@ func LayoutSearchBar(gtx layout.Context, window *app.Window, theme *material.The
 	})
 }
 
-// layoutLocateButton handles the logic and rendering of the location toggle button.
+// layoutLocateButton renders the Locate button, handles its click events, and dynamically updates the UI state.
 func layoutLocateButton(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+	handleLocateClick(gtx, window, state)
+	handleLocateHover(window, state)
+
+	btnText := GetTranslation(state.UI.Language, "locate_button")
+	btn := material.Button(theme, &state.UI.LocateButton, btnText)
+
+	btn.Background = color.NRGBA{R: 255, G: 255, B: 255, A: 10}
+	btn.Color = AppColors.Accent1
+	btn.CornerRadius = unit.Dp(8)
+	btn.Inset = layout.UniformInset(unit.Dp(10))
+	btn.TextSize = unit.Sp(14)
+
+	if state.UI.UserLocation.Active {
+		return layoutLocateActiveState(gtx, window, theme, state, btn)
+	}
+
+	return btn.Layout(gtx)
+}
+
+func handleLocateClick(gtx layout.Context, window *app.Window, state *AppState) {
 	if state.UI.LocateButton.Clicked(gtx) {
 		if !state.UI.UserLocation.Active {
-			// Default coordinates
-			state.UI.UserLocation.Latitude = 50.5744
-			state.UI.UserLocation.Longitude = 22.0528
 			state.UI.UserLocation.Active = true
 
-			// Asynchronously fetch real location (Native macOS or IP fallback)
 			go func() {
 				lat, lon, err := FetchUserLocation()
 				if err == nil && lat != 0 && lon != 0 {
+					fmt.Printf("Location success: %f, %f\n", lat, lon)
 					state.UI.UserLocation.Latitude = lat
 					state.UI.UserLocation.Longitude = lon
 					window.Invalidate()
@@ -708,7 +1067,9 @@ func layoutLocateButton(gtx layout.Context, window *app.Window, theme *material.
 		}
 		window.Invalidate()
 	}
+}
 
+func handleLocateHover(window *app.Window, state *AppState) {
 	if state.UI.LocateButton.Hovered() {
 		state.UI.HoverInfo = HoverInfo{
 			Active:   true,
@@ -718,123 +1079,41 @@ func layoutLocateButton(gtx layout.Context, window *app.Window, theme *material.
 		}
 		window.Invalidate()
 	}
+}
 
-	btnText := GetTranslation(state.UI.Language, "locate_button")
-	btn := material.Button(theme, &state.UI.LocateButton, btnText)
+func layoutLocateActiveState(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, btn material.ButtonStyle) layout.Dimensions {
+	btn.Background = AppColors.Accent1
+	btn.Color = color.NRGBA{R: 20, G: 20, B: 20, A: 255}
 
-	btn.Background = color.NRGBA{R: 255, G: 255, B: 255, A: 10}
-	btn.Color = AppColors.Accent1
-	btn.CornerRadius = unit.Dp(8)
-	btn.Inset = layout.UniformInset(unit.Dp(10))
-	btn.TextSize = unit.Sp(14)
-
-	if state.UI.UserLocation.Active {
-		btn.Background = AppColors.Accent1
-		btn.Color = color.NRGBA{R: 20, G: 20, B: 20, A: 255}
-
-		newVal := float64(state.UI.DistanceSlider.Value) * 100.0
-		if newVal != state.UI.MaxDistance {
-			state.UI.MaxDistance = newVal
-			window.Invalidate()
-		}
-
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return btn.Layout(gtx)
-			}),
-			layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				gtx.Constraints.Min.X = gtx.Dp(unit.Dp(100))
-				gtx.Constraints.Max.X = gtx.Dp(unit.Dp(150))
-
-				slider := material.Slider(theme, &state.UI.DistanceSlider)
-				slider.Color = AppColors.Accent1
-				return slider.Layout(gtx)
-			}),
-			layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Body2(theme, fmt.Sprintf("%.0f km", state.UI.MaxDistance))
-				label.Color = AppColors.Text
-				return label.Layout(gtx)
-			}),
-		)
+	newVal := float64(state.UI.DistanceSlider.Value) * 100.0
+	if newVal != state.UI.MaxDistance {
+		state.UI.MaxDistance = newVal
+		window.Invalidate()
 	}
 
-	return btn.Layout(gtx)
-}
-
-// LayoutRightPanel lays out the right-side panel of the application, featuring titles, subtitles, charts, and descriptive text.
-func LayoutRightPanel(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
-	panelWidth := gtx.Dp(unit.Dp(320))
-	gtx.Constraints.Min.X = panelWidth
-	gtx.Constraints.Max.X = panelWidth
-	gtx.Constraints.Min.Y = gtx.Constraints.Max.Y
-	paint.FillShape(gtx.Ops, color.NRGBA{R: 18, G: 18, B: 22, A: 255}, clip.Rect{Max: gtx.Constraints.Max}.Op())
-	return layout.Inset{Top: unit.Dp(20), Left: unit.Dp(20), Right: unit.Dp(20)}.Layout(
-		gtx, func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					h := material.H6(theme, GetTranslation(state.UI.Language, "ai_title"))
-					h.Color = AppColors.Accent1
-					h.Font.Weight = font.Bold
-					return h.Layout(gtx)
-				}),
-				layout.Rigid(layout.Spacer{Height: unit.Dp(5)}.Layout),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					txt := material.Caption(theme, GetTranslation(state.UI.Language, "ai_subtitle"))
-					txt.Color = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
-					return txt.Layout(gtx)
-				}),
-				layout.Rigid(layout.Spacer{Height: unit.Dp(30)}.Layout),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					height := gtx.Dp(unit.Dp(200))
-					return layout.Stack{}.Layout(gtx,
-						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-							shape := clip.UniformRRect(image.Rectangle{Max: image.Point{X: gtx.Constraints.Max.X, Y: height}}, 5)
-							paint.FillShape(gtx.Ops, color.NRGBA{R: 40, G: 20, B: 20, A: 255}, shape.Op(gtx.Ops))
-							return layout.Dimensions{Size: image.Point{X: gtx.Constraints.Max.X, Y: height}}
-						}),
-						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-							return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								msg := material.Body2(theme, GetTranslation(state.UI.Language, "ai_chart_placeholder"))
-								msg.Color = AppColors.Error
-								return layout.Inset{Top: unit.Dp(80)}.Layout(gtx, msg.Layout)
-							})
-						}),
-					)
-				}),
-				layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					txt := material.Body2(theme, GetTranslation(state.UI.Language, "ai_desc"))
-					txt.Color = color.NRGBA{R: 80, G: 80, B: 90, A: 255}
-					return txt.Layout(gtx)
-				}),
-			)
-		})
-}
-
-// layoutMarketValue lays out a market value displaying a label and its corresponding value with customizable text color.
-func layoutMarketValue(
-	gtx layout.Context, theme *material.Theme,
-	label, value string, txtColor color.NRGBA) layout.Dimensions {
-	return layout.Flex{Axis: layout.Vertical, Alignment: layout.End}.Layout(gtx,
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Caption(theme, label)
-			l.Color = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
-			l.TextSize = unit.Sp(12)
-			return l.Layout(gtx)
+			return btn.Layout(gtx)
 		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			v := material.Body2(theme, value)
-			v.Color = txtColor
-			v.TextSize = unit.Sp(18)
-			v.Font.Weight = font.Bold
-			return v.Layout(gtx)
+			gtx.Constraints.Min.X = gtx.Dp(unit.Dp(100))
+			gtx.Constraints.Max.X = gtx.Dp(unit.Dp(150))
+
+			slider := material.Slider(theme, &state.UI.DistanceSlider)
+			slider.Color = AppColors.Accent1
+			return slider.Layout(gtx)
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			label := material.Body2(theme, fmt.Sprintf("%.0f km", state.UI.MaxDistance))
+			label.Color = AppColors.Text
+			return label.Layout(gtx)
 		}),
 	)
 }
 
-// layoutModal renders a modal overlay based on the application's current modal state and selected modal type.
+// layoutModal renders a modal overlay if a modal is currently open in the application state.
 func layoutModal(
 	gtx layout.Context, window *app.Window,
 	theme *material.Theme, state *AppState) layout.Dimensions {
@@ -849,7 +1128,7 @@ func layoutModal(
 	})
 }
 
-// ModalOverlay renders a centered modal overlay with a semi-transparent background and specified content widget.
+// ModalOverlay displays a centrally aligned modal overlay with optional content and handles dismissal on background click.
 func ModalOverlay(
 	gtx layout.Context, window *app.Window,
 	state *AppState, content layout.Widget) layout.Dimensions {
@@ -893,7 +1172,7 @@ func ModalOverlay(
 	)
 }
 
-// LanguageModal renders a modal dialog for selecting a language and updates the application state upon selection.
+// LanguageModal renders a modal for selecting a language, updating the application state, and triggering a UI refresh.
 func LanguageModal(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
 	cfg := ModalConfig{
 		Title:   GetTranslation(state.UI.Language, "select_lang_title"),
@@ -908,7 +1187,7 @@ func LanguageModal(gtx layout.Context, window *app.Window, theme *material.Theme
 	return ModalDialog(gtx, window, theme, state, cfg)
 }
 
-// ModalDialog renders a modal dialog with a title, list of options, and action buttons, and executes a callback on selection.
+// ModalDialog renders a modal dialog with a title, grid of selectable options, and buttons using the provided configuration.
 func ModalDialog(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config ModalConfig) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layoutModalHeader(window, theme, config.Title, state),
@@ -924,7 +1203,7 @@ func ModalDialog(gtx layout.Context, window *app.Window, theme *material.Theme, 
 	)
 }
 
-// layoutModalHeader creates a header layout for a modal dialog, including a title and a close button.
+// layoutModalHeader creates a modal header with a title and a close button, styled according to the provided theme and state.
 func layoutModalHeader(window *app.Window, theme *material.Theme, title string, state *AppState) layout.FlexChild {
 	return layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
@@ -950,7 +1229,7 @@ func layoutModalHeader(window *app.Window, theme *material.Theme, title string, 
 	})
 }
 
-// layoutModalGridRow arranges a row of buttons in a grid layout within a modal, handling button clicks and triggering a callback.
+// layoutModalGridRow arranges a row of buttons in a modal grid layout, handling click events and callbacks for each option.
 func layoutModalGridRow(gtx layout.Context, theme *material.Theme, row, cols int, options []string, buttons []widget.Clickable, onSelect func(string)) layout.Dimensions {
 	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 		func() []layout.FlexChild {
@@ -980,7 +1259,7 @@ func layoutModalGridRow(gtx layout.Context, theme *material.Theme, row, cols int
 	)
 }
 
-// DrawProgressBar draws a loading progress bar based on elapsed time relative to a fixed total duration.
+// DrawProgressBar renders a loading progress bar based on the elapsed loading duration and triggers window refresh if needed.
 func DrawProgressBar(gtx layout.Context, window *app.Window, state *AppState) layout.Dimensions {
 	elapsed := time.Since(state.IsLoadingStart).Seconds()
 	var totalDuration float32 = 1.0
@@ -1006,7 +1285,7 @@ func DrawProgressBar(gtx layout.Context, window *app.Window, state *AppState) la
 	return layout.Dimensions{Size: image.Point{X: barWidth, Y: barHeight}}
 }
 
-// layoutLoadingBar displays a loading bar if the application's loading state is active.
+// layoutLoadingBar renders a loading bar if the application's loading state is active.
 func layoutLoadingBar(gtx layout.Context, window *app.Window, state *AppState) layout.Dimensions {
 	if !state.IsLoading.Load() {
 		return layout.Dimensions{}
@@ -1016,13 +1295,13 @@ func layoutLoadingBar(gtx layout.Context, window *app.Window, state *AppState) l
 	})
 }
 
-// LoadFontCollection loads and returns a collection of font faces. Returns an error if the loading or parsing fails.
+// LoadFontCollection loads a collection of font faces from predefined font files and returns them.
 func LoadFontCollection() ([]font.FontFace, error) {
 	face, _ := reading_data.LoadAndParseFont("fonts/NotoSans-Regular.ttf")
 	return []font.FontFace{face}, nil
 }
 
-// layoutNotch renders a dynamic, aesthetic notification bubble at the top of the screen (Notch-like).
+// layoutNotch renders a UI "notch" element with dynamic alpha, displaying contextually relevant information to the user.
 func layoutNotch(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	alphaVal := state.UI.NotchState.CurrentAlpha
 	if alphaVal <= 0.01 {

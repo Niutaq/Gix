@@ -1,7 +1,6 @@
 package scrapers
 
 import (
-	// Standard libraries
 	"fmt"
 	"io"
 	"log"
@@ -9,16 +8,13 @@ import (
 	"strings"
 	"time"
 
-	// External libraries
 	"github.com/PuerkitoBio/goquery"
 )
 
 // Constants
 const (
-	// Error messages - an error occurred when closing the response body
 	errorClosingResponseBody = "Error closing response body: %v\n"
-	// Error messages - an error occurred when scraping
-	errorNotFoundRates = "not found rates for: %s"
+	errorNotFoundRates       = "not found rates for: %s"
 )
 
 // ScrapeResult - struct for storing the scraped data

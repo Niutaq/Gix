@@ -4,7 +4,6 @@ package main
 import (
 	// Standard libraries
 	"context"
-	//"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -14,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	// External libraries
+	// External utilities
 	pb "github.com/Niutaq/Gix/api/proto/v1"
 	"github.com/Niutaq/Gix/pkg/scrapers"
 	"github.com/gin-gonic/gin"
@@ -23,7 +22,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 
-	// Swagger utilities
 	"github.com/Niutaq/Gix/docs"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -31,10 +29,8 @@ import (
 
 // Constants
 const (
-	// Content-Type headers
 	contentTypeProtoBuf = "application/x-protobuf"
 
-	// Error messages
 	internalServerError = "Internal server error"
 )
 
@@ -95,7 +91,6 @@ type processedRates struct {
 func main() {
 	log.Println("Launching Gix server...")
 
-	// Swagger dynamic host
 	if envHost := os.Getenv("SWAGGER_HOST"); envHost != "" {
 		docs.SwaggerInfo.Host = envHost
 	}
@@ -131,7 +126,6 @@ func main() {
 		Cache: rdb,
 	}
 
-	// Gin middleware
 	r := gin.Default()
 
 	r.Use(func(c *gin.Context) {
@@ -140,16 +134,14 @@ func main() {
 		c.Next()
 	})
 
-	// Endpoints
 	r.GET("/healthz", handleHealthCheck(appState))
 
 	v1 := r.Group("/api/v1")
 	{
 		v1.GET("/cantors", handleCantorsList(appState))
 		v1.GET("/rates", handleGetRates(appState))
+		v1.GET("/history", handleGetHistory(appState))
 	}
-
-	// Swagger route
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	log.Println("Gin API listens at port :8080...")
@@ -462,4 +454,187 @@ func saveToArchive(db *pgxpool.Pool, cantorID int, currency string, buyRate, sel
 	if err != nil {
 		log.Printf("Archive Error: %v", err)
 	}
+}
+
+func handleGetHistory(app *AppState) gin.HandlerFunc {
+
+	return func(c *gin.Context) {
+
+		currency := c.Query("currency")
+
+		if currency == "" {
+
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing currency"})
+
+			return
+
+		}
+
+		params := parseHistoryParams(c)
+
+		query, args := buildHistoryQuery(currency, params)
+
+		rows, err := app.DB.Query(c.Request.Context(), query, args...)
+
+		if err != nil {
+
+			log.Printf("History DB Error: %v", err)
+
+			c.JSON(http.StatusInternalServerError, gin.H{"error": internalServerError})
+
+			return
+
+		}
+
+		defer rows.Close()
+
+		points := scanHistoryPoints(rows)
+
+		sendHistoryResponse(c, currency, points)
+
+	}
+
+}
+
+type historyParams struct {
+	cantorID int
+
+	days int
+
+	cutoff time.Time
+}
+
+func parseHistoryParams(c *gin.Context) historyParams {
+
+	cantorIDStr := c.Query("cantor_id")
+
+	daysStr := c.DefaultQuery("days", "7")
+
+	days, _ := strconv.Atoi(daysStr)
+
+	if days <= 0 {
+
+		days = 7
+
+	}
+
+	cantorID, _ := strconv.Atoi(cantorIDStr)
+
+	return historyParams{
+
+		cantorID: cantorID,
+
+		days: days,
+
+		cutoff: time.Now().AddDate(0, 0, -days),
+	}
+
+}
+
+func buildHistoryQuery(currency string, params historyParams) (string, []interface{}) {
+
+	var query string
+
+	var args []interface{}
+
+	args = append(args, currency, params.cutoff)
+
+	if params.cantorID > 0 {
+
+		query = `
+
+			SELECT time_bucket('1 hour', time) AS bucket,
+
+				   AVG(buy_rate)::FLOAT,
+
+				   AVG(sell_rate)::FLOAT
+
+			FROM rates
+
+			WHERE currency = 
+ AND time > $2 AND cantor_id = $3
+
+			GROUP BY bucket
+
+			ORDER BY bucket ASC`
+
+		args = append(args, params.cantorID)
+
+	} else {
+
+		query = `
+
+			SELECT time_bucket('1 hour', time) AS bucket,
+
+				   AVG(buy_rate)::FLOAT,
+
+				   AVG(sell_rate)::FLOAT
+
+			FROM rates
+
+			WHERE currency = 
+ AND time > $2
+
+			GROUP BY bucket
+
+			ORDER BY bucket ASC`
+
+	}
+
+	return query, args
+
+}
+
+func scanHistoryPoints(rows pgx.Rows) []*pb.HistoryPoint {
+
+	var points []*pb.HistoryPoint
+
+	for rows.Next() {
+
+		var t time.Time
+
+		var buy, sell float64
+
+		if err := rows.Scan(&t, &buy, &sell); err != nil {
+
+			log.Printf("History Scan Error: %v", err)
+
+			continue
+
+		}
+
+		points = append(points, &pb.HistoryPoint{
+
+			Time: t.Unix(),
+
+			BuyRate: buy,
+
+			SellRate: sell,
+		})
+
+	}
+
+	return points
+
+}
+
+func sendHistoryResponse(c *gin.Context, currency string, points []*pb.HistoryPoint) {
+
+	resp := &pb.HistoryResponse{
+
+		Points: points,
+
+		Currency: currency,
+	}
+
+	if c.GetHeader("Accept") == contentTypeProtoBuf {
+
+		c.ProtoBuf(http.StatusOK, resp)
+
+	} else {
+
+		c.JSON(http.StatusOK, resp)
+
+	}
+
 }

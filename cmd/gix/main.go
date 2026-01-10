@@ -36,7 +36,7 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
-	// Gix utilities
+	// External utilities
 	"github.com/Niutaq/Gix/pkg/utilities"
 )
 
@@ -53,8 +53,8 @@ func main() {
 	config := utilities.AppConfig{
 		APICantorsURL: base + "/api/v1/cantors",
 		APIRatesURL:   base + "/api/v1/rates",
+		APIHistoryURL: base + "/api/v1/history",
 	}
-
 	window := new(app.Window)
 	window.Option(
 		app.Title("Gix"),
@@ -73,8 +73,6 @@ func main() {
 
 // run starts the application event loop, handling window events, UI rendering, and asynchronous data loading.
 func run(window *app.Window, config utilities.AppConfig) error {
-
-	/// TRACING ---
 	fileTrace, err := os.Create("trace.out")
 	if err != nil {
 		log.Fatal(err)
@@ -90,7 +88,6 @@ func run(window *app.Window, config utilities.AppConfig) error {
 		log.Fatal(err)
 	}
 	defer trace.Stop()
-	// ---
 
 	var ops op.Ops
 
@@ -113,9 +110,10 @@ func run(window *app.Window, config utilities.AppConfig) error {
 			},
 			LanguageOptionButtons: make([]widget.Clickable, 16),
 			CurrencyOptionButtons: make([]widget.Clickable, 17),
+			ChartMode:             "BUY",
+			ChartModeButtons:      make([]widget.Clickable, 2),
 		},
 	}
-
 	cantorChan := make(chan []utilities.ApiCantorResponse, 1)
 	loadCantorsAsync(window, cantorChan, config)
 
@@ -147,6 +145,8 @@ func run(window *app.Window, config utilities.AppConfig) error {
 						Longitude:   c.Longitude,
 					}
 				}
+				utilities.FetchAllRates(window, state, config)
+
 			default:
 			}
 
