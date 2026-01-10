@@ -15,14 +15,14 @@ class LocationDelegate: NSObject, CLLocationManagerDelegate {
         manager.startUpdatingLocation()
     }
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    func locationManager(_: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         if let location = locations.first {
             print("\(location.coordinate.latitude),\(location.coordinate.longitude)")
             exit(0)
         }
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    func locationManager(_: CLLocationManager, didFailWithError error: Error) {
         fputs("Error: \(error.localizedDescription)\n", stderr)
         exit(1)
     }
