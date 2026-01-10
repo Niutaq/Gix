@@ -34,7 +34,10 @@
   "sidebar_currency_label": "Waluty",
   "location_unknown": "Lokalizacja nieznana",
   "notch_lang_title": "Język",
-  "notch_lang_desc": "Zmień język aplikacji",
-  "notch_loc_title": "Filtr Lokalizacji",
-  "notch_loc_desc": "Filtruj kantory po odległości"
-}
+    "notch_lang_desc": "Zmień język aplikacji",
+    "notch_loc_title": "Filtr Lokalizacji",
+    "notch_loc_desc": "Filtruj kantory po odległości",
+    "chart_7d_ago": "-7 Dni",
+    "chart_today": "Dzisiaj"
+  }
+  

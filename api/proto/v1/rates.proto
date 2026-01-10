@@ -5,9 +5,37 @@ package v1;
 option go_package = "github.com/Niutaq/Gix/api/proto/v1";
 
 message RateResponse {
+
   string buyRate = 1 [json_name = "buyRate"];
+
   string sellRate = 2 [json_name = "sellRate"];
+
   int32 cantorId = 3 [json_name = "cantorID"];
+
   string currency = 4 [json_name = "currency"];
+
   int64 fetchedAt = 5 [json_name = "fetchedAt"];
+
+}
+
+
+
+message HistoryPoint {
+
+  int64 time = 1 [json_name = "time"];
+
+  double buyRate = 2 [json_name = "buyRate"];
+
+  double sellRate = 3 [json_name = "sellRate"];
+
+}
+
+
+
+message HistoryResponse {
+
+  repeated HistoryPoint points = 1 [json_name = "points"];
+
+  string currency = 2 [json_name = "currency"];
+
 }

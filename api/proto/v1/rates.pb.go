@@ -15,9 +15,7 @@ import (
 )
 
 const (
-	// Verify that this generated code is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(20 - protoimpl.MinVersion)
-	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
@@ -97,6 +95,118 @@ func (x *RateResponse) GetFetchedAt() int64 {
 	return 0
 }
 
+type HistoryPoint struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Time          int64                  `protobuf:"varint,1,opt,name=time,proto3" json:"time,omitempty"`
+	BuyRate       float64                `protobuf:"fixed64,2,opt,name=buyRate,proto3" json:"buyRate,omitempty"`
+	SellRate      float64                `protobuf:"fixed64,3,opt,name=sellRate,proto3" json:"sellRate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HistoryPoint) Reset() {
+	*x = HistoryPoint{}
+	mi := &file_api_proto_v1_rates_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistoryPoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistoryPoint) ProtoMessage() {}
+
+func (x *HistoryPoint) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_rates_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistoryPoint.ProtoReflect.Descriptor instead.
+func (*HistoryPoint) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_rates_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *HistoryPoint) GetTime() int64 {
+	if x != nil {
+		return x.Time
+	}
+	return 0
+}
+
+func (x *HistoryPoint) GetBuyRate() float64 {
+	if x != nil {
+		return x.BuyRate
+	}
+	return 0
+}
+
+func (x *HistoryPoint) GetSellRate() float64 {
+	if x != nil {
+		return x.SellRate
+	}
+	return 0
+}
+
+type HistoryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Points        []*HistoryPoint        `protobuf:"bytes,1,rep,name=points,proto3" json:"points,omitempty"`
+	Currency      string                 `protobuf:"bytes,2,opt,name=currency,proto3" json:"currency,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HistoryResponse) Reset() {
+	*x = HistoryResponse{}
+	mi := &file_api_proto_v1_rates_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistoryResponse) ProtoMessage() {}
+
+func (x *HistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_rates_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistoryResponse.ProtoReflect.Descriptor instead.
+func (*HistoryResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_rates_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *HistoryResponse) GetPoints() []*HistoryPoint {
+	if x != nil {
+		return x.Points
+	}
+	return nil
+}
+
+func (x *HistoryResponse) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
 var File_api_proto_v1_rates_proto protoreflect.FileDescriptor
 
 const file_api_proto_v1_rates_proto_rawDesc = "" +
@@ -107,7 +217,14 @@ const file_api_proto_v1_rates_proto_rawDesc = "" +
 	"\bsellRate\x18\x02 \x01(\tR\bsellRate\x12\x1a\n" +
 	"\bcantorId\x18\x03 \x01(\x05R\bcantorID\x12\x1a\n" +
 	"\bcurrency\x18\x04 \x01(\tR\bcurrency\x12\x1c\n" +
-	"\tfetchedAt\x18\x05 \x01(\x03R\tfetchedAtB$Z\"github.com/Niutaq/Gix/api/proto/v1b\x06proto3"
+	"\tfetchedAt\x18\x05 \x01(\x03R\tfetchedAt\"X\n" +
+	"\fHistoryPoint\x12\x12\n" +
+	"\x04time\x18\x01 \x01(\x03R\x04time\x12\x18\n" +
+	"\abuyRate\x18\x02 \x01(\x01R\abuyRate\x12\x1a\n" +
+	"\bsellRate\x18\x03 \x01(\x01R\bsellRate\"W\n" +
+	"\x0fHistoryResponse\x12(\n" +
+	"\x06points\x18\x01 \x03(\v2\x10.v1.HistoryPointR\x06points\x12\x1a\n" +
+	"\bcurrency\x18\x02 \x01(\tR\bcurrencyB$Z\"github.com/Niutaq/Gix/api/proto/v1b\x06proto3"
 
 var (
 	file_api_proto_v1_rates_proto_rawDescOnce sync.Once
@@ -121,16 +238,19 @@ func file_api_proto_v1_rates_proto_rawDescGZIP() []byte {
 	return file_api_proto_v1_rates_proto_rawDescData
 }
 
-var file_api_proto_v1_rates_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_api_proto_v1_rates_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_api_proto_v1_rates_proto_goTypes = []any{
-	(*RateResponse)(nil), // 0: v1.RateResponse
+	(*RateResponse)(nil),    // 0: v1.RateResponse
+	(*HistoryPoint)(nil),    // 1: v1.HistoryPoint
+	(*HistoryResponse)(nil), // 2: v1.HistoryResponse
 }
 var file_api_proto_v1_rates_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	1, // 0: v1.HistoryResponse.points:type_name -> v1.HistoryPoint
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_v1_rates_proto_init() }
@@ -144,7 +264,7 @@ func file_api_proto_v1_rates_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_v1_rates_proto_rawDesc), len(file_api_proto_v1_rates_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
