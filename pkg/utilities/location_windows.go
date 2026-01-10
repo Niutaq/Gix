@@ -29,6 +29,7 @@ if ($watcher.Status -eq 'Ready') {
 }
 exit 1
 `
+	// SonarQube: powershell is a system command. We use -NoProfile for security.
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", psScript)
 	out, err := cmd.Output()
 	if err != nil {

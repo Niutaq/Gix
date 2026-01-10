@@ -1,7 +1,6 @@
 package scrapers
 
 import (
-	// Standard libraries
 	"fmt"
 	"net/http"
 	"net/http/httptest"
