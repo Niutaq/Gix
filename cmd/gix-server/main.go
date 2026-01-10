@@ -126,6 +126,9 @@ func main() {
 		Cache: rdb,
 	}
 
+	// Start the background harvester to collect data 24/7
+	go startBackgroundHarvester(appState)
+
 	r := gin.Default()
 
 	r.Use(func(c *gin.Context) {
@@ -637,4 +640,76 @@ func sendHistoryResponse(c *gin.Context, currency string, points []*pb.HistoryPo
 
 	}
 
+}
+
+// startBackgroundHarvester runs a loop that fetches rates every 15 minutes.
+func startBackgroundHarvester(app *AppState) {
+	currencies := []string{
+		"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF", "SEK",
+		"CZK", "HUF", "UAH", "BGN", "RON", "TRY", "ISK", "LEK",
+	}
+
+	ticker := time.NewTicker(15 * time.Minute)
+	defer ticker.Stop()
+
+	// Run once immediately on start
+	harvest(app, currencies)
+
+	for range ticker.C {
+		harvest(app, currencies)
+	}
+}
+
+// harvest iterates through all cantors and currencies to fetch and save rates.
+func harvest(app *AppState, currencies []string) {
+	log.Println("Background Harvest: Starting collection cycle...")
+	ctx := context.Background()
+
+	rows, err := app.DB.Query(ctx, "SELECT id, display_name, base_url, strategy, units FROM cantors")
+	if err != nil {
+		log.Printf("Harvest Error (DB): %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var cantors []CantorInfo
+	for rows.Next() {
+		var ci CantorInfo
+		if err := rows.Scan(&ci.ID, &ci.DisplayName, &ci.BaseURL, &ci.Strategy, &ci.Units); err != nil {
+			continue
+		}
+		cantors = append(cantors, ci)
+	}
+
+	for _, ci := range cantors {
+		for _, curr := range currencies {
+			time.Sleep(500 * time.Millisecond)
+
+			_, rates, err := scrapeAndProcess(ci, ci.ID, curr)
+			if err != nil {
+				continue
+			}
+
+			if rates.Buy == 0 && rates.Sell == 0 {
+				continue
+			}
+
+			log.Printf("Harvesting: %s -> %s (%.4f / %.4f)", ci.DisplayName, curr, rates.Buy, rates.Sell)
+
+			saveToArchive(app.DB, ci.ID, curr, rates.Buy, rates.Sell)
+
+			cacheKey := fmt.Sprintf("rates:proto%d:%s", ci.ID, curr)
+			response := &pb.RateResponse{
+				BuyRate:   fmt.Sprintf("%.4f", rates.Buy),
+				SellRate:  fmt.Sprintf("%.4f", rates.Sell),
+				CantorId:  int32(ci.ID),
+				Currency:  curr,
+				FetchedAt: time.Now().Unix(),
+			}
+			if protoBytes, err := proto.Marshal(response); err == nil {
+				app.Cache.Set(ctx, cacheKey, protoBytes, 60*time.Second)
+			}
+		}
+	}
+	log.Println("Background Harvest: Cycle completed.")
 }
