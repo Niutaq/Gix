@@ -16,7 +16,7 @@ func fetchNativeLocation() (float64, float64, error) {
 	// SonarQube: where-am-i is an optional system tool.
 	path, err := exec.LookPath("where-am-i")
 	if err == nil && path != "" {
-		cmd := exec.Command("where-am-i")
+		cmd := exec.Command(path)
 		out, err := cmd.Output()
 		if err == nil {
 			fmt.Printf("Native Location: %s\n", out)
