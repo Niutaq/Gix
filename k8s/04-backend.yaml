@@ -16,7 +16,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: gix-backend
-          image: niutaq/gix-backend:v1.0.0
+          image: niutaq/gix-backend:v1.1.0
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -57,10 +57,12 @@ metadata:
 spec:
   type: LoadBalancer
   ports:
-    - port: 8080
+    - name: http
+      port: 8080
       targetPort: 8080
       nodePort: 30080
-    - port: 8081
+    - name: drpc
+      port: 8081
       targetPort: 8081
       nodePort: 30081
   selector:
