@@ -435,6 +435,11 @@ func performHistoryFetch(window *app.Window, state *AppState, config AppConfig, 
 		return
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Server returned error %d: %s", resp.StatusCode, string(body))
+		return
+	}
+
 	var history pb.HistoryResponse
 	if err := proto.Unmarshal(body, &history); err != nil {
 		log.Printf("Error unmarshalling history: %v", err)

@@ -29,7 +29,7 @@ if ($watcher.Status -eq 'Ready') {
 }
 exit 1
 `
-	// SonarQube: powershell is a system command. We use -NoProfile for security.
+	// SonarQube: PowerShell is a system command. We use -NoProfile for security.
 	// We use the full path to avoid PATH injection vulnerabilities.
 	cmd := exec.Command("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoProfile", "-NonInteractive", "-Command", psScript)
 	out, err := cmd.Output()

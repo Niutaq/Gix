@@ -13,5 +13,6 @@ WORKDIR /root/
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /gix-server .
 EXPOSE 8080
+EXPOSE 8081
 
 CMD ["./gix-server"]

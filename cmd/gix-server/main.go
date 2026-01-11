@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -21,6 +22,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
+	"storj.io/drpc/drpcmux"
+	"storj.io/drpc/drpcserver"
 
 	"github.com/Niutaq/Gix/docs"
 	swaggerFiles "github.com/swaggo/files"
@@ -58,6 +61,19 @@ type CantorListResponse struct {
 	Longitude   float64 `json:"longitude"`
 }
 
+// historyParams represents parameters for querying historical data such as rates or transactions.
+type historyParams struct {
+	cantorID int
+	days     int
+	cutoff   time.Time
+}
+
+// processedRates - a struct for holding the final rates after processing
+type processedRates struct {
+	Buy  float64
+	Sell float64
+}
+
 // RatesResponse - a response struct for the /api/v1/rates endpoint
 //type RatesResponse struct {
 //	BuyRate  string `json:"buyRate"`
@@ -65,12 +81,6 @@ type CantorListResponse struct {
 //	CantorID int    `json:"cantorID"`
 //	Currency string `json:"currency"`
 //}
-
-// processedRates - a struct for holding the final rates after processing
-type processedRates struct {
-	Buy  float64
-	Sell float64
-}
 
 // @title           Gix API
 // @version         1.0
@@ -125,6 +135,24 @@ func main() {
 		DB:    dbpool,
 		Cache: rdb,
 	}
+
+	// Start dRPC server
+	go func() {
+		lis, err := net.Listen("tcp", ":8081")
+		if err != nil {
+			log.Fatalf("failed to listen for dRPC: %v", err)
+		}
+		mux := drpcmux.New()
+		err = pb.DRPCRegisterRatesService(mux, &RatesDRPCServer{Cache: rdb})
+		if err != nil {
+			log.Fatalf("failed to register dRPC service: %v", err)
+		}
+		srv := drpcserver.New(mux)
+		log.Println("dRPC server listening on :8081")
+		if err := srv.Serve(context.Background(), lis); err != nil {
+			log.Fatalf("dRPC serve error: %v", err)
+		}
+	}()
 
 	// Start the background harvester to collect data 24/7
 	go startBackgroundHarvester(appState)
@@ -459,187 +487,113 @@ func saveToArchive(db *pgxpool.Pool, cantorID int, currency string, buyRate, sel
 	}
 }
 
+// handleGetHistory processes the /history endpoint, retrieves historical exchange rates, and returns them as JSON or ProtoBuf.
 func handleGetHistory(app *AppState) gin.HandlerFunc {
-
 	return func(c *gin.Context) {
-
 		currency := c.Query("currency")
-
 		if currency == "" {
-
 			c.JSON(http.StatusBadRequest, gin.H{"error": "missing currency"})
-
 			return
-
 		}
 
 		params := parseHistoryParams(c)
-
 		query, args := buildHistoryQuery(currency, params)
-
 		rows, err := app.DB.Query(c.Request.Context(), query, args...)
 
 		if err != nil {
-
 			log.Printf("History DB Error: %v", err)
-
 			c.JSON(http.StatusInternalServerError, gin.H{"error": internalServerError})
-
 			return
-
 		}
 
 		defer rows.Close()
-
 		points := scanHistoryPoints(rows)
-
 		sendHistoryResponse(c, currency, points)
-
 	}
-
 }
 
-type historyParams struct {
-	cantorID int
-
-	days int
-
-	cutoff time.Time
-}
-
+// parseHistoryParams extracts Cantor ID and historical query parameters from the request and returns a historyParams struct.
 func parseHistoryParams(c *gin.Context) historyParams {
-
 	cantorIDStr := c.Query("cantor_id")
-
 	daysStr := c.DefaultQuery("days", "7")
-
 	days, _ := strconv.Atoi(daysStr)
 
 	if days <= 0 {
-
 		days = 7
-
 	}
 
 	cantorID, _ := strconv.Atoi(cantorIDStr)
 
 	return historyParams{
-
 		cantorID: cantorID,
-
-		days: days,
-
-		cutoff: time.Now().AddDate(0, 0, -days),
+		days:     days,
+		cutoff:   time.Now().AddDate(0, 0, -days),
 	}
-
 }
 
+// buildHistoryQuery constructs a SQL query and its arguments to fetch historical exchange rates based on input parameters.
 func buildHistoryQuery(currency string, params historyParams) (string, []interface{}) {
-
 	var query string
-
 	var args []interface{}
-
 	args = append(args, currency, params.cutoff)
-
-	if params.cantorID > 0 {
-
-		query = `
-
-			SELECT time_bucket('1 hour', time) AS bucket,
-
-				   AVG(buy_rate)::FLOAT,
-
-				   AVG(sell_rate)::FLOAT
-
-			FROM rates
-
-			WHERE currency = 
- AND time > $2 AND cantor_id = $3
-
-			GROUP BY bucket
-
-			ORDER BY bucket ASC`
-
-		args = append(args, params.cantorID)
-
-	} else {
-
-		query = `
-
-			SELECT time_bucket('1 hour', time) AS bucket,
-
-				   AVG(buy_rate)::FLOAT,
-
-				   AVG(sell_rate)::FLOAT
-
-			FROM rates
-
-			WHERE currency = 
- AND time > $2
-
-			GROUP BY bucket
-
-			ORDER BY bucket ASC`
-
-	}
-
+			if params.cantorID > 0 {
+			query = `
+				SELECT time_bucket('1 hour', time) AS bucket,
+					   AVG(buy_rate)::FLOAT,
+					   AVG(sell_rate)::FLOAT
+				FROM rates
+				WHERE currency = $1 AND time > $2 AND cantor_id = $3
+				GROUP BY bucket
+				ORDER BY bucket ASC`
+			args = append(args, params.cantorID)
+		} else {
+			query = `
+				SELECT time_bucket('1 hour', time) AS bucket,
+					   AVG(buy_rate)::FLOAT,
+					   AVG(sell_rate)::FLOAT
+				FROM rates
+				WHERE currency = $1 AND time > $2
+				GROUP BY bucket
+				ORDER BY bucket ASC`
+		}
 	return query, args
-
 }
 
+// scanHistoryPoints scans rows from the database and maps them to a slice of HistoryPoint objects, handling time and rate fields.
 func scanHistoryPoints(rows pgx.Rows) []*pb.HistoryPoint {
-
 	var points []*pb.HistoryPoint
-
 	for rows.Next() {
 
 		var t time.Time
-
 		var buy, sell float64
 
 		if err := rows.Scan(&t, &buy, &sell); err != nil {
-
 			log.Printf("History Scan Error: %v", err)
-
 			continue
-
 		}
 
 		points = append(points, &pb.HistoryPoint{
-
-			Time: t.Unix(),
-
-			BuyRate: buy,
-
+			Time:     t.Unix(),
+			BuyRate:  buy,
 			SellRate: sell,
 		})
-
 	}
-
 	return points
-
 }
 
+// sendHistoryResponse formats and sends a currency's historical rate response in JSON or ProtoBuf based on the "Accept" header.
 func sendHistoryResponse(c *gin.Context, currency string, points []*pb.HistoryPoint) {
-
 	resp := &pb.HistoryResponse{
-
-		Points: points,
-
+		Points:   points,
 		Currency: currency,
 	}
 
 	if c.GetHeader("Accept") == contentTypeProtoBuf {
-
 		c.ProtoBuf(http.StatusOK, resp)
 
 	} else {
-
 		c.JSON(http.StatusOK, resp)
-
 	}
-
 }
 
 // startBackgroundHarvester runs a loop that fetches rates every 15 minutes.
@@ -708,6 +662,7 @@ func harvest(app *AppState, currencies []string) {
 			}
 			if protoBytes, err := proto.Marshal(response); err == nil {
 				app.Cache.Set(ctx, cacheKey, protoBytes, 60*time.Second)
+				app.Cache.Publish(ctx, "rates_updates", protoBytes)
 			}
 		}
 	}
