@@ -4,8 +4,8 @@
 *.dll
 *.so
 *.dylib
-gix
-main
+/gix
+/main
 
 # Build output directories
 /outputDir/
@@ -45,5 +45,5 @@ kubectl
 kubectl.sha256
 k8s/.secrets.yaml
 
-gix-server
+/gix-server
 trace.out
