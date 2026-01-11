@@ -21,7 +21,7 @@ func (s *RatesDRPCServer) StreamRates(req *pb.StreamRatesRequest, stream pb.DRPC
 	ctx := stream.Context()
 	log.Println("New dRPC stream client connected")
 	pubsub := s.Cache.Subscribe(ctx, "rates_updates")
-	defer pubsub.Close()
+	defer func() { _ = pubsub.Close() }()
 
 	ch := pubsub.Channel()
 
@@ -37,18 +37,8 @@ func (s *RatesDRPCServer) StreamRates(req *pb.StreamRatesRequest, stream pb.DRPC
 				continue
 			}
 
-			// Filter by requested currencies if any
-			if len(req.Currencies) > 0 {
-				found := false
-				for _, c := range req.Currencies {
-					if c == rate.Currency {
-						found = true
-						break
-					}
-				}
-				if !found {
-					continue
-				}
+			if !s.shouldSendRate(req, &rate) {
+				continue
 			}
 
 			if err := stream.Send(&rate); err != nil {
@@ -56,4 +46,17 @@ func (s *RatesDRPCServer) StreamRates(req *pb.StreamRatesRequest, stream pb.DRPC
 			}
 		}
 	}
+}
+
+// shouldSendRate checks if the rate update matches the client's requested currencies.
+func (s *RatesDRPCServer) shouldSendRate(req *pb.StreamRatesRequest, rate *pb.RateResponse) bool {
+	if len(req.Currencies) == 0 {
+		return true
+	}
+	for _, c := range req.Currencies {
+		if c == rate.Currency {
+			return true
+		}
+	}
+	return false
 }
