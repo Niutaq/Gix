@@ -46,3 +46,4 @@ kubectl.sha256
 k8s/.secrets.yaml
 
 gix-server
+trace.out

@@ -3,11 +3,11 @@ version: '3'
 dotenv: ['.env']
 
 vars:
-  ENTRY_POINT: ./cmd/gix/main.go
-  SERVER_ENTRY: ./cmd/gix-server/main.go
+  ENTRY_POINT: ./cmd/gix
+  SERVER_ENTRY: ./cmd/gix-server
   APP_NAME: Gix
   ICON: appicon2.png
-  LOCAL_DB_URL: "postgres://gixuser:{{.DB_PASS}}@localhost:5432/gix_rates?sslmode=disable"
+  LOCAL_DB_URL: "postgres://gixuser:{{.POSTGRES_PASSWORD}}@localhost:5432/gix_rates?sslmode=disable"
   LOCAL_REDIS_URL: "redis://localhost:6379/0"
   API_URL: "http://165.227.246.100:8080"
   PROTO_FILE: api/proto/v1/rates.proto

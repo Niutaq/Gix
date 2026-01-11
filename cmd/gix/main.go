@@ -130,6 +130,9 @@ func run(window *app.Window, config utilities.AppConfig) error {
 
 	log.Println("Application started.")
 
+	// Start dRPC client
+	go startDRPCStream(window, state, config.APICantorsURL)
+
 	for {
 		switch e := window.Event().(type) {
 		case app.DestroyEvent:
