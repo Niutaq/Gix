@@ -68,7 +68,7 @@ func fetchIPLocation() (float64, float64, error) {
 
 	// Use HTTP because the free tier of ip-api.com does not support SSL (HTTPS).
 	// SonarQube: Allowing clear-text is safe here as no sensitive data is transmitted.
-	resp, err := client.Get("http://ip-api.com/json/")
+	resp, err := client.Get("http://ip-api.com/json/") //NOSONAR
 	if err != nil {
 		return 0, 0, err
 	}
