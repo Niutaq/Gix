@@ -13,7 +13,7 @@ import (
 // RatesDRPCServer implements the dRPC RatesService
 type RatesDRPCServer struct {
 	pb.DRPCRatesServiceServer
-	Cache *redis.Client
+	Cache redis.UniversalClient
 }
 
 // StreamRates streams real-time rate updates to the dRPC client, filtering by requested currencies if specified.

@@ -25,6 +25,10 @@ import (
 	"storj.io/drpc/drpcmux"
 	"storj.io/drpc/drpcserver"
 
+	redistrace "github.com/DataDog/dd-trace-go/contrib/redis/go-redis.v9/v2"
+	gintrace "gopkg.in/DataDog/dd-trace-go.v1/contrib/gin-gonic/gin"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+
 	"github.com/Niutaq/Gix/docs"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -40,7 +44,7 @@ const (
 // AppState struct holds all app-wide components like DB pools
 type AppState struct {
 	DB    *pgxpool.Pool
-	Cache *redis.Client
+	Cache redis.UniversalClient
 }
 
 // CantorInfo - an internal struct to hold data from the 'cantors' table
@@ -99,6 +103,10 @@ type processedRates struct {
 
 // main initializes the application by connecting to the database and Redis, setting up routes, and starting the HTTP server.
 func main() {
+	// Start DataDog tracer
+	tracer.Start(tracer.WithService("gix-server"))
+	defer tracer.Stop()
+
 	log.Println("Launching Gix server...")
 
 	if envHost := os.Getenv("SWAGGER_HOST"); envHost != "" {
@@ -158,6 +166,9 @@ func main() {
 	go startBackgroundHarvester(appState)
 
 	r := gin.Default()
+
+	// DataDog Middleware
+	r.Use(gintrace.Middleware("gix-server"))
 
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -306,7 +317,7 @@ func parseRateParams(c *gin.Context) (int, string, error) {
 }
 
 // respondFromCache - a helper function to respond from cache if available
-func respondFromCache(c *gin.Context, cache *redis.Client, key string) bool {
+func respondFromCache(c *gin.Context, cache redis.UniversalClient, key string) bool {
 	if cachedBytes, err := cache.Get(c.Request.Context(), key).Bytes(); err == nil {
 		var cachedRate pb.RateResponse
 		if err := proto.Unmarshal(cachedBytes, &cachedRate); err == nil {
@@ -388,12 +399,14 @@ func connectToDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error)
 }
 
 // connectToRedis - connecting to Redis
-func connectToRedis(ctx context.Context, redisURL string) (*redis.Client, error) {
+func connectToRedis(ctx context.Context, redisURL string) (redis.UniversalClient, error) {
 	opts, err := redis.ParseURL(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("can't parse the REDIS_URL: %w", err)
 	}
-	client := redis.NewClient(opts)
+	// Use redistrace.NewClient which automatically adds the tracing hook
+	client := redistrace.NewClient(opts)
+
 	pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if _, err := client.Ping(pingCtx).Result(); err != nil {
@@ -536,8 +549,8 @@ func buildHistoryQuery(currency string, params historyParams) (string, []interfa
 	var query string
 	var args []interface{}
 	args = append(args, currency, params.cutoff)
-			if params.cantorID > 0 {
-			query = `
+	if params.cantorID > 0 {
+		query = `
 				SELECT time_bucket('1 hour', time) AS bucket,
 					   AVG(buy_rate)::FLOAT,
 					   AVG(sell_rate)::FLOAT
@@ -545,9 +558,9 @@ func buildHistoryQuery(currency string, params historyParams) (string, []interfa
 				WHERE currency = $1 AND time > $2 AND cantor_id = $3
 				GROUP BY bucket
 				ORDER BY bucket ASC`
-			args = append(args, params.cantorID)
-		} else {
-			query = `
+		args = append(args, params.cantorID)
+	} else {
+		query = `
 				SELECT time_bucket('1 hour', time) AS bucket,
 					   AVG(buy_rate)::FLOAT,
 					   AVG(sell_rate)::FLOAT
@@ -555,7 +568,7 @@ func buildHistoryQuery(currency string, params historyParams) (string, []interfa
 				WHERE currency = $1 AND time > $2
 				GROUP BY bucket
 				ORDER BY bucket ASC`
-		}
+	}
 	return query, args
 }
 
@@ -619,10 +632,25 @@ func harvest(app *AppState, currencies []string) {
 	log.Println("Background Harvest: Starting collection cycle...")
 	ctx := context.Background()
 
-	rows, err := app.DB.Query(ctx, "SELECT id, display_name, base_url, strategy, units FROM cantors")
+	cantors, err := fetchAllCantors(ctx, app.DB)
 	if err != nil {
 		log.Printf("Harvest Error (DB): %v", err)
 		return
+	}
+
+	for _, ci := range cantors {
+		for _, curr := range currencies {
+			processCantorCurrency(ctx, app, ci, curr)
+		}
+	}
+	log.Println("Background Harvest: Cycle completed.")
+}
+
+// fetchAllCantors retrieves all cantors from the database.
+func fetchAllCantors(ctx context.Context, db *pgxpool.Pool) ([]CantorInfo, error) {
+	rows, err := db.Query(ctx, "SELECT id, display_name, base_url, strategy, units FROM cantors")
+	if err != nil {
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -634,37 +662,45 @@ func harvest(app *AppState, currencies []string) {
 		}
 		cantors = append(cantors, ci)
 	}
+	return cantors, nil
+}
 
-	for _, ci := range cantors {
-		for _, curr := range currencies {
-			time.Sleep(500 * time.Millisecond)
+// processCantorCurrency handles scraping and saving data for a single cantor and currency.
+func processCantorCurrency(ctx context.Context, app *AppState, ci CantorInfo, curr string) {
+	time.Sleep(500 * time.Millisecond) // Throttling to be polite
 
-			_, rates, err := scrapeAndProcess(ci, ci.ID, curr)
-			if err != nil {
-				continue
-			}
-
-			if rates.Buy == 0 && rates.Sell == 0 {
-				continue
-			}
-
-			log.Printf("Harvesting: %s -> %s (%.4f / %.4f)", ci.DisplayName, curr, rates.Buy, rates.Sell)
-
-			saveToArchive(app.DB, ci.ID, curr, rates.Buy, rates.Sell)
-
-			cacheKey := fmt.Sprintf("rates:proto%d:%s", ci.ID, curr)
-			response := &pb.RateResponse{
-				BuyRate:   fmt.Sprintf("%.4f", rates.Buy),
-				SellRate:  fmt.Sprintf("%.4f", rates.Sell),
-				CantorId:  int32(ci.ID),
-				Currency:  curr,
-				FetchedAt: time.Now().Unix(),
-			}
-			if protoBytes, err := proto.Marshal(response); err == nil {
-				app.Cache.Set(ctx, cacheKey, protoBytes, 60*time.Second)
-				app.Cache.Publish(ctx, "rates_updates", protoBytes)
-			}
-		}
+	_, rates, err := scrapeAndProcess(ci, ci.ID, curr)
+	if err != nil {
+		return
 	}
-	log.Println("Background Harvest: Cycle completed.")
+
+	if rates.Buy == 0 && rates.Sell == 0 {
+		return
+	}
+
+	log.Printf("Harvesting: %s -> %s (%.4f / %.4f)", ci.DisplayName, curr, rates.Buy, rates.Sell)
+
+	saveToArchive(app.DB, ci.ID, curr, rates.Buy, rates.Sell)
+	updateCacheAndNotify(ctx, app, ci.ID, curr, rates)
+}
+
+// updateCacheAndNotify updates Redis cache and publishes the event via Pub/Sub.
+func updateCacheAndNotify(ctx context.Context, app *AppState, cantorID int, curr string, rates processedRates) {
+	cacheKey := fmt.Sprintf("rates:proto%d:%s", cantorID, curr)
+	response := &pb.RateResponse{
+		BuyRate:   fmt.Sprintf("%.4f", rates.Buy),
+		SellRate:  fmt.Sprintf("%.4f", rates.Sell),
+		CantorId:  int32(cantorID),
+		Currency:  curr,
+		FetchedAt: time.Now().Unix(),
+	}
+
+	protoBytes, err := proto.Marshal(response)
+	if err != nil {
+		log.Printf("Marshal Error: %v", err)
+		return
+	}
+
+	app.Cache.Set(ctx, cacheKey, protoBytes, 60*time.Second)
+	app.Cache.Publish(ctx, "rates_updates", protoBytes)
 }
