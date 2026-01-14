@@ -1,6 +1,7 @@
 package scrapers
 
 import (
+	// Standard libraries
 	"fmt"
 	"io"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	// External utilities
 	"github.com/PuerkitoBio/goquery"
 )
 
