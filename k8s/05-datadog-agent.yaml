@@ -3,14 +3,7 @@ kind: Namespace
 metadata:
   name: datadog-agent
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: datadog-secret
-  namespace: datadog-agent
-type: Opaque
-data:
-  api-key: Zjg2ZGIxYWE5Njc5OThmNDI4YzllYTQ2ZDdiYmRjOTE= # f86db1aa967998f428c9ea46d7bbdc91
+# kubectl create secret generic datadog-secret --from-literal=api-key=<API_KEY_...> -n datadog-agent
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -111,6 +104,7 @@ spec:
         volumeMounts:
           - name: dockersocket
             mountPath: /var/run/docker.sock
+            readOnly: true
           - name: procdir
             mountPath: /host/proc
             readOnly: true
