@@ -36,62 +36,67 @@ func startDRPCStream(window *app.Window, state *utilities.AppState, apiURL strin
 		stream, err := client.StreamRates(context.Background(), &pb.StreamRatesRequest{})
 		if err != nil {
 			log.Printf("dRPC stream error: %v. Retrying in 5s...", err)
-			err := drpcConn.Close()
-			if err != nil {
-				return
-			}
+			_ = drpcConn.Close()
 			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		log.Println("Connected to dRPC stream!")
+		processStreamUpdates(window, state, stream)
 
-		for {
-			rate, err := stream.Recv()
-			if err != nil {
-				log.Printf("dRPC receive error: %v", err)
-				break
-			}
-
-			// Filter: only update if the currency matches what the user is looking at
-			if rate.Currency != state.UI.Currency {
-				continue
-			}
-
-			// Update state
-			state.Vault.Mu.Lock()
-			var cantorName string
-			for name, info := range state.Cantors {
-				if info.ID == int(rate.CantorId) {
-					cantorName = name
-					break
-				}
-			}
-
-			if cantorName != "" {
-				entry, ok := state.Vault.Rates[cantorName]
-				if !ok {
-					entry = &utilities.CantorEntry{}
-					state.Vault.Rates[cantorName] = entry
-				}
-				entry.Rate.BuyRate = rate.BuyRate
-				entry.Rate.SellRate = rate.SellRate
-				entry.LoadedAt = time.Now()
-				// Clear any previous error
-				entry.Error = ""
-
-				// Force UI refresh
-				window.Invalidate()
-			}
-			state.Vault.Mu.Unlock()
-		}
-		err2 := drpcConn.Close()
-		if err2 != nil {
-			return
-		}
+		_ = drpcConn.Close()
 		time.Sleep(1 * time.Second)
 	}
 }
+
+// processStreamUpdates handles the message loop for the dRPC stream.
+func processStreamUpdates(window *app.Window, state *utilities.AppState, stream pb.DRPCRatesService_StreamRatesClient) {
+	for {
+		rate, err := stream.Recv()
+		if err != nil {
+			log.Printf("dRPC receive error: %v", err)
+			return
+		}
+
+		if rate.Currency != state.UI.Currency {
+			continue
+		}
+
+		updateStateWithRate(window, state, rate)
+	}
+}
+
+// updateStateWithRate safely updates the application state with a new rate and triggers a UI refresh.
+func updateStateWithRate(window *app.Window, state *utilities.AppState, rate *pb.RateResponse) {
+	state.Vault.Mu.Lock()
+	defer state.Vault.Mu.Unlock()
+
+	cantorName := ""
+	for name, info := range state.Cantors {
+		if info.ID == int(rate.CantorId) {
+			cantorName = name
+			break
+		}
+	}
+
+	if cantorName == "" {
+		return
+	}
+
+	entry, ok := state.Vault.Rates[cantorName]
+	if !ok {
+		entry = &utilities.CantorEntry{}
+		state.Vault.Rates[cantorName] = entry
+	}
+
+	entry.Rate.BuyRate = rate.BuyRate
+	entry.Rate.SellRate = rate.SellRate
+	entry.LoadedAt = time.Now()
+	entry.Error = ""
+
+	window.Invalidate()
+}
+
 
 // deriveDRPCTarget parses the given API URL, extracts the host, and appends a default port of 8081 for dRPC connections.
 func deriveDRPCTarget(apiURL string) string {
