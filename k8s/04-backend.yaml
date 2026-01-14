@@ -16,7 +16,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: gix-backend
-          image: niutaq/gix-backend:v1.1.0
+          image: niutaq/gix-backend:v1.2.1
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -42,6 +42,17 @@ spec:
                   key: REDIS_URL
             - name: SWAGGER_HOST
               value: "165.227.246.100:8080"
+            # DataDog Configuration
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: DD_SERVICE
+              value: "gix-backend"
+            - name: DD_ENV
+              value: "production"
+            - name: DD_VERSION
+              value: "v1.2.1"
           livenessProbe:
             httpGet:
               path: /healthz
