@@ -3,7 +3,8 @@ kind: Namespace
 metadata:
   name: datadog-agent
 ---
-# kubectl create secret generic datadog-secret --from-literal=api-key=<API_KEY_...> -n datadog-agent
+# NOTE: The 'datadog-secret' must be created manually!
+# Command: kubectl create secret generic datadog-secret --from-literal=api-key=<YOUR_KEY> -n datadog-agent
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -64,6 +65,13 @@ spec:
       - image: gcr.io/datadoghq/agent:7
         imagePullPolicy: Always
         name: datadog-agent
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+            ephemeral-storage: 500Mi
+          limits:
+            memory: 384Mi
         ports:
           - containerPort: 8125
             hostPort: 8125
@@ -85,6 +93,12 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: status.hostIP
+          # --- ERROR FIXES ---
+          - name: DD_CLUSTER_NAME
+            value: "gix-cluster"
+          - name: DD_IGNORE_AUTOCONF
+            value: "cilium"
+          # -------------------
           - name: DD_APM_ENABLED
             value: "true"
           - name: DD_APM_NON_LOCAL_TRAFFIC
