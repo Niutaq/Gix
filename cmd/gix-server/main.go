@@ -445,16 +445,11 @@ func initSchema(ctx context.Context, db *pgxpool.Pool) error {
 
 // runScrapeStrategy - a helper function to run the scrape strategy based on the cantor's strategy'
 func runScrapeStrategy(ci CantorInfo, currency string) (scrapers.ScrapeResult, error) {
-	switch ci.Strategy {
-	case "C1":
-		return scrapers.FetchC1(ci.BaseURL, currency)
-	case "C2":
-		return scrapers.FetchC2(ci.BaseURL, currency)
-	case "C3":
-		return scrapers.FetchC3(ci.BaseURL, currency)
-	default:
-		return scrapers.ScrapeResult{}, fmt.Errorf("unknown scrape strategy: %s", ci.Strategy)
+	scraper, err := scrapers.GetScraper(ci.Strategy)
+	if err != nil {
+		return scrapers.ScrapeResult{}, err
 	}
+	return scraper(ci.BaseURL, currency)
 }
 
 // processRates - a helper function to process the rates based on the cantor's units'

@@ -768,6 +768,20 @@ func handleCantorHover(window *app.Window, state *AppState, cantor *CantorInfo, 
 				address = "Gen. Okulickiego 1b, 37-450 Stalowa Wola"
 			case "exchange":
 				address = "Grottgera 20, 35-001 Rzeszów"
+			case "alex":
+				address = "Al. Tadeusza Rejtana 65, 35-310 Rzeszów"
+			case "grosz":
+				address = "Sławkowska 4, 31-014 Kraków"
+			case "centrum":
+				address = "Świdnicka 3, 50-064 Wrocław"
+			case "lider":
+				address = "Wolności 1, 41-800 Zabrze"
+			case "baks":
+				address = "Marszałkowska 85, 00-683 Warszawa"
+			case "waluciarz":
+				address = "Szewska 21, 31-009 Kraków"
+			case "joker":
+				address = "Piłsudskiego 34, 35-001 Rzeszów"
 			default:
 				address = GetTranslation(state.UI.Language, "location_unknown")
 			}
@@ -823,7 +837,7 @@ func renderCantorItem(gtx layout.Context, theme *material.Theme, state *AppState
 		return args.Cantor.Button.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			bgColor := color.NRGBA{R: 30, G: 30, B: 35, A: 150}
 			if args.IsSelected {
-				bgColor = color.NRGBA{R: 50, G: 50, B: 70, A: 255}
+				bgColor = color.NRGBA{R: 90, G: 65, B: 25, A: 255}
 			} else if args.Cantor.Button.Hovered() {
 				bgColor = color.NRGBA{R: 45, G: 45, B: 55, A: 200}
 			}
