@@ -25,6 +25,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"runtime/trace"
 	"time"
 
@@ -151,6 +152,12 @@ func run(window *app.Window, config utilities.AppConfig) error {
 				utilities.FetchAllRates(window, state, config)
 
 			default:
+			}
+
+			// Adjust scaling for Windows and Linux if UI is too small
+			if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
+				e.Metric.PxPerDp *= 1.5
+				e.Metric.PxPerSp *= 1.5
 			}
 
 			ops.Reset()
