@@ -538,8 +538,9 @@ func handleCantorResponse(resp *http.Response, err error) *CantorEntry {
 		}
 		return &CantorEntry{
 			Rate: ExchangeRates{
-				BuyRate:  pbRate.BuyRate,
-				SellRate: pbRate.SellRate,
+				BuyRate:   pbRate.BuyRate,
+				SellRate:  pbRate.SellRate,
+				Change24h: pbRate.Change24H,
 			},
 			LoadedAt: time.Now(),
 		}
@@ -737,7 +738,7 @@ func layoutCantorItem(
 	state.Vault.Mu.Unlock()
 
 	alpha := getAnimationAlpha(window, entry)
-	buyVal, sellVal, buyColor, sellColor := getCantorDisplayData(state, entry, cfg.BestBuy, cfg.BestSell)
+	buyVal, sellVal, buyColor, sellColor, change := getCantorDisplayData(state, entry, cfg.BestBuy, cfg.BestSell)
 	buyColor.A = alpha
 	sellColor.A = alpha
 
@@ -752,6 +753,7 @@ func layoutCantorItem(
 		SellVal:     sellVal,
 		BuyColor:    buyColor,
 		SellColor:   sellColor,
+		Change24h:   change,
 		IsSelected:  isSelected,
 	})
 }
@@ -828,6 +830,7 @@ type CantorItemArgs struct {
 	SellVal     string
 	BuyColor    color.NRGBA
 	SellColor   color.NRGBA
+	Change24h   float64
 	IsSelected  bool
 }
 
@@ -860,12 +863,12 @@ func renderCantorItem(gtx layout.Context, theme *material.Theme, state *AppState
 								return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										label := GetTranslation(state.UI.Language, "buy_col")
-										return layoutMarketValue(gtx, theme, label, args.BuyVal, args.BuyColor)
+										return layoutMarketValue(gtx, theme, label, args.BuyVal, args.BuyColor, args.Change24h)
 									}),
 									layout.Rigid(layout.Spacer{Width: unit.Dp(30)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										label := GetTranslation(state.UI.Language, "sell_col")
-										return layoutMarketValue(gtx, theme, label, args.SellVal, args.SellColor)
+										return layoutMarketValue(gtx, theme, label, args.SellVal, args.SellColor, 0)
 									}),
 								)
 							}),
@@ -875,6 +878,48 @@ func renderCantorItem(gtx layout.Context, theme *material.Theme, state *AppState
 			)
 		})
 	})
+}
+
+// ... (getAnimationAlpha, getCantorDisplayData remain same)
+
+// layoutMarketValue lays out a market value displaying a label and its corresponding value with customizable text color.
+func layoutMarketValue(
+	gtx layout.Context, theme *material.Theme,
+	label, value string, txtColor color.NRGBA, change float64) layout.Dimensions {
+	return layout.Flex{Axis: layout.Vertical, Alignment: layout.End}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Caption(theme, label)
+			l.Color = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
+			l.TextSize = unit.Sp(12)
+			return l.Layout(gtx)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Baseline}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					v := material.Body2(theme, value)
+					v.Color = txtColor
+					v.TextSize = unit.Sp(18)
+					v.Font.Weight = font.Bold
+					return v.Layout(gtx)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					if change == 0 {
+						return layout.Dimensions{}
+					}
+					col := AppColors.Success
+					txt := fmt.Sprintf(" +%.2f%%", change)
+					if change < 0 {
+						col = AppColors.Error
+						txt = fmt.Sprintf(" %.2f%%", change)
+					}
+					c := material.Caption(theme, txt)
+					c.Color = col
+					c.TextSize = unit.Sp(10)
+					return layout.Inset{Left: unit.Dp(4)}.Layout(gtx, c.Layout)
+				}),
+			)
+		}),
+	)
 }
 
 // getAnimationAlpha calculates an alpha value for animations, based on the entry's load time, with an ease-out effect.
@@ -896,15 +941,15 @@ func getAnimationAlpha(window *app.Window, entry *CantorEntry) uint8 {
 
 // getCantorDisplayData generates display values for buy and sell rates along with their respective colors based on conditions.
 func getCantorDisplayData(
-	state *AppState, entry *CantorEntry, bestBuy, bestSell float64) (string, string, color.NRGBA, color.NRGBA) {
+	state *AppState, entry *CantorEntry, bestBuy, bestSell float64) (string, string, color.NRGBA, color.NRGBA, float64) {
 	defColor := color.NRGBA{R: 150, G: 150, B: 160, A: 255}
 	if entry == nil {
-		return "---", "---", defColor, defColor
+		return "---", "---", defColor, defColor, 0
 	}
 
 	if entry.Error != "" {
 		errTxt := GetTranslation(state.UI.Language, "no_rate_label")
-		return errTxt, errTxt, AppColors.Error, AppColors.Error
+		return errTxt, errTxt, AppColors.Error, AppColors.Error, 0
 	}
 
 	buyVal := entry.Rate.BuyRate + " zł"
@@ -922,28 +967,7 @@ func getCantorDisplayData(
 		sellColor = AppColors.Accent1
 	}
 
-	return buyVal, sellVal, buyColor, sellColor
-}
-
-// layoutMarketValue lays out a market value displaying a label and its corresponding value with customizable text color.
-func layoutMarketValue(
-	gtx layout.Context, theme *material.Theme,
-	label, value string, txtColor color.NRGBA) layout.Dimensions {
-	return layout.Flex{Axis: layout.Vertical, Alignment: layout.End}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Caption(theme, label)
-			l.Color = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
-			l.TextSize = unit.Sp(12)
-			return l.Layout(gtx)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			v := material.Body2(theme, value)
-			v.Color = txtColor
-			v.TextSize = unit.Sp(18)
-			v.Font.Weight = font.Bold
-			return v.Layout(gtx)
-		}),
-	)
+	return buyVal, sellVal, buyColor, sellColor, entry.Rate.Change24h
 }
 
 // layoutHeader renders the application's header, including the market title, subtitle, and a language selection button.
