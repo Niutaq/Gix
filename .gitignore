@@ -47,3 +47,4 @@ k8s/.secrets.yaml
 
 /gix-server
 trace.out
+/pkg/scrapers/*_test*.go
