@@ -33,8 +33,9 @@ type HoverInfo struct {
 
 // ExchangeRates holds the buy and sell rates for a currency.
 type ExchangeRates struct {
-	BuyRate  string `json:"buyRate"`
-	SellRate string `json:"sellRate"`
+	BuyRate   string  `json:"buyRate"`
+	SellRate  string  `json:"sellRate"`
+	Change24h float64 `json:"change24h"`
 }
 
 // CantorEntry represents data fetched from a single cantor.

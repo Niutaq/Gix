@@ -28,6 +28,7 @@ type RateResponse struct {
 	CantorId      int32                  `protobuf:"varint,3,opt,name=cantorId,json=cantorID,proto3" json:"cantorId,omitempty"`
 	Currency      string                 `protobuf:"bytes,4,opt,name=currency,proto3" json:"currency,omitempty"`
 	FetchedAt     int64                  `protobuf:"varint,5,opt,name=fetchedAt,proto3" json:"fetchedAt,omitempty"`
+	Change24H     float64                `protobuf:"fixed64,6,opt,name=change24h,proto3" json:"change24h,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -93,6 +94,13 @@ func (x *RateResponse) GetCurrency() string {
 func (x *RateResponse) GetFetchedAt() int64 {
 	if x != nil {
 		return x.FetchedAt
+	}
+	return 0
+}
+
+func (x *RateResponse) GetChange24H() float64 {
+	if x != nil {
+		return x.Change24H
 	}
 	return 0
 }
@@ -257,13 +265,14 @@ var File_api_proto_v1_rates_proto protoreflect.FileDescriptor
 
 const file_api_proto_v1_rates_proto_rawDesc = "" +
 	"\n" +
-	"\x18api/proto/v1/rates.proto\x12\x02v1\"\x9a\x01\n" +
+	"\x18api/proto/v1/rates.proto\x12\x02v1\"\xb8\x01\n" +
 	"\fRateResponse\x12\x18\n" +
 	"\abuyRate\x18\x01 \x01(\tR\abuyRate\x12\x1a\n" +
 	"\bsellRate\x18\x02 \x01(\tR\bsellRate\x12\x1a\n" +
 	"\bcantorId\x18\x03 \x01(\x05R\bcantorID\x12\x1a\n" +
 	"\bcurrency\x18\x04 \x01(\tR\bcurrency\x12\x1c\n" +
-	"\tfetchedAt\x18\x05 \x01(\x03R\tfetchedAt\"X\n" +
+	"\tfetchedAt\x18\x05 \x01(\x03R\tfetchedAt\x12\x1c\n" +
+	"\tchange24h\x18\x06 \x01(\x01R\tchange24h\"X\n" +
 	"\fHistoryPoint\x12\x12\n" +
 	"\x04time\x18\x01 \x01(\x03R\x04time\x12\x18\n" +
 	"\abuyRate\x18\x02 \x01(\x01R\abuyRate\x12\x1a\n" +
