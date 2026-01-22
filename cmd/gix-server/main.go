@@ -282,7 +282,7 @@ func handleGetRates(app *AppState) gin.HandlerFunc {
 			return
 		}
 
-		response, rates, err := scrapeAndProcess(cantorInfo, cantorID, currency)
+		response, rates, err := scrapeAndProcess(app, cantorInfo, cantorID, currency)
 		if err != nil {
 			log.Printf("Processing Error (%s): %v", cantorInfo.Strategy, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -352,7 +352,7 @@ func handleDBError(c *gin.Context, err error) {
 }
 
 // scrapeAndProcess - a helper function to scrape and process the rates
-func scrapeAndProcess(ci CantorInfo, id int, currency string) (*pb.RateResponse, processedRates, error) {
+func scrapeAndProcess(app *AppState, ci CantorInfo, id int, currency string) (*pb.RateResponse, processedRates, error) {
 	scrapeResult, err := runScrapeStrategy(ci, currency)
 	if err != nil {
 		return nil, processedRates{}, err
@@ -371,7 +371,25 @@ func scrapeAndProcess(ci CantorInfo, id int, currency string) (*pb.RateResponse,
 		FetchedAt: time.Now().Unix(),
 	}
 
+	// Calculate change from the previous reading
+	if prevBuy, err := getPreviousRate(app.DB, id, currency); err == nil && prevBuy > 0 {
+		change := ((rates.Buy - prevBuy) / prevBuy) * 100
+		response.Change24H = change
+	}
+
 	return response, rates, nil
+}
+
+// getPreviousRate retrieves the previous buy rate (the one before the current latest).
+func getPreviousRate(db *pgxpool.Pool, id int, currency string) (float64, error) {
+	var buyRate float64
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err := db.QueryRow(ctx,
+		"SELECT buy_rate FROM rates WHERE cantor_id=$1 AND currency=$2 ORDER BY time DESC LIMIT 1 OFFSET 1",
+		id, currency).Scan(&buyRate)
+	return buyRate, err
 }
 
 // cacheAndArchive - a helper function to cache and archive the response
@@ -445,16 +463,11 @@ func initSchema(ctx context.Context, db *pgxpool.Pool) error {
 
 // runScrapeStrategy - a helper function to run the scrape strategy based on the cantor's strategy'
 func runScrapeStrategy(ci CantorInfo, currency string) (scrapers.ScrapeResult, error) {
-	switch ci.Strategy {
-	case "C1":
-		return scrapers.FetchC1(ci.BaseURL, currency)
-	case "C2":
-		return scrapers.FetchC2(ci.BaseURL, currency)
-	case "C3":
-		return scrapers.FetchC3(ci.BaseURL, currency)
-	default:
-		return scrapers.ScrapeResult{}, fmt.Errorf("unknown scrape strategy: %s", ci.Strategy)
+	scraper, err := scrapers.GetScraper(ci.Strategy)
+	if err != nil {
+		return scrapers.ScrapeResult{}, err
 	}
+	return scraper(ci.BaseURL, currency)
 }
 
 // processRates - a helper function to process the rates based on the cantor's units'
@@ -669,7 +682,7 @@ func fetchAllCantors(ctx context.Context, db *pgxpool.Pool) ([]CantorInfo, error
 func processCantorCurrency(ctx context.Context, app *AppState, ci CantorInfo, curr string) {
 	time.Sleep(500 * time.Millisecond) // Throttling to be polite
 
-	_, rates, err := scrapeAndProcess(ci, ci.ID, curr)
+	_, rates, err := scrapeAndProcess(app, ci, ci.ID, curr)
 	if err != nil {
 		return
 	}

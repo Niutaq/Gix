@@ -10,6 +10,7 @@ message RateResponse {
   int32 cantorId = 3 [json_name = "cantorID"];
   string currency = 4 [json_name = "currency"];
   int64 fetchedAt = 5 [json_name = "fetchedAt"];
+  double change24h = 6 [json_name = "change24h"];
 
 }
 

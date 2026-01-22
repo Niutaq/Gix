@@ -34,7 +34,7 @@ var AppColors = struct {
 	Warning:     color.NRGBA{R: 255, G: 184, B: 0, A: 255},
 	Primary:     color.NRGBA{R: 0, G: 125, B: 255, A: 255},
 	Secondary:   color.NRGBA{R: 110, G: 115, B: 125, A: 255},
-	Light:       color.NRGBA{R: 200, G: 180, B: 250, A: 255},
+	Light:       color.NRGBA{R: 20, G: 18, B: 25, A: 255},
 	Dark:        color.NRGBA{R: 0, G: 0, B: 0, A: 255},
 	Accent1:     color.NRGBA{R: 255, G: 184, B: 0, A: 255},
 	Accent2:     color.NRGBA{R: 255, G: 184, B: 0, A: 255},
