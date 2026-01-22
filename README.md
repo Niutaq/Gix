@@ -1,3 +1,5 @@
+<div align="center">
+    
 <img src="appicon2.png" alt="GIX Logo" width="192"/>
 
 # GIX
@@ -11,6 +13,7 @@
 [![SonarQube Cloud](https://sonarcloud.io/images/project_badges/sonarcloud-dark.svg)](https://sonarcloud.io/summary/new_code?id=Niutaq_Gix)
 
 ---
+</div>
 
 ## Architecture
 
