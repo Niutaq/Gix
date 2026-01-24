@@ -151,7 +151,7 @@ func main() {
 			log.Fatalf("failed to listen for dRPC: %v", err)
 		}
 		mux := drpcmux.New()
-		err = pb.DRPCRegisterRatesService(mux, &RatesDRPCServer{Cache: rdb})
+		err = pb.DRPCRegisterRatesService(mux, &RatesDRPCServer{Cache: rdb, DB: dbpool})
 		if err != nil {
 			log.Fatalf("failed to register dRPC service: %v", err)
 		}
@@ -371,7 +371,7 @@ func scrapeAndProcess(app *AppState, ci CantorInfo, id int, currency string) (*p
 		FetchedAt: time.Now().Unix(),
 	}
 
-	// Calculate change from the previous reading
+	// Calculate change from 24h ago
 	if prevBuy, err := getPreviousRate(app.DB, id, currency); err == nil && prevBuy > 0 {
 		change := ((rates.Buy - prevBuy) / prevBuy) * 100
 		response.Change24H = change
@@ -380,14 +380,14 @@ func scrapeAndProcess(app *AppState, ci CantorInfo, id int, currency string) (*p
 	return response, rates, nil
 }
 
-// getPreviousRate retrieves the previous buy rate (the one before the current latest).
+// getPreviousRate retrieves the rate from approximately 24 hours ago.
 func getPreviousRate(db *pgxpool.Pool, id int, currency string) (float64, error) {
 	var buyRate float64
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	err := db.QueryRow(ctx,
-		"SELECT buy_rate FROM rates WHERE cantor_id=$1 AND currency=$2 ORDER BY time DESC LIMIT 1 OFFSET 1",
+		"SELECT buy_rate FROM rates WHERE cantor_id=$1 AND currency=$2 AND time <= NOW() - INTERVAL '24 hours' ORDER BY time DESC LIMIT 1",
 		id, currency).Scan(&buyRate)
 	return buyRate, err
 }

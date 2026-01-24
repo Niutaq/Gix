@@ -24,6 +24,7 @@
     "locate_button": "Helymeghatározás",
     "buy_col": "Vétel",
     "sell_col": "Eladás",
+    "spread_col": "Árrés",
     "ai_title": "Elemzés",
     "ai_subtitle": "Trend előrejelzések",
     "ai_chart_placeholder": "[ GRAFIKON ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Nyelv",
     "notch_lang_desc": "Nyelv módosítása",
     "notch_loc_title": "Helyszűrő",
-    "notch_loc_desc": "Szűrés távolság szerint"
-  ,"chart_7d_ago": "-7 Nap"}
+    "notch_loc_desc": "Szűrés távolság szerint",
+    "chart_7d_ago": "-7 Nap",
+    "status_live_desc": "Kapcsolódva. Élő adatok.",
+    "status_offline_desc": "Nincs kapcsolat. Gyorsítótárazott adatok."
+}

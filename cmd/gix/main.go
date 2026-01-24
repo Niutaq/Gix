@@ -74,27 +74,69 @@ func main() {
 
 // run starts the application event loop, handling window events, UI rendering, and asynchronous data loading.
 func run(window *app.Window, config utilities.AppConfig) error {
+	cleanupTrace := setupTrace()
+	defer cleanupTrace()
+
+	state, theme, cantorChan := setupApplication(window, config)
+
+	// Start dRPC client
+	go utilities.StartDRPCStream(window, state, config.APICantorsURL)
+
+	var ops op.Ops
+	for {
+		switch e := window.Event().(type) {
+		case app.DestroyEvent:
+			return e.Err
+		case app.FrameEvent:
+			handleFrame(window, &ops, e, state, config, cantorChan, theme)
+		}
+	}
+}
+
+// setupTrace sets up tracing for the application, returning a function to stop it.
+func setupTrace() func() {
 	fileTrace, err := os.Create("trace.out")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func(fileTrace *os.File) {
-		err := fileTrace.Close()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}(fileTrace)
-
 	if err := trace.Start(fileTrace); err != nil {
 		log.Fatal(err)
 	}
-	defer trace.Stop()
+	return func() {
+		trace.Stop()
+		if err := fileTrace.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}
+}
 
-	var ops op.Ops
-
+// setupApplication sets up the application state and theme, loading cantors asynchronously, and returns the theme and application state.
+func setupApplication(window *app.Window, config utilities.AppConfig) (*utilities.AppState, *material.Theme, chan []utilities.ApiCantorResponse) {
 	utilities.InitTranslations()
 
-	state := &utilities.AppState{
+	state := initializeAppState()
+	utilities.LoadCache(state)
+	cantorChan := make(chan []utilities.ApiCantorResponse, 1)
+	loadCantorsAsync(window, cantorChan, config)
+
+	fonts, err := utilities.LoadFontCollection()
+	if err != nil {
+		log.Printf("Font load failed: %v", err)
+	} else {
+		log.Println("Font collection loaded successfully.")
+	}
+
+	theme := material.NewTheme()
+	theme.Shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(fonts))
+	theme.FingerSize = 48
+
+	log.Println("Application started.")
+	return state, theme, cantorChan
+}
+
+// initializeAppState initializes the application state with default values.
+func initializeAppState() *utilities.AppState {
+	return &utilities.AppState{
 		Vault:   &utilities.CantorVault{},
 		Cantors: make(map[string]*utilities.CantorInfo),
 		UI: utilities.UIState{
@@ -115,58 +157,44 @@ func run(window *app.Window, config utilities.AppConfig) error {
 			ChartModeButtons:      make([]widget.Clickable, 2),
 		},
 	}
-	cantorChan := make(chan []utilities.ApiCantorResponse, 1)
-	loadCantorsAsync(window, cantorChan, config)
+}
 
-	fonts, err := utilities.LoadFontCollection()
-	if err != nil {
-		log.Printf("Font load failed: %v", err)
-	} else {
-		log.Println("Font collection loaded successfully.")
+// handleFrame processes the current frame event by updating state, adjusting scaling, and rendering the UI.
+func handleFrame(window *app.Window, ops *op.Ops, e app.FrameEvent, state *utilities.AppState, config utilities.AppConfig, cantorChan chan []utilities.ApiCantorResponse, theme *material.Theme) {
+	updateCantors(window, state, config, cantorChan)
+
+	// Adjust scaling for Windows and Linux if UI is too small
+	if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
+		e.Metric.PxPerDp *= 1.5
+		e.Metric.PxPerSp *= 1.5
 	}
 
-	theme := material.NewTheme()
-	theme.Shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(fonts))
-	theme.FingerSize = 48
+	ops.Reset()
+	gtx := app.NewContext(ops, e)
 
-	log.Println("Application started.")
+	utilities.LayoutUI(gtx, window, theme, state, config)
 
-	// Start dRPC client
-	go startDRPCStream(window, state, config.APICantorsURL)
+	e.Frame(gtx.Ops)
+}
 
-	for {
-		switch e := window.Event().(type) {
-		case app.DestroyEvent:
-			return e.Err
-		case app.FrameEvent:
-			select {
-			case list := <-cantorChan:
-				for _, c := range list {
-					state.Cantors[c.Name] = &utilities.CantorInfo{
-						ID:          c.ID,
-						DisplayName: c.DisplayName,
-						Latitude:    c.Latitude,
-						Longitude:   c.Longitude,
-					}
-				}
-				utilities.FetchAllRates(window, state, config)
-
-			default:
+// updateCantors updates the list of cantors from the provided channel, if any.
+func updateCantors(window *app.Window, state *utilities.AppState, config utilities.AppConfig, cantorChan chan []utilities.ApiCantorResponse) {
+	select {
+	case list := <-cantorChan:
+		state.CantorsMu.Lock()
+		for _, c := range list {
+			state.Cantors[c.Name] = &utilities.CantorInfo{
+				ID:          c.ID,
+				DisplayName: c.DisplayName,
+				Latitude:    c.Latitude,
+				Longitude:   c.Longitude,
 			}
-
-			// Adjust scaling for Windows and Linux if UI is too small
-			if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
-				e.Metric.PxPerDp *= 1.5
-				e.Metric.PxPerSp *= 1.5
-			}
-
-			ops.Reset()
-			gtx := app.NewContext(&ops, e)
-
-			utilities.LayoutUI(gtx, window, theme, state, config)
-
-			e.Frame(gtx.Ops)
 		}
+		state.CantorsMu.Unlock()
+		utilities.SaveCache(state)
+		utilities.FetchAllRates(window, state, config)
+
+	default:
 	}
 }
 

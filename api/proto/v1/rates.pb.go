@@ -217,6 +217,94 @@ func (x *HistoryResponse) GetCurrency() string {
 	return ""
 }
 
+type RateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Currency      string                 `protobuf:"bytes,1,opt,name=currency,proto3" json:"currency,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RateRequest) Reset() {
+	*x = RateRequest{}
+	mi := &file_api_proto_v1_rates_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RateRequest) ProtoMessage() {}
+
+func (x *RateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_rates_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RateRequest.ProtoReflect.Descriptor instead.
+func (*RateRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_rates_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RateRequest) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+type RateListResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Results       []*RateResponse        `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RateListResponse) Reset() {
+	*x = RateListResponse{}
+	mi := &file_api_proto_v1_rates_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RateListResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RateListResponse) ProtoMessage() {}
+
+func (x *RateListResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_rates_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RateListResponse.ProtoReflect.Descriptor instead.
+func (*RateListResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_rates_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *RateListResponse) GetResults() []*RateResponse {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
 type StreamRatesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Currencies    []string               `protobuf:"bytes,1,rep,name=currencies,proto3" json:"currencies,omitempty"`
@@ -226,7 +314,7 @@ type StreamRatesRequest struct {
 
 func (x *StreamRatesRequest) Reset() {
 	*x = StreamRatesRequest{}
-	mi := &file_api_proto_v1_rates_proto_msgTypes[3]
+	mi := &file_api_proto_v1_rates_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -238,7 +326,7 @@ func (x *StreamRatesRequest) String() string {
 func (*StreamRatesRequest) ProtoMessage() {}
 
 func (x *StreamRatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_rates_proto_msgTypes[3]
+	mi := &file_api_proto_v1_rates_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -251,7 +339,7 @@ func (x *StreamRatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamRatesRequest.ProtoReflect.Descriptor instead.
 func (*StreamRatesRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_rates_proto_rawDescGZIP(), []int{3}
+	return file_api_proto_v1_rates_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StreamRatesRequest) GetCurrencies() []string {
@@ -279,13 +367,18 @@ const file_api_proto_v1_rates_proto_rawDesc = "" +
 	"\bsellRate\x18\x03 \x01(\x01R\bsellRate\"W\n" +
 	"\x0fHistoryResponse\x12(\n" +
 	"\x06points\x18\x01 \x03(\v2\x10.v1.HistoryPointR\x06points\x12\x1a\n" +
-	"\bcurrency\x18\x02 \x01(\tR\bcurrency\"4\n" +
+	"\bcurrency\x18\x02 \x01(\tR\bcurrency\")\n" +
+	"\vRateRequest\x12\x1a\n" +
+	"\bcurrency\x18\x01 \x01(\tR\bcurrency\">\n" +
+	"\x10RateListResponse\x12*\n" +
+	"\aresults\x18\x01 \x03(\v2\x10.v1.RateResponseR\aresults\"4\n" +
 	"\x12StreamRatesRequest\x12\x1e\n" +
 	"\n" +
 	"currencies\x18\x01 \x03(\tR\n" +
-	"currencies2I\n" +
+	"currencies2\x7f\n" +
 	"\fRatesService\x129\n" +
-	"\vStreamRates\x12\x16.v1.StreamRatesRequest\x1a\x10.v1.RateResponse0\x01B$Z\"github.com/Niutaq/Gix/api/proto/v1b\x06proto3"
+	"\vStreamRates\x12\x16.v1.StreamRatesRequest\x1a\x10.v1.RateResponse0\x01\x124\n" +
+	"\vGetAllRates\x12\x0f.v1.RateRequest\x1a\x14.v1.RateListResponseB$Z\"github.com/Niutaq/Gix/api/proto/v1b\x06proto3"
 
 var (
 	file_api_proto_v1_rates_proto_rawDescOnce sync.Once
@@ -299,22 +392,27 @@ func file_api_proto_v1_rates_proto_rawDescGZIP() []byte {
 	return file_api_proto_v1_rates_proto_rawDescData
 }
 
-var file_api_proto_v1_rates_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_api_proto_v1_rates_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_api_proto_v1_rates_proto_goTypes = []any{
 	(*RateResponse)(nil),       // 0: v1.RateResponse
 	(*HistoryPoint)(nil),       // 1: v1.HistoryPoint
 	(*HistoryResponse)(nil),    // 2: v1.HistoryResponse
-	(*StreamRatesRequest)(nil), // 3: v1.StreamRatesRequest
+	(*RateRequest)(nil),        // 3: v1.RateRequest
+	(*RateListResponse)(nil),   // 4: v1.RateListResponse
+	(*StreamRatesRequest)(nil), // 5: v1.StreamRatesRequest
 }
 var file_api_proto_v1_rates_proto_depIdxs = []int32{
 	1, // 0: v1.HistoryResponse.points:type_name -> v1.HistoryPoint
-	3, // 1: v1.RatesService.StreamRates:input_type -> v1.StreamRatesRequest
-	0, // 2: v1.RatesService.StreamRates:output_type -> v1.RateResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0, // 1: v1.RateListResponse.results:type_name -> v1.RateResponse
+	5, // 2: v1.RatesService.StreamRates:input_type -> v1.StreamRatesRequest
+	3, // 3: v1.RatesService.GetAllRates:input_type -> v1.RateRequest
+	0, // 4: v1.RatesService.StreamRates:output_type -> v1.RateResponse
+	4, // 5: v1.RatesService.GetAllRates:output_type -> v1.RateListResponse
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_v1_rates_proto_init() }
@@ -328,7 +426,7 @@ func file_api_proto_v1_rates_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_v1_rates_proto_rawDesc), len(file_api_proto_v1_rates_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

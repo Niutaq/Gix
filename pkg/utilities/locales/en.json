@@ -24,6 +24,7 @@
   "locate_button": "Locate",
   "buy_col": "Buy",
   "sell_col": "Sell",
+  "spread_col": "Spread",
   "ai_title": "Analysis",
   "ai_subtitle": "Trend Predictions",
   "ai_chart_placeholder": "[ CHART ]",
@@ -37,6 +38,9 @@
   "notch_lang_desc": "Change app language",
   "notch_loc_title": "Location Filter",
   "notch_loc_desc": "Filter cantors by distance",
-  "chart_7d_ago": "-7 Days",
-  "chart_today": "Today"
-}
+      "chart_7d_ago": "-7 Days",
+      "chart_today": "Today",
+      "status_live_desc": "Connected. Data is updating in real-time.",
+      "status_offline_desc": "Disconnected. Showing cached data."
+  }
+  

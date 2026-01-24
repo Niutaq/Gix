@@ -24,6 +24,7 @@
     "locate_button": "Localizează",
     "buy_col": "Cump.",
     "sell_col": "Vânz.",
+    "spread_col": "Spread",
     "ai_title": "Analiză",
     "ai_subtitle": "Predicții tendințe",
     "ai_chart_placeholder": "[ GRAFIC ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Limbă",
     "notch_lang_desc": "Schimbă limba",
     "notch_loc_title": "Filtru locație",
-    "notch_loc_desc": "Filtrează după distanță"
-  ,"chart_7d_ago": "-7 Zile"}
+    "notch_loc_desc": "Filtrează după distanță",
+    "chart_7d_ago": "-7 Zile",
+    "status_live_desc": "Conectat. Date în timp real.",
+    "status_offline_desc": "Deconectat. Date din cache."
+}
