@@ -46,7 +46,11 @@ func SaveCache(state *AppState) {
 		log.Printf("Failed to create cache file at %s: %v", path, err)
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Error closing cache file (save): %v", err)
+		}
+	}()
 
 	encoder := json.NewEncoder(file)
 	if err := encoder.Encode(data); err != nil {
@@ -64,7 +68,11 @@ func LoadCache(state *AppState) {
 		log.Println("No cache found or failed to open:", err)
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Error closing cache file (load): %v", err)
+		}
+	}()
 
 	var data CachedData
 	if err := json.NewDecoder(file).Decode(&data); err != nil {

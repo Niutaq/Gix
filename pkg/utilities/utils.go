@@ -1483,7 +1483,7 @@ func layoutLoadingOverlay(gtx layout.Context, window *app.Window, theme *materia
 			path.MoveTo(f32.Point{X: 0, Y: startY})
 			
 			points := []f32.Point{
-				{0.1, 0.7}, {0.3, 0.8}, {0.4, 0.4}, {0.6, 0.5}, {0.7, 0.2}, {0.9, 0.3}, {1.0, 0.0},
+				{X: 0.1, Y: 0.7}, {X: 0.3, Y: 0.8}, {X: 0.4, Y: 0.4}, {X: 0.6, Y: 0.5}, {X: 0.7, Y: 0.2}, {X: 0.9, Y: 0.3}, {X: 1.0, Y: 0.0},
 			}
 			
 			prevX := float32(0)
