@@ -36,7 +36,9 @@ func StartDRPCStream(window *app.Window, state *AppState, apiURL string) {
 		if err != nil {
 			log.Printf("dRPC stream error: %v. Retrying in 5s...", err)
 			state.IsConnected.Store(false)
-			_ = drpcConn.Close()
+			if err := drpcConn.Close(); err != nil {
+				log.Printf("Error closing dRPC connection (stream error): %v", err)
+			}
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -46,7 +48,9 @@ func StartDRPCStream(window *app.Window, state *AppState, apiURL string) {
 		processStreamUpdates(window, state, stream)
 
 		state.IsConnected.Store(false)
-		_ = drpcConn.Close()
+		if err := drpcConn.Close(); err != nil {
+			log.Printf("Error closing dRPC connection (stream end): %v", err)
+		}
 		time.Sleep(1 * time.Second)
 	}
 }
@@ -60,10 +64,18 @@ func FetchAllRatesRPC(window *app.Window, state *AppState, apiURL string) {
 		log.Printf("FetchAllRatesRPC dial error: %v", err)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Printf("Error closing connection: %v", err)
+		}
+	}()
 
 	drpcConn := drpcconn.New(conn)
-	defer drpcConn.Close()
+	defer func() {
+		if err := drpcConn.Close(); err != nil {
+			log.Printf("Error closing dRPC connection: %v", err)
+		}
+	}()
 
 	client := pb.NewDRPCRatesServiceClient(drpcConn)
 
