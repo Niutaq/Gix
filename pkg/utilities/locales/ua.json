@@ -24,6 +24,7 @@
     "locate_button": "Знайти",
     "buy_col": "Купівля",
     "sell_col": "Продаж",
+    "spread_col": "Спред",
     "ai_title": "Аналіз",
     "ai_subtitle": "Прогноз трендів",
     "ai_chart_placeholder": "[ ГРАФІК ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Мова",
     "notch_lang_desc": "Змінити мову",
     "notch_loc_title": "Фільтр місця",
-    "notch_loc_desc": "Фільтрувати за відстанню"
-  ,"chart_7d_ago": "-7 Днів"}
+    "notch_loc_desc": "Фільтрувати за відстанню",
+    "chart_7d_ago": "-7 Днів",
+    "status_live_desc": "Підключено. Дані в реальному часі.",
+    "status_offline_desc": "Відключено. Кешовані дані."
+}

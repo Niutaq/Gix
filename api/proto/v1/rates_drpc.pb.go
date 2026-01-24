@@ -39,6 +39,7 @@ type DRPCRatesServiceClient interface {
 	DRPCConn() drpc.Conn
 
 	StreamRates(ctx context.Context, in *StreamRatesRequest) (DRPCRatesService_StreamRatesClient, error)
+	GetAllRates(ctx context.Context, in *RateRequest) (*RateListResponse, error)
 }
 
 type drpcRatesServiceClient struct {
@@ -91,8 +92,18 @@ func (x *drpcRatesService_StreamRatesClient) RecvMsg(m *RateResponse) error {
 	return x.MsgRecv(m, drpcEncoding_File_api_proto_v1_rates_proto{})
 }
 
+func (c *drpcRatesServiceClient) GetAllRates(ctx context.Context, in *RateRequest) (*RateListResponse, error) {
+	out := new(RateListResponse)
+	err := c.cc.Invoke(ctx, "/v1.RatesService/GetAllRates", drpcEncoding_File_api_proto_v1_rates_proto{}, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 type DRPCRatesServiceServer interface {
 	StreamRates(*StreamRatesRequest, DRPCRatesService_StreamRatesStream) error
+	GetAllRates(context.Context, *RateRequest) (*RateListResponse, error)
 }
 
 type DRPCRatesServiceUnimplementedServer struct{}
@@ -101,9 +112,13 @@ func (s *DRPCRatesServiceUnimplementedServer) StreamRates(*StreamRatesRequest, D
 	return drpcerr.WithCode(errors.New("Unimplemented"), drpcerr.Unimplemented)
 }
 
+func (s *DRPCRatesServiceUnimplementedServer) GetAllRates(context.Context, *RateRequest) (*RateListResponse, error) {
+	return nil, drpcerr.WithCode(errors.New("Unimplemented"), drpcerr.Unimplemented)
+}
+
 type DRPCRatesServiceDescription struct{}
 
-func (DRPCRatesServiceDescription) NumMethods() int { return 1 }
+func (DRPCRatesServiceDescription) NumMethods() int { return 2 }
 
 func (DRPCRatesServiceDescription) Method(n int) (string, drpc.Encoding, drpc.Receiver, interface{}, bool) {
 	switch n {
@@ -116,6 +131,15 @@ func (DRPCRatesServiceDescription) Method(n int) (string, drpc.Encoding, drpc.Re
 						&drpcRatesService_StreamRatesStream{in2.(drpc.Stream)},
 					)
 			}, DRPCRatesServiceServer.StreamRates, true
+	case 1:
+		return "/v1.RatesService/GetAllRates", drpcEncoding_File_api_proto_v1_rates_proto{},
+			func(srv interface{}, ctx context.Context, in1, in2 interface{}) (drpc.Message, error) {
+				return srv.(DRPCRatesServiceServer).
+					GetAllRates(
+						ctx,
+						in1.(*RateRequest),
+					)
+			}, DRPCRatesServiceServer.GetAllRates, true
 	default:
 		return "", nil, nil, nil, false
 	}
@@ -136,4 +160,20 @@ type drpcRatesService_StreamRatesStream struct {
 
 func (x *drpcRatesService_StreamRatesStream) Send(m *RateResponse) error {
 	return x.MsgSend(m, drpcEncoding_File_api_proto_v1_rates_proto{})
+}
+
+type DRPCRatesService_GetAllRatesStream interface {
+	drpc.Stream
+	SendAndClose(*RateListResponse) error
+}
+
+type drpcRatesService_GetAllRatesStream struct {
+	drpc.Stream
+}
+
+func (x *drpcRatesService_GetAllRatesStream) SendAndClose(m *RateListResponse) error {
+	if err := x.MsgSend(m, drpcEncoding_File_api_proto_v1_rates_proto{}); err != nil {
+		return err
+	}
+	return x.CloseSend()
 }

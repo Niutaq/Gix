@@ -85,13 +85,12 @@ func fetchNativeLocation() (float64, float64, error) {
 	C.fetchLocationBridge(20)
 
 	status := int(C.getStatus())
-	if status == 1 {
+	switch status {
+	case 1:
 		return float64(C.getLatitude()), float64(C.getLongitude()), nil
-	} else if status == 2 {
-		return 0, 0, fmt.Errorf("core location error: %v", C.GoString(C.getLastError()))
-	} else if status == 3 {
-		return 0, 0, errors.New("core location timeout")
+	case 2:
+		return 0, 0, errors.New(C.GoString(C.getLastError()))
+	default:
+		return 0, 0, fmt.Errorf("unknown location status: %d", status)
 	}
-
-	return 0, 0, fmt.Errorf("unknown location status: %d", status)
 }

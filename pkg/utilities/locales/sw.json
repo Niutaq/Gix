@@ -24,6 +24,7 @@
     "locate_button": "Hitta",
     "buy_col": "Köp",
     "sell_col": "Sälj",
+    "spread_col": "Spread",
     "ai_title": "Analys",
     "ai_subtitle": "Trendprognoser",
     "ai_chart_placeholder": "[ DIAGRAM ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Språk",
     "notch_lang_desc": "Ändra app-språk",
     "notch_loc_title": "Platsfilter",
-    "notch_loc_desc": "Filtrera efter avstånd"
-  ,"chart_7d_ago": "-7 Dagar"}
+    "notch_loc_desc": "Filtrera efter avstånd",
+    "chart_7d_ago": "-7 Dagar",
+    "status_live_desc": "Ansluten. Realtidsdata.",
+    "status_offline_desc": "Frånkopplad. Cachad data."
+}

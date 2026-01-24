@@ -23,11 +23,12 @@ var AppColors = struct {
 	Accent3     color.NRGBA
 	Accent4     color.NRGBA
 	Accent1Dark color.NRGBA
+	Spread      color.NRGBA
 }{
 	Background:  color.NRGBA{R: 20, G: 20, B: 20, A: 155},
 	Text:        color.NRGBA{R: 255, G: 255, B: 255, A: 255},
 	Error:       color.NRGBA{R: 225, G: 50, B: 50, A: 255},
-	Success:     color.NRGBA{R: 255, G: 250, B: 130, A: 255},
+	Success:     color.NRGBA{R: 76, G: 175, B: 80, A: 255},
 	Title:       color.NRGBA{R: 255, G: 184, B: 0, A: 255},
 	Button:      color.NRGBA{R: 100, G: 100, B: 100, A: 165},
 	Info:        color.NRGBA{R: 0, G: 190, B: 255, A: 255},
@@ -41,4 +42,5 @@ var AppColors = struct {
 	Accent3:     color.NRGBA{R: 255, G: 184, B: 0, A: 255},
 	Accent4:     color.NRGBA{R: 20, G: 20, B: 0, A: 255},
 	Accent1Dark: color.NRGBA{R: 180, G: 130, B: 0, A: 255},
+	Spread:      color.NRGBA{R: 255, G: 200, B: 0, A: 135},
 }
