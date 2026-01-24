@@ -81,6 +81,8 @@ func processChartEvents(gtx layout.Context, lc *LineChart, state *UIState) {
 				state.ChartHoverX = xev.Position.X
 			case pointer.Leave:
 				state.ChartHoverActive = false
+			default:
+				panic("unhandled default case")
 			}
 		}
 	}

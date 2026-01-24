@@ -544,71 +544,7 @@ func LayoutVerticalCurrencyBar(
 				list.Axis = layout.Vertical
 				return material.List(theme, list).Layout(gtx, len(state.UI.CurrencyOptions),
 					func(gtx layout.Context, i int) layout.Dimensions {
-						currency := state.UI.CurrencyOptions[i]
-						btn := &state.UI.CurrencyOptionButtons[i]
-						isSelected := state.UI.Currency == currency
-
-						if btn.Clicked(gtx) {
-							state.UI.Currency = currency
-							state.ChartAnimStart = time.Now()
-							FetchAllRates(window, state, config)
-							window.Invalidate()
-						}
-
-						return layout.Inset{Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								// Minimalist style
-								txtColor := color.NRGBA{R: 150, G: 150, B: 160, A: 255}
-								if isSelected {
-									txtColor = AppColors.Accent1
-								} else if btn.Hovered() {
-									txtColor = color.NRGBA{R: 200, G: 200, B: 210, A: 255}
-								}
-
-																	return layout.Stack{}.Layout(gtx,
-
-																		// Hover/Select Background (bardzo subtelne)
-
-																		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-
-																			shape := clip.UniformRRect(image.Rectangle{Max: gtx.Constraints.Min}, gtx.Dp(8))
-
-																			if isSelected {
-
-																				paint.FillShape(gtx.Ops, color.NRGBA{R: 255, G: 255, B: 255, A: 5}, shape.Op(gtx.Ops))
-
-																			} else if btn.Hovered() {
-
-																				paint.FillShape(gtx.Ops, color.NRGBA{R: 255, G: 255, B: 255, A: 2}, shape.Op(gtx.Ops))
-
-																			}
-
-																			return layout.Dimensions{Size: gtx.Constraints.Min}
-
-																		}),
-
-								
-									layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-										// Accent Bar (pionowa kreska)
-										if isSelected {
-											barRect := image.Rect(0, 12, 3, 38) // Stała wysokość paska dla estetyki
-											paint.FillShape(gtx.Ops, AppColors.Accent1, clip.UniformRRect(barRect, 1).Op(gtx.Ops))
-										}
-										
-										// Content
-										return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-											return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-												lbl := material.Body2(theme, currency)
-												lbl.Color = txtColor
-												lbl.Font.Weight = font.Bold
-												lbl.TextSize = unit.Sp(13) // Nieco większy tekst
-												return lbl.Layout(gtx)
-											})
-										})
-									}),
-								)
-							})
-						})
+						return layoutCurrencyItem(gtx, theme, state, window, config, i)
 					})
 			})
 		}),
@@ -620,6 +556,62 @@ func LayoutVerticalCurrencyBar(
 			})
 		}),
 	)
+}
+
+// layoutCurrencyItem renders a single currency selection button in the sidebar.
+func layoutCurrencyItem(gtx layout.Context, theme *material.Theme, state *AppState, window *app.Window, config AppConfig, index int) layout.Dimensions {
+	currency := state.UI.CurrencyOptions[index]
+	btn := &state.UI.CurrencyOptionButtons[index]
+	isSelected := state.UI.Currency == currency
+
+	if btn.Clicked(gtx) {
+		state.UI.Currency = currency
+		state.ChartAnimStart = time.Now()
+		FetchAllRates(window, state, config)
+		window.Invalidate()
+	}
+
+	return layout.Inset{Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			// Minimalist style
+			txtColor := color.NRGBA{R: 150, G: 150, B: 160, A: 255}
+			if isSelected {
+				txtColor = AppColors.Accent1
+			} else if btn.Hovered() {
+				txtColor = color.NRGBA{R: 200, G: 200, B: 210, A: 255}
+			}
+
+			return layout.Stack{}.Layout(gtx,
+				// Hover/Select Background
+				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+					shape := clip.UniformRRect(image.Rectangle{Max: gtx.Constraints.Min}, gtx.Dp(8))
+					if isSelected {
+						paint.FillShape(gtx.Ops, color.NRGBA{R: 255, G: 255, B: 255, A: 5}, shape.Op(gtx.Ops))
+					} else if btn.Hovered() {
+						paint.FillShape(gtx.Ops, color.NRGBA{R: 255, G: 255, B: 255, A: 2}, shape.Op(gtx.Ops))
+					}
+					return layout.Dimensions{Size: gtx.Constraints.Min}
+				}),
+				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+					// Accent Bar
+					if isSelected {
+						barRect := image.Rect(0, 12, 3, 38)
+						paint.FillShape(gtx.Ops, AppColors.Accent1, clip.UniformRRect(barRect, 1).Op(gtx.Ops))
+					}
+					// Content
+					return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							lbl := material.Body2(theme, currency)
+							lbl.Color = txtColor
+							lbl.Font.Weight = font.Bold
+							lbl.TextSize = unit.Sp(13)
+							return lbl.Layout(gtx)
+						})
+					})
+				}),
+			)
+		})
+	})
 }
 
 // parseRate converts a string representing a rate (e.g., "123,45 zł") to a float64, removing commas, "zł", and whitespace.
@@ -978,7 +970,6 @@ func getCantorDisplayData(
 // layoutHeader renders the application's header, including the market title, subtitle, and a language selection button.
 func layoutHeader(gtx layout.Context, window *app.Window,
 	theme *material.Theme, state *AppState) layout.Dimensions {
-	isMobile := state.UI.IsMobile
 
 	return layout.Inset{Bottom: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
@@ -986,19 +977,7 @@ func layoutHeader(gtx layout.Context, window *app.Window,
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					// Mobile Menu Button
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						if !isMobile {
-							return layout.Dimensions{}
-						}
-						if state.UI.MobileMenuBtn.Clicked(gtx) {
-							state.UI.MobileMenuOpen = !state.UI.MobileMenuOpen
-							window.Invalidate()
-						}
-						
-						return layout.Inset{Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							return state.UI.MobileMenuBtn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return DrawIconMenu(gtx, AppColors.Text)
-							})
-						})
+						return layoutMobileMenuButton(gtx, window, state)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -1012,42 +991,7 @@ func layoutHeader(gtx layout.Context, window *app.Window,
 									}),
 									layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										// Connection Status Dot
-										isConnected := state.IsConnected.Load()
-										t := float64(time.Now().UnixMilli()) / 500.0
-										alpha := (math.Sin(t) + 1.0) / 2.0
-
-										col := color.NRGBA{R: 100, G: 100, B: 110, A: 255} // Default Gray
-										statusTitle := "Offline"
-										statusDesc := GetTranslation(state.UI.Language, "status_offline_desc")
-
-										if isConnected {
-											col = AppColors.Success
-											col.A = uint8(150 + (105 * alpha))
-											statusTitle = "Live"
-											statusDesc = GetTranslation(state.UI.Language, "status_live_desc")
-											window.Invalidate()
-										}
-
-										// Status Tooltip logic
-										if state.UI.StatusClickable.Hovered() {
-											state.UI.HoverInfo = HoverInfo{
-												Active:   true,
-												Title:    statusTitle,
-												Subtitle: statusDesc,
-												Extra:    "dRPC",
-											}
-											window.Invalidate()
-										}
-
-										sz := gtx.Dp(8)
-										return layout.Inset{Top: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-											return state.UI.StatusClickable.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-												circle := clip.Ellipse{Max: image.Point{X: sz, Y: sz}}.Op(gtx.Ops)
-												paint.FillShape(gtx.Ops, col, circle)
-												return layout.Dimensions{Size: image.Point{X: sz, Y: sz}}
-											})
-										})
+										return layoutStatusIndicator(gtx, window, state)
 									}),
 								)
 							}),
@@ -1061,6 +1005,62 @@ func layoutHeader(gtx layout.Context, window *app.Window,
 				)
 			}),
 		)
+	})
+}
+
+// layoutMobileMenuButton renders the hamburger menu button for mobile layout.
+func layoutMobileMenuButton(gtx layout.Context, window *app.Window, state *AppState) layout.Dimensions {
+	if !state.UI.IsMobile {
+		return layout.Dimensions{}
+	}
+	if state.UI.MobileMenuBtn.Clicked(gtx) {
+		state.UI.MobileMenuOpen = !state.UI.MobileMenuOpen
+		window.Invalidate()
+	}
+
+	return layout.Inset{Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return state.UI.MobileMenuBtn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return DrawIconMenu(gtx, AppColors.Text)
+		})
+	})
+}
+
+// layoutStatusIndicator renders the connection status dot and handles its tooltip.
+func layoutStatusIndicator(gtx layout.Context, window *app.Window, state *AppState) layout.Dimensions {
+	isConnected := state.IsConnected.Load()
+	t := float64(time.Now().UnixMilli()) / 500.0
+	alpha := (math.Sin(t) + 1.0) / 2.0
+
+	col := color.NRGBA{R: 100, G: 100, B: 110, A: 255} // Default Gray
+	statusTitle := "Offline"
+	statusDesc := GetTranslation(state.UI.Language, "status_offline_desc")
+
+	if isConnected {
+		col = AppColors.Success
+		col.A = uint8(150 + (105 * alpha))
+		statusTitle = "Live"
+		statusDesc = GetTranslation(state.UI.Language, "status_live_desc")
+		window.Invalidate()
+	}
+
+	// Status Tooltip logic
+	if state.UI.StatusClickable.Hovered() {
+		state.UI.HoverInfo = HoverInfo{
+			Active:   true,
+			Title:    statusTitle,
+			Subtitle: statusDesc,
+			Extra:    "dRPC",
+		}
+		window.Invalidate()
+	}
+
+	sz := gtx.Dp(8)
+	return layout.Inset{Top: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return state.UI.StatusClickable.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			circle := clip.Ellipse{Max: image.Point{X: sz, Y: sz}}.Op(gtx.Ops)
+			paint.FillShape(gtx.Ops, col, circle)
+			return layout.Dimensions{Size: image.Point{X: sz, Y: sz}}
+		})
 	})
 }
 
