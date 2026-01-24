@@ -24,6 +24,7 @@
     "locate_button": "Localiser",
     "buy_col": "Achat",
     "sell_col": "Vente",
+    "spread_col": "Écart",
     "ai_title": "Analyse",
     "ai_subtitle": "Prévisions de tendances",
     "ai_chart_placeholder": "[ GRAPHIQUE ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Langue",
     "notch_lang_desc": "Changer de langue",
     "notch_loc_title": "Filtre de lieu",
-    "notch_loc_desc": "Filtrer par distance"
-  ,"chart_7d_ago": "-7 Jours"}
+    "notch_loc_desc": "Filtrer par distance",
+    "chart_7d_ago": "-7 Jours",
+    "status_live_desc": "Connecté. Données en temps réel.",
+    "status_offline_desc": "Déconnecté. Données en cache."
+}

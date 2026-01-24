@@ -24,6 +24,7 @@
     "locate_button": "Finn",
     "buy_col": "Kjøp",
     "sell_col": "Salg",
+    "spread_col": "Spread",
     "ai_title": "Analyse",
     "ai_subtitle": "Trendprognoser",
     "ai_chart_placeholder": "[ DIAGRAM ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Språk",
     "notch_lang_desc": "Bytt app-språk",
     "notch_loc_title": "Stedsfilter",
-    "notch_loc_desc": "Filtrer etter avstand"
-  ,"chart_7d_ago": "-7 Dager"}
+    "notch_loc_desc": "Filtrer etter avstand",
+    "chart_7d_ago": "-7 Dager",
+    "status_live_desc": "Tilkoblet. Sanntidsdata.",
+    "status_offline_desc": "Frakoblet. Bufrede data."
+}

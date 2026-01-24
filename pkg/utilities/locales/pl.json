@@ -24,6 +24,7 @@
   "locate_button": "Lokalizuj",
   "buy_col": "Skup",
   "sell_col": "Sprzedaż",
+  "spread_col": "Marża",
   "ai_title": "Analiza",
   "ai_subtitle": "Predykcje trendów",
   "ai_chart_placeholder": "[ WYKRES]",
@@ -38,6 +39,8 @@
     "notch_loc_title": "Filtr Lokalizacji",
     "notch_loc_desc": "Filtruj kantory po odległości",
     "chart_7d_ago": "-7 Dni",
-    "chart_today": "Dzisiaj"
+    "chart_today": "Dzisiaj",
+    "status_live_desc": "Połączono. Dane są aktualizowane na żywo.",
+    "status_offline_desc": "Brak połączenia. Widzisz dane z pamięci podręcznej."
   }
   

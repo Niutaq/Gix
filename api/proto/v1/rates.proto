@@ -27,10 +27,19 @@ message HistoryResponse {
 
 }
 
+message RateRequest {
+  string currency = 1;
+}
+
+message RateListResponse {
+  repeated RateResponse results = 1;
+}
+
 message StreamRatesRequest {
     repeated string currencies = 1;
 }
 
 service RatesService {
     rpc StreamRates(StreamRatesRequest) returns (stream RateResponse);
+    rpc GetAllRates(RateRequest) returns (RateListResponse);
 }

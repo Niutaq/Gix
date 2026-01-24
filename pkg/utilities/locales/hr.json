@@ -24,6 +24,7 @@
     "locate_button": "Lociraj",
     "buy_col": "Kupnja",
     "sell_col": "Prodaja",
+    "spread_col": "Raspon",
     "ai_title": "Analiza",
     "ai_subtitle": "Predviđanje trendova",
     "ai_chart_placeholder": "[ GRAFIKON ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Jezik",
     "notch_lang_desc": "Promijeni jezik",
     "notch_loc_title": "Filtar lokacije",
-    "notch_loc_desc": "Filtriraj po udaljenosti"
-  ,"chart_7d_ago": "-7 Dana"}
+    "notch_loc_desc": "Filtriraj po udaljenosti",
+    "chart_7d_ago": "-7 Dana",
+    "status_live_desc": "Povezano. Podaci u stvarnom vremenu.",
+    "status_offline_desc": "Izvan mreže. Podaci iz predmemorije."
+}

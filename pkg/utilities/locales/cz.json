@@ -24,6 +24,7 @@
     "locate_button": "Lokalizovat",
     "buy_col": "Nákup",
     "sell_col": "Prodej",
+    "spread_col": "Rozpětí",
     "ai_title": "Analýza",
     "ai_subtitle": "Předpověď trendů",
     "ai_chart_placeholder": "[ GRAF ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Jazyk",
     "notch_lang_desc": "Změnit jazyk",
     "notch_loc_title": "Filtr polohy",
-    "notch_loc_desc": "Filtrovat podle vzdálenosti"
-  ,"chart_7d_ago": "-7 Dní"}
+    "notch_loc_desc": "Filtrovat podle vzdálenosti",
+    "chart_7d_ago": "-7 Dní",
+    "status_live_desc": "Připojeno. Data v reálném čase.",
+    "status_offline_desc": "Odpojeno. Data z mezipaměti."
+}

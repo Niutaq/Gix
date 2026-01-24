@@ -24,6 +24,7 @@
     "locate_button": "Lokalisieren",
     "buy_col": "Kauf",
     "sell_col": "Verkauf",
+    "spread_col": "Spanne",
     "ai_title": "Analyse",
     "ai_subtitle": "Trendprognosen",
     "ai_chart_placeholder": "[ DIAGRAMM ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Sprache",
     "notch_lang_desc": "App-Sprache ändern",
     "notch_loc_title": "Standortfilter",
-    "notch_loc_desc": "Nach Entfernung filtern"
-  ,"chart_7d_ago": "-7 Tage"}
+    "notch_loc_desc": "Nach Entfernung filtern",
+    "chart_7d_ago": "-7 Tage",
+    "status_live_desc": "Verbunden. Echtzeit-Daten.",
+    "status_offline_desc": "Getrennt. Cache-Daten."
+}

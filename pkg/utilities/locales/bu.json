@@ -24,6 +24,7 @@
     "locate_button": "Локализирай",
     "buy_col": "Купува",
     "sell_col": "Продава",
+    "spread_col": "Спред",
     "ai_title": "Анализ",
     "ai_subtitle": "Прогнози за тенденции",
     "ai_chart_placeholder": "[ ГРАФИКА ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Език",
     "notch_lang_desc": "Смяна на езика",
     "notch_loc_title": "Филтър локация",
-    "notch_loc_desc": "Филтриране по разстояние"
-  ,"chart_7d_ago": "-7 Дни"}
+    "notch_loc_desc": "Филтриране по разстояние",
+    "chart_7d_ago": "-7 Дни",
+    "status_live_desc": "Свързан. Данни в реално време.",
+    "status_offline_desc": "Няма връзка. Кеширани данни."
+}

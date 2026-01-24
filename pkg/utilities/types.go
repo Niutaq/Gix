@@ -20,7 +20,7 @@ type CantorInfo struct {
 	Address     string
 	Latitude    float64
 	Longitude   float64
-	Button      widget.Clickable
+	Button      widget.Clickable `json:"-"`
 }
 
 // HoverInfo holds data for the dynamic notch display
@@ -62,6 +62,11 @@ type UIState struct {
 	ModalList           widget.List
 	ModalClose          widget.Clickable
 
+	MobileMenuOpen bool
+	MobileMenuBtn  widget.Clickable
+	MobileMenuBackdrop widget.Clickable
+	IsMobile           bool
+
 	CurrencyList widget.List
 	SearchEditor widget.Editor
 	SearchText   string
@@ -69,6 +74,8 @@ type UIState struct {
 	ChartMode        string             // "BUY" or "SELL"
 	ChartModeButtons []widget.Clickable // [0] -> Buy, [1] -> Sell
 	ChartHoverTag    int                // Unique tag for chart input events
+	ChartHoverX      float32
+	ChartHoverActive bool
 
 	UserLocation struct {
 		Latitude  float64
@@ -79,6 +86,7 @@ type UIState struct {
 	MaxDistance    float64
 	DistanceSlider widget.Float
 	LocateButton   widget.Clickable
+	StatusClickable widget.Clickable
 	HoverInfo      HoverInfo
 	NotchState     struct {
 		CurrentAlpha  float32
@@ -110,12 +118,14 @@ type Notification struct {
 // AppState holds the overall state of the application.
 type AppState struct {
 	Vault          *CantorVault
+	CantorsMu      sync.RWMutex
 	Cantors        map[string]*CantorInfo
 	History        *pb.HistoryResponse
 	ChartAnimStart time.Time // Tracks when the chart data was last updated for animation
 	LastFrameTime  time.Time
 	IsLoadingStart time.Time
 	IsLoading      atomic.Bool
+	IsConnected    atomic.Bool
 	Notifications  *Notification
 	UI             UIState
 }
