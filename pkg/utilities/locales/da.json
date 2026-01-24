@@ -24,6 +24,7 @@
     "locate_button": "Find",
     "buy_col": "Køb",
     "sell_col": "Salg",
+    "spread_col": "Spænd",
     "ai_title": "Analyse",
     "ai_subtitle": "Trendprognoser",
     "ai_chart_placeholder": "[ GRAF ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Sprog",
     "notch_lang_desc": "Skift app-sprog",
     "notch_loc_title": "Placeringsfilter",
-    "notch_loc_desc": "Filtrer efter afstand"
-  ,"chart_7d_ago": "-7 Dage"}
+    "notch_loc_desc": "Filtrer efter afstand",
+    "chart_7d_ago": "-7 Dage",
+    "status_live_desc": "Tilsluttet. Realtidsdata.",
+    "status_offline_desc": "Afbrudt. Cachede data."
+}

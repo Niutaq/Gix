@@ -23,8 +23,9 @@
     "no_cantor_found": "Këmbimore nuk u gjet...",
     "locate_button": "Lokohu",
     "buy_col": "Bli",
-    "sell_col": "Shit",
-    "ai_title": "Analizë",
+    "sell_col": "Shitja",
+    "spread_col": "Diferenca",
+    "ai_title": "Analiza",
     "ai_subtitle": "Parashikim trendesh",
     "ai_chart_placeholder": "[ GRAFIK ]",
     "ai_desc": "Moduli në ndërtim. Sugjerimet bazuar në TimescaleDB do të shfaqen këtu.",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Gjuha",
     "notch_lang_desc": "Ndrysho gjuhën",
     "notch_loc_title": "Filtri i vendit",
-    "notch_loc_desc": "Filtro sipas distancës"
-  ,"chart_7d_ago": "-7 Ditë"}
+    "notch_loc_desc": "Filtro sipas distancës",
+    "chart_7d_ago": "-7 Ditë",
+    "status_live_desc": "Lidhur. Të dhëna në kohë reale.",
+    "status_offline_desc": "Jo lidhur. Të dhëna të ruajtura."
+}

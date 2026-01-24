@@ -24,6 +24,7 @@
     "locate_button": "Konumla",
     "buy_col": "Alış",
     "sell_col": "Satış",
+    "spread_col": "Makas",
     "ai_title": "Analiz",
     "ai_subtitle": "Trend Tahminleri",
     "ai_chart_placeholder": "[ GRAFİK ]",
@@ -36,5 +37,8 @@
     "notch_lang_title": "Dil",
     "notch_lang_desc": "Dili değiştir",
     "notch_loc_title": "Konum Filtresi",
-    "notch_loc_desc": "Mesafeye göre filtrele"
-  ,"chart_7d_ago": "-7 Gün"}
+    "notch_loc_desc": "Mesafeye göre filtrele",
+    "chart_7d_ago": "-7 Gün",
+    "status_live_desc": "Bağlandı. Gerçek zamanlı veri.",
+    "status_offline_desc": "Bağlantı yok. Önbellek verisi."
+}
