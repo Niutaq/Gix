@@ -20,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 	"storj.io/drpc/drpcmux"
@@ -45,6 +46,7 @@ const (
 type AppState struct {
 	DB    *pgxpool.Pool
 	Cache redis.UniversalClient
+	JS    nats.JetStreamContext
 }
 
 // CantorInfo - an internal struct to hold data from the 'cantors' table
@@ -139,28 +141,33 @@ func main() {
 	}
 	log.Println("Successfully connected to Redis.")
 
+	// Connect to NATS
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL == "" {
+		natsURL = "nats://localhost:4222"
+	}
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		log.Printf("Warning: Can't connect to NATS (Streaming disabled): %v", err)
+	} else {
+		log.Println("Successfully connected to NATS.")
+	}
+
+	js := setupNATS(nc)
+	defer func() {
+		if nc != nil {
+			_ = nc.Drain()
+		}
+	}()
+
 	appState := &AppState{
 		DB:    dbpool,
 		Cache: rdb,
+		JS:    js,
 	}
 
 	// Start dRPC server
-	go func() {
-		lis, err := net.Listen("tcp", ":8081")
-		if err != nil {
-			log.Fatalf("failed to listen for dRPC: %v", err)
-		}
-		mux := drpcmux.New()
-		err = pb.DRPCRegisterRatesService(mux, &RatesDRPCServer{Cache: rdb, DB: dbpool})
-		if err != nil {
-			log.Fatalf("failed to register dRPC service: %v", err)
-		}
-		srv := drpcserver.New(mux)
-		log.Println("dRPC server listening on :8081")
-		if err := srv.Serve(context.Background(), lis); err != nil {
-			log.Fatalf("dRPC serve error: %v", err)
-		}
-	}()
+	go startDRPCServer(dbpool, rdb)
 
 	// Start the background harvester to collect data 24/7
 	go startBackgroundHarvester(appState)
@@ -364,8 +371,8 @@ func scrapeAndProcess(app *AppState, ci CantorInfo, id int, currency string) (*p
 	}
 
 	response := &pb.RateResponse{
-		BuyRate:   fmt.Sprintf("%.4f", rates.Buy),
-		SellRate:  fmt.Sprintf("%.4f", rates.Sell),
+		BuyRate:   fmt.Sprintf("%.3f", rates.Buy),
+		SellRate:  fmt.Sprintf("%.3f", rates.Sell),
 		CantorId:  int32(id),
 		Currency:  currency,
 		FetchedAt: time.Now().Unix(),
@@ -414,6 +421,49 @@ func connectToDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error)
 		return nil, fmt.Errorf("couldn't ping pool connection: %w", err)
 	}
 	return pool, nil
+}
+
+// setupNATS initializes a connection to NATS and sets up the JetStream context with a default stream.
+func setupNATS(nc *nats.Conn) nats.JetStreamContext {
+	if nc == nil {
+		return nil
+	}
+
+	js, err := nc.JetStream()
+	if err != nil {
+		log.Printf("Warning: Can't init JetStream: %v", err)
+		return nil
+	}
+
+	log.Println("JetStream initialized.")
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:     "RATES",
+		Subjects: []string{"rates.*"},
+		MaxAge:   24 * time.Hour,
+		Storage:  nats.FileStorage,
+	})
+	if err != nil {
+		log.Printf("Warning: Could not create stream: %v", err)
+	}
+	return js
+}
+
+// startDRPCServer begins listening for and serving dRPC requests on a dedicated port.
+func startDRPCServer(db *pgxpool.Pool, cache redis.UniversalClient) {
+	lis, err := net.Listen("tcp", ":8081")
+	if err != nil {
+		log.Fatalf("failed to listen for dRPC: %v", err)
+	}
+	mux := drpcmux.New()
+	err = pb.DRPCRegisterRatesService(mux, &RatesDRPCServer{Cache: cache, DB: db})
+	if err != nil {
+		log.Fatalf("failed to register dRPC service: %v", err)
+	}
+	srv := drpcserver.New(mux)
+	log.Println("dRPC server listening on :8081")
+	if err := srv.Serve(context.Background(), lis); err != nil {
+		log.Fatalf("dRPC serve error: %v", err)
+	}
 }
 
 // connectToRedis - connecting to Redis
@@ -691,7 +741,7 @@ func processCantorCurrency(ctx context.Context, app *AppState, ci CantorInfo, cu
 		return
 	}
 
-	log.Printf("Harvesting: %s -> %s (%.4f / %.4f)", ci.DisplayName, curr, rates.Buy, rates.Sell)
+	log.Printf("Harvesting: %s -> %s (%.3f / %.3f)", ci.DisplayName, curr, rates.Buy, rates.Sell)
 
 	saveToArchive(app.DB, ci.ID, curr, rates.Buy, rates.Sell)
 	updateCacheAndNotify(ctx, app, ci.ID, curr, rates)
@@ -701,8 +751,8 @@ func processCantorCurrency(ctx context.Context, app *AppState, ci CantorInfo, cu
 func updateCacheAndNotify(ctx context.Context, app *AppState, cantorID int, curr string, rates processedRates) {
 	cacheKey := fmt.Sprintf("rates:proto%d:%s", cantorID, curr)
 	response := &pb.RateResponse{
-		BuyRate:   fmt.Sprintf("%.4f", rates.Buy),
-		SellRate:  fmt.Sprintf("%.4f", rates.Sell),
+		BuyRate:   fmt.Sprintf("%.3f", rates.Buy),
+		SellRate:  fmt.Sprintf("%.3f", rates.Sell),
 		CantorId:  int32(cantorID),
 		Currency:  curr,
 		FetchedAt: time.Now().Unix(),
@@ -716,4 +766,13 @@ func updateCacheAndNotify(ctx context.Context, app *AppState, cantorID int, curr
 
 	app.Cache.Set(ctx, cacheKey, protoBytes, 60*time.Second)
 	app.Cache.Publish(ctx, "rates_updates", protoBytes)
+
+	// Publish to NATS JetStream (Persistent Stream)
+	if app.JS != nil {
+		subject := fmt.Sprintf("rates.%s", curr)
+		_, err := app.JS.Publish(subject, protoBytes)
+		if err != nil {
+			log.Printf("NATS Publish Error: %v", err)
+		}
+	}
 }

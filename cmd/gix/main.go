@@ -44,7 +44,24 @@ import (
 // the main is the entry point of the application that initializes configuration, sets up the main window, and starts the app loop.
 func main() {
 	apiBase := flag.String("api", "http://165.227.246.100:8080", "API base URL")
+	tracePath := flag.String("trace", "", "Path to write trace file")
 	flag.Parse()
+
+	if *tracePath != "" {
+		f, err := os.Create(*tracePath)
+		if err != nil {
+			log.Fatalf("failed to create trace file: %v", err)
+		}
+		defer func() {
+			if err := f.Close(); err != nil {
+				log.Printf("failed to close trace file: %v", err)
+			}
+		}()
+		if err := trace.Start(f); err != nil {
+			log.Fatalf("failed to start trace: %v", err)
+		}
+		defer trace.Stop()
+	}
 
 	base := *apiBase
 	if len(base) > 0 && base[len(base)-1] == '/' {
@@ -74,8 +91,6 @@ func main() {
 
 // run starts the application event loop, handling window events, UI rendering, and asynchronous data loading.
 func run(window *app.Window, config utilities.AppConfig) error {
-	cleanupTrace := setupTrace()
-	defer cleanupTrace()
 
 	state, theme, cantorChan := setupApplication(window, config)
 
@@ -89,23 +104,6 @@ func run(window *app.Window, config utilities.AppConfig) error {
 			return e.Err
 		case app.FrameEvent:
 			handleFrame(window, &ops, e, state, config, cantorChan, theme)
-		}
-	}
-}
-
-// setupTrace sets up tracing for the application, returning a function to stop it.
-func setupTrace() func() {
-	fileTrace, err := os.Create("trace.out")
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := trace.Start(fileTrace); err != nil {
-		log.Fatal(err)
-	}
-	return func() {
-		trace.Stop()
-		if err := fileTrace.Close(); err != nil {
-			log.Fatal(err)
 		}
 	}
 }
@@ -127,7 +125,7 @@ func setupApplication(window *app.Window, config utilities.AppConfig) (*utilitie
 	}
 
 	theme := material.NewTheme()
-	theme.Shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(fonts))
+	theme.Shaper = text.NewShaper(text.WithCollection(fonts))
 	theme.FingerSize = 48
 
 	log.Println("Application started.")
@@ -136,26 +134,39 @@ func setupApplication(window *app.Window, config utilities.AppConfig) (*utilitie
 
 // initializeAppState initializes the application state with default values.
 func initializeAppState() *utilities.AppState {
-	return &utilities.AppState{
+	state := &utilities.AppState{
 		Vault:   &utilities.CantorVault{},
 		Cantors: make(map[string]*utilities.CantorInfo),
 		UI: utilities.UIState{
-			Language: "EN",
-			Currency: "EUR",
-			LanguageOptions: []string{
-				"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ",
-				"HR", "HU", "UA", "BU", "RO", "AL", "TR", "IC",
-			},
-			CurrencyOptions: []string{
-				"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF",
-				"SEK", "CZK", "HRF", "HUF", "UAH", "BGN",
-				"RON", "LEK", "TRY", "ISK",
-			},
+			Language:              "EN",
+			Currency:              "EUR",
 			LanguageOptionButtons: make([]widget.Clickable, 16),
 			CurrencyOptionButtons: make([]widget.Clickable, 17),
 			ChartMode:             "BUY",
 			ChartModeButtons:      make([]widget.Clickable, 2),
+			SortMode:              "NAME",
+			SortButtons:           make([]widget.Clickable, 4),
+			Timeframe:             "7D",
+			TimeframeButtons:      make([]widget.Clickable, 3),
+			IntroAnim: utilities.IntroAnim{
+				Active:    true,
+				StartTime: time.Now(),
+			},
 		},
+	}
+	setupUILists(state)
+	return state
+}
+
+func setupUILists(state *utilities.AppState) {
+	state.UI.LanguageOptions = []string{
+		"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ",
+		"HR", "HU", "UA", "BU", "RO", "AL", "TR", "IC",
+	}
+	state.UI.CurrencyOptions = []string{
+		"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF",
+		"SEK", "CZK", "HRF", "HUF", "UAH", "BGN",
+		"RON", "LEK", "TRY", "ISK",
 	}
 }
 
@@ -167,6 +178,12 @@ func handleFrame(window *app.Window, ops *op.Ops, e app.FrameEvent, state *utili
 	if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
 		e.Metric.PxPerDp *= 1.5
 		e.Metric.PxPerSp *= 1.5
+	}
+
+	// Adjust scaling for iOS ONLY
+	if runtime.GOOS == "ios" {
+		e.Metric.PxPerDp *= 0.825
+		e.Metric.PxPerSp *= 0.825
 	}
 
 	ops.Reset()
