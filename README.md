@@ -11,6 +11,7 @@
 [![License](https://img.shields.io/badge/License-MIT-b45f00?style=flat)](LICENSE)
 
 [![SonarQube Cloud](https://sonarcloud.io/images/project_badges/sonarcloud-dark.svg)](https://sonarcloud.io/summary/new_code?id=Niutaq_Gix)
+[![DataDog](https://img.shields.io/badge/DataDog-Monitoring-632CA6?style=flat&logo=datadog&logoColor=white)](https://www.datadoghq.com/)
 
 ---
 </div>
@@ -28,6 +29,7 @@ graph TD
     B -->|⑦ Store| C
     B -->|⑧ Archive| D
     B -->|⑨ Response| A
+    B -->|⑩ Publish| H[NATS JetStream]
     
     subgraph Infrastructure
     F[DigitalOcean K8s]
@@ -41,6 +43,7 @@ graph TD
     style E fill:#78350f,stroke:#92400e,stroke-width:2px,color:#fff
     style F fill:#0080FF,stroke:#0059b3,stroke-width:2px,color:#fff
     style G fill:#2496ED,stroke:#0059b3,stroke-width:2px,color:#fff
+    style H fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff
 ```
 
 ### Data Flow Pipeline
@@ -57,6 +60,7 @@ graph TD
 | **⑦** | **Cache Update**  | Store fresh data in Redis (60s expiry)                  |
 | **⑧** | **Archive**       | Async save to TimescaleDB (PGX) for historical analysis |
 | **⑨** | **Response**      | API → Frontend: Protobuf encoded response via dRPC      |
+| **⑩** | **Publish Event** | Async publish to NATS Stream (24h retention)            |
 
 ## Technology Stack
 
@@ -65,12 +69,14 @@ graph TD
 |    **Frontend**    |    Go + Gio UI     | Native cross-platform desktop application       |
 | **API Framework**  |      Gin (Go)      | High-performance HTTP/REST API server           |
 | **Communication**  |  dRPC + ProtoBuf   | Lightweight Protobuf-based RPC                  |
+|   **Messaging**    |   NATS JetStream   | Event Streaming & Replay                        |
 |     **Cache**      |       Redis        | 60-second TTL for rate limiting and performance |
 |    **Database**    |    TimescaleDB     | Time-series optimized PostgreSQL                |
 |   **DB Driver**    |        PGX         | PostgreSQL Driver and Toolkit for Go            |
 |    **Scraping**    |      Goquery       | Strategy Pattern for parsing cantor layouts     |
 | **Infrastructure** | DigitalOcean + K8s | Scalable Kubernetes-managed hosting             |
 |   **Container**    | Docker + DockerHub | Containerized deployment and registry           |
+| **Observability**  |      DataDog       | Infrastructure & Application Monitoring         |
 
 ## Quick Start
 

@@ -52,3 +52,12 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.7.2
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'

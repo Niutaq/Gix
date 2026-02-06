@@ -17,7 +17,7 @@ In your report, please include:
 
 ## Our Security Practices
 
-We strive to follow best practices for security in our development process, including:
+We strive to follow the best practices for security in our development process, including:
 
 *   Regularly updating dependencies to their latest secure versions.
 *   Using static analysis tools to identify potential security flaws.

@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gix-nats
+  namespace: default
+  labels:
+    app: gix-nats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gix-nats
+  template:
+    metadata:
+      labels:
+        app: gix-nats
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: nats
+          image: nats:2.10
+          args: ["-js"] # Enable JetStream
+          ports:
+            - containerPort: 4222
+              name: client
+            - containerPort: 8222
+              name: monitor
+          resources:
+            requests:
+              memory: "10Mi"
+              cpu: "50m"
+              ephemeral-storage: "100Mi"
+            limits:
+              memory: "64Mi"
+              cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gix-nats
+  namespace: default
+spec:
+  selector:
+    app: gix-nats
+  ports:
+    - protocol: TCP
+      port: 4222
+      targetPort: 4222
+      name: client
+    - protocol: TCP
+      port: 8222
+      targetPort: 8222
+      name: monitor
