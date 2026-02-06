@@ -113,4 +113,4 @@ go install github.com/go-task/task/v3/cmd/task@latest
 
 ## Demo
 
-<video src="https://github.com/user-attachments/assets/85330f18-7977-44d7-8e72-852787d50ea1" width="100%" controls autoplay loop muted></video>
+<video src="https://github.com/user-attachments/assets/438faa71-acc5-4c26-a929-42660a75cb4b" width="100%" controls autoplay loop muted></video>
