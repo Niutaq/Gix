@@ -21,6 +21,11 @@ type CantorInfo struct {
 	Latitude    float64
 	Longitude   float64
 	Button      widget.Clickable `json:"-"`
+
+	// Long Press Logic
+	PressStart        time.Time `json:"-"`
+	IsPressing        bool      `json:"-"`
+	LongPressTriggered bool      `json:"-"`
 }
 
 // HoverInfo holds data for the dynamic notch display
@@ -29,6 +34,19 @@ type HoverInfo struct {
 	Title    string
 	Subtitle string
 	Extra    string
+}
+
+// IntroAnim holds state for the intro animation.
+type IntroAnim struct {
+	Active    bool
+	StartTime time.Time
+	Progress  float32
+}
+
+// MenuAnim holds state for the mobile menu animation.
+type MenuAnim struct {
+	CurrentAlpha float32
+	LastTime     time.Time
 }
 
 // ExchangeRates holds the buy and sell rates for a currency.
@@ -56,16 +74,19 @@ type CantorVault struct {
 // UIState holds UI-specific state and widgets.
 type UIState struct {
 	ModalOpen           string
+	ModalAnimStart      time.Time
 	LangModalButton     widget.Clickable
 	CurrencyModalButton widget.Clickable
 	ModalClick          widget.Clickable
 	ModalList           widget.List
 	ModalClose          widget.Clickable
 
-	MobileMenuOpen bool
-	MobileMenuBtn  widget.Clickable
+	MobileMenuOpen     bool
+	MobileMenuBtn      widget.Clickable
 	MobileMenuBackdrop widget.Clickable
+	BgClick            widget.Clickable
 	IsMobile           bool
+	LayoutTransitionTime time.Time
 
 	CurrencyList widget.List
 	SearchEditor widget.Editor
@@ -83,17 +104,31 @@ type UIState struct {
 		Active    bool
 	}
 
-	MaxDistance    float64
-	DistanceSlider widget.Float
-	LocateButton   widget.Clickable
+	MaxDistance     float64
+	DistanceSlider  widget.Float
+	LocateButton    widget.Clickable
 	StatusClickable widget.Clickable
-	HoverInfo      HoverInfo
-	NotchState     struct {
+	HoverInfo       HoverInfo
+	NotchState      struct {
 		CurrentAlpha  float32
 		LastContent   HoverInfo
 		LastTime      time.Time
 		LastHoverTime time.Time
 	}
+
+	PulseState struct {
+		ShowGainer bool      // True = Gainer, False = Loser
+		LastSwitch time.Time // Last switch?
+	}
+
+	TopMovers struct {
+		GainerID   string
+		LoserID    string
+		LastUpdate time.Time
+	}
+
+	IntroAnim IntroAnim
+	MenuAnim  MenuAnim
 
 	SelectedCantor        string
 	SelectedLanguage      string
@@ -104,6 +139,14 @@ type UIState struct {
 
 	Language string
 	Currency string
+
+	LightMode       bool
+	ThemeButton     widget.Clickable
+
+	SortMode         string // "NAME", "BUY", "SELL", "DIST"
+	SortButtons      []widget.Clickable
+	Timeframe        string // "1D", "7D", "30D"
+	TimeframeButtons []widget.Clickable
 
 	CantorsList widget.List
 }

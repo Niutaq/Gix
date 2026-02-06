@@ -69,8 +69,8 @@ func (s *RatesDRPCServer) GetAllRates(ctx context.Context, req *pb.RateRequest) 
 		}
 
 		results = append(results, &pb.RateResponse{
-			BuyRate:   fmt.Sprintf("%.4f", buy),
-			SellRate:  fmt.Sprintf("%.4f", sell),
+			BuyRate:   fmt.Sprintf("%.3f", buy),
+			SellRate:  fmt.Sprintf("%.3f", sell),
 			CantorId:  int32(cantorID),
 			Currency:  currency,
 			FetchedAt: t.Unix(),

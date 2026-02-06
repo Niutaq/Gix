@@ -3,9 +3,6 @@ kind: Namespace
 metadata:
   name: datadog-agent
 ---
-# NOTE: The 'datadog-secret' must be created manually!
-# Command: kubectl create secret generic datadog-secret --from-literal=api-key=<YOUR_KEY> -n datadog-agent
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -115,9 +112,18 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
+          # --- SOCKETLESS CONFIG ---
+          - name: DD_LOGS_CONFIG_K8S_CONTAINER_USE_FILE
+            value: "true"
+          - name: DD_KUBELET_TLS_VERIFY
+            value: "false"
+          # -------------------------
         volumeMounts:
-          - name: dockersocket
-            mountPath: /var/run/docker.sock
+          - name: logpodpath
+            mountPath: /var/log/pods
+            readOnly: true
+          - name: logcontainerpath
+            mountPath: /var/log/containers
             readOnly: true
           - name: procdir
             mountPath: /host/proc
@@ -127,8 +133,11 @@ spec:
             readOnly: true
       volumes:
         - hostPath:
-            path: /var/run/docker.sock
-          name: dockersocket
+            path: /var/log/pods
+          name: logpodpath
+        - hostPath:
+            path: /var/log/containers
+          name: logcontainerpath
         - hostPath:
             path: /proc
           name: procdir
