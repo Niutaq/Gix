@@ -86,18 +86,21 @@ func FetchAllRatesRPC(window *app.Window, state *AppState, apiURL string) {
 		return
 	}
 
-	state.Vault.Mu.Lock()
-	for _, rate := range resp.Results {
-		cantorName := ""
-		state.CantorsMu.RLock()
-		for name, info := range state.Cantors {
-			if info.ID == int(rate.CantorId) {
-				cantorName = name
-				break
-			}
-		}
-		state.CantorsMu.RUnlock()
+	updateStateWithRates(state, resp.Results)
 
+	SaveCache(state)
+
+	state.IsLoading.Store(false)
+	window.Invalidate()
+	log.Printf("Fetched %d rates via dRPC.", len(resp.Results))
+}
+
+func updateStateWithRates(state *AppState, results []*pb.RateResponse) {
+	state.Vault.Mu.Lock()
+	defer state.Vault.Mu.Unlock()
+
+	for _, rate := range results {
+		cantorName := findCantorNameByID(state, int(rate.CantorId))
 		if cantorName == "" {
 			continue
 		}
@@ -114,13 +117,17 @@ func FetchAllRatesRPC(window *app.Window, state *AppState, apiURL string) {
 		entry.LoadedAt = time.Now()
 		entry.Error = ""
 	}
-	state.Vault.Mu.Unlock()
+}
 
-	SaveCache(state)
-
-	state.IsLoading.Store(false)
-	window.Invalidate()
-	log.Printf("Fetched %d rates via dRPC.", len(resp.Results))
+func findCantorNameByID(state *AppState, id int) string {
+	state.CantorsMu.RLock()
+	defer state.CantorsMu.RUnlock()
+	for name, info := range state.Cantors {
+		if info.ID == id {
+			return name
+		}
+	}
+	return ""
 }
 
 // processStreamUpdates handles the message loop for the dRPC stream.
@@ -145,16 +152,7 @@ func UpdateStateWithRate(window *app.Window, state *AppState, rate *pb.RateRespo
 	state.Vault.Mu.Lock()
 	defer state.Vault.Mu.Unlock()
 
-	cantorName := ""
-	state.CantorsMu.RLock()
-	for name, info := range state.Cantors {
-		if info.ID == int(rate.CantorId) {
-			cantorName = name
-			break
-		}
-	}
-	state.CantorsMu.RUnlock()
-
+	cantorName := findCantorNameByID(state, int(rate.CantorId))
 	if cantorName == "" {
 		return
 	}

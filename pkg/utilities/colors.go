@@ -3,9 +3,9 @@ package utilities
 // Standard libraries
 import "image/color"
 
-// AppColors Colors
+// ColorPalette AppColors Colors
 // It defines the color palette used throughout the application.
-var AppColors = struct {
+type ColorPalette struct {
 	Background  color.NRGBA
 	Text        color.NRGBA
 	Error       color.NRGBA
@@ -24,7 +24,9 @@ var AppColors = struct {
 	Accent4     color.NRGBA
 	Accent1Dark color.NRGBA
 	Spread      color.NRGBA
-}{
+}
+
+var DarkPalette = ColorPalette{
 	Background:  color.NRGBA{R: 20, G: 20, B: 20, A: 155},
 	Text:        color.NRGBA{R: 255, G: 255, B: 255, A: 255},
 	Error:       color.NRGBA{R: 225, G: 50, B: 50, A: 255},
@@ -44,3 +46,27 @@ var AppColors = struct {
 	Accent1Dark: color.NRGBA{R: 180, G: 130, B: 0, A: 255},
 	Spread:      color.NRGBA{R: 255, G: 200, B: 0, A: 135},
 }
+
+var LightPalette = ColorPalette{
+	Background:  color.NRGBA{R: 255, G: 255, B: 255, A: 255},
+	Text:        color.NRGBA{R: 30, G: 30, B: 35, A: 255},
+	Error:       color.NRGBA{R: 200, G: 30, B: 30, A: 255},
+	Success:     color.NRGBA{R: 20, G: 120, B: 50, A: 255},
+	Title:       color.NRGBA{R: 160, G: 110, B: 0, A: 255},
+	Button:      color.NRGBA{R: 235, G: 235, B: 240, A: 255},
+	Info:        color.NRGBA{R: 180, G: 130, B: 0, A: 255},
+	Warning:     color.NRGBA{R: 180, G: 130, B: 0, A: 255},
+	Primary:     color.NRGBA{R: 60, G: 60, B: 70, A: 255},
+	Secondary:   color.NRGBA{R: 100, G: 100, B: 110, A: 255},
+	Light:       color.NRGBA{R: 255, G: 255, B: 255, A: 255},
+	Dark:        color.NRGBA{R: 248, G: 248, B: 250, A: 255},
+	Accent1:     color.NRGBA{R: 210, G: 150, B: 0, A: 255},
+	Accent2:     color.NRGBA{R: 60, G: 60, B: 70, A: 255},
+	Accent3:     color.NRGBA{R: 210, G: 150, B: 0, A: 255},
+	Accent4:     color.NRGBA{R: 248, G: 248, B: 250, A: 255},
+	Accent1Dark: color.NRGBA{R: 160, G: 110, B: 0, A: 255},
+	Spread:      color.NRGBA{R: 180, G: 130, B: 0, A: 180},
+}
+
+// AppColors is now a pointer that we switch
+var AppColors = DarkPalette

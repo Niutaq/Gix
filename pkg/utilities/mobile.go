@@ -1,10 +1,12 @@
 package utilities
 
 import (
+	// Standard libraries
 	"image"
 	"image/color"
 	"time"
 
+	// Gio utilities
 	"gioui.org/app"
 	"gioui.org/layout"
 	"gioui.org/op/clip"
@@ -19,7 +21,6 @@ func layoutMobileMenuOverlay(gtx layout.Context, window *app.Window, theme *mate
 		return layout.Dimensions{}
 	}
 
-	// 1. Dimmed Background (Click to close)
 	if state.UI.MobileMenuBackdrop.Clicked(gtx) {
 		state.UI.MobileMenuOpen = false
 		window.Invalidate()
@@ -43,18 +44,28 @@ func layoutMobileMenuOverlay(gtx layout.Context, window *app.Window, theme *mate
 			gtx.Constraints.Min.Y = gtx.Constraints.Max.Y
 
 			rect := image.Rectangle{Max: gtx.Constraints.Max}
-			paint.FillShape(gtx.Ops, color.NRGBA{R: 18, G: 18, B: 22, A: 255}, clip.Rect(rect).Op())
+			bgColor := AppColors.Background
+			bgColor.A = 255
+			paint.FillShape(gtx.Ops, bgColor, clip.Rect(rect).Op())
 
 			return layout.Inset{Top: unit.Dp(20), Left: unit.Dp(16), Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						// Close Button (Optional, or just Title)
+						// Close Button
 						h3 := material.H6(theme, "Menu")
 						h3.Color = AppColors.Title
 						return layout.Inset{Bottom: unit.Dp(20)}.Layout(gtx, h3.Layout)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return layoutLanguageButton(gtx, window, theme, state)
+						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								return layoutThemeButton(gtx, window, state)
+							}),
+							layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								return layoutLanguageButton(gtx, window, theme, state)
+							}),
+						)
 					}),
 					layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
