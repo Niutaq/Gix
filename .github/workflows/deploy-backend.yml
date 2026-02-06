@@ -50,7 +50,7 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
       - name: Save DigitalOcean kubeconfig
-        run: doctl kubernetes cluster kubeconfig save do-fra1-gix-pool-cluster
+        run: doctl kubernetes cluster kubeconfig save gix-pool-cluster
 
       - name: Update Kubernetes Deployment
         run: |
