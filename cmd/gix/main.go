@@ -73,11 +73,15 @@ func main() {
 		APIRatesURL:   base + "/api/v1/rates",
 		APIHistoryURL: base + "/api/v1/history",
 	}
-	window := new(app.Window)
-	window.Option(
+
+	// Prepare window options
+	opts := []app.Option{
 		app.Title("Gix"),
 		app.Size(unit.Dp(1280), unit.Dp(1280)),
-	)
+	}
+
+	window := new(app.Window)
+	window.Option(opts...)
 
 	go func() {
 		if err := run(window, config); err != nil {
@@ -149,7 +153,7 @@ func initializeAppState() *utilities.AppState {
 			Timeframe:             "7D",
 			TimeframeButtons:      make([]widget.Clickable, 3),
 			IntroAnim: utilities.IntroAnim{
-				Active:    true,
+				Active:    runtime.GOOS != "linux",
 				StartTime: time.Now(),
 			},
 		},

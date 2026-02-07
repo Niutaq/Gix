@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -88,7 +89,10 @@ func LayoutUI(gtx layout.Context, window *app.Window, theme *material.Theme, sta
 			return layoutModal(gtx, window, theme, state)
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return layoutNotch(gtx, theme, state)
+			if state.UI.IsMobile {
+				return layoutNotch(gtx, theme, state, true)
+			}
+			return layout.Dimensions{}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			return layoutIntroAnimation(gtx, window, state)
@@ -308,6 +312,11 @@ func LayoutRightPanel(gtx layout.Context, window *app.Window, theme *material.Th
 				layout.Rigid(layout.Spacer{Height: unit.Dp(15)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layoutChartSection(gtx, window, theme, state, config)
+				}),
+				layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					// Move notch here for desktop
+					return layoutNotch(gtx, theme, state, false)
 				}),
 				layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
 			)
@@ -591,10 +600,15 @@ func layoutToggleButton(gtx layout.Context, theme *material.Theme, btn *widget.C
 
 	if active {
 		b.Background = AppColors.Accent1
-		b.Color = color.NRGBA{R: 20, G: 20, B: 20, A: 255}
+		b.Color = color.NRGBA{R: 0, G: 0, B: 0, A: 255}
 	} else {
-		b.Background = color.NRGBA{R: 30, G: 30, B: 35, A: 255}
-		b.Color = color.NRGBA{R: 150, G: 150, B: 160, A: 255}
+		if AppColors.Background.R > 200 { // Light Mode
+			b.Background = color.NRGBA{R: 230, G: 230, B: 235, A: 255}
+			b.Color = color.NRGBA{R: 60, G: 60, B: 70, A: 255}
+		} else { // Dark Mode
+			b.Background = color.NRGBA{R: 35, G: 35, B: 40, A: 255}
+			b.Color = color.NRGBA{R: 180, G: 180, B: 190, A: 255}
+		}
 	}
 
 	return b.Layout(gtx)
@@ -1146,10 +1160,11 @@ func layoutMoverNotch(gtx layout.Context, theme *material.Theme, name string, ch
 			return layout.Dimensions{Size: gtx.Constraints.Min}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			// Content with tight padding
+			// Content with tight padding and clipping to prevent overflow
+			defer clip.Rect(image.Rectangle{Max: gtx.Constraints.Min}).Push(gtx.Ops).Pop()
 			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 						lbl := material.Caption(theme, name)
 						lbl.Color = color.NRGBA{R: 200, G: 200, B: 210, A: 255}
 						if AppColors.Background.R > 200 {
@@ -1851,38 +1866,41 @@ func drawSearchLocateButton(gtx layout.Context, window *app.Window, theme *mater
 
 // layoutCantorInfoBar displays cantor details (address, distance) in the search bar area.
 func layoutCantorInfoBar(gtx layout.Context, theme *material.Theme, info HoverInfo) layout.Dimensions {
-	return layout.Stack{Alignment: layout.Center}.Layout(gtx,
-		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			shape := clip.UniformRRect(image.Rectangle{Max: gtx.Constraints.Min}, gtx.Dp(10))
-			paint.FillShape(gtx.Ops, color.NRGBA{R: 35, G: 35, B: 40, A: 255}, shape.Op(gtx.Ops))
-			return layout.Dimensions{Size: gtx.Constraints.Min}
-		}),
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						lbl := material.Caption(theme, info.Title)
-						lbl.Color = AppColors.Accent1
-						lbl.Font.Weight = font.Bold
-						lbl.MaxLines = 1
-						return lbl.Layout(gtx)
-					}),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						txt := info.Extra // Distance
-						if txt == "" {
-							txt = info.Subtitle
-						} // Fallback to address if no distance
+	macro := op.Record(gtx.Ops)
+	dims := layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				lbl := material.Caption(theme, info.Title)
+				lbl.Color = AppColors.Accent1
+				lbl.Font.Weight = font.Bold
+				lbl.MaxLines = 1
+				return lbl.Layout(gtx)
+			}),
+			layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				txt := info.Extra // Distance
+				if txt == "" {
+					txt = info.Subtitle
+				} // Fallback to address if no distance
 
-						lbl := material.Caption(theme, txt)
-						lbl.Color = color.NRGBA{R: 200, G: 200, B: 210, A: 255}
-						lbl.MaxLines = 1
-						return lbl.Layout(gtx)
-					}),
-				)
-			})
-		}),
-	)
+				lbl := material.Caption(theme, txt)
+				lbl.Color = color.NRGBA{R: 200, G: 200, B: 210, A: 255}
+				lbl.MaxLines = 1
+				return lbl.Layout(gtx)
+			}),
+		)
+	})
+	call := macro.Stop()
+
+	shape := clip.UniformRRect(image.Rectangle{Max: dims.Size}, gtx.Dp(10))
+	paint.FillShape(gtx.Ops, color.NRGBA{R: 35, G: 35, B: 40, A: 255}, shape.Op(gtx.Ops))
+
+	// Render content with clipping
+	stack := clip.Rect(image.Rectangle{Max: dims.Size}).Push(gtx.Ops)
+	call.Add(gtx.Ops)
+	stack.Pop()
+
+	return dims
 }
 
 // layoutLocateButton renders the Locate button, handles its click events, and dynamically updates the UI state.
@@ -1899,6 +1917,9 @@ func layoutLocateButton(gtx layout.Context, window *app.Window, theme *material.
 	}
 	btn.Background = btnBg
 	btn.Color = AppColors.Accent1
+	if state.UI.LightMode {
+		btn.Color = color.NRGBA{R: 160, G: 110, B: 0, A: 255} // Darker yellow for text on light bg
+	}
 	btn.CornerRadius = unit.Dp(8)
 	btn.Inset = layout.UniformInset(unit.Dp(10))
 	btn.TextSize = unit.Sp(14)
@@ -1952,7 +1973,7 @@ func handleLocateHover(window *app.Window, state *AppState) {
 // layoutLocateActiveState renders the active state of the Locate button, including a distance slider and label.
 func layoutLocateActiveState(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, btn material.ButtonStyle) layout.Dimensions {
 	btn.Background = AppColors.Accent1
-	btn.Color = color.NRGBA{R: 20, G: 20, B: 20, A: 255}
+	btn.Color = color.NRGBA{R: 0, G: 0, B: 0, A: 255}
 
 	newVal := float64(state.UI.DistanceSlider.Value) * 100.0
 	if newVal != state.UI.MaxDistance {
@@ -2098,7 +2119,7 @@ func renderLanguageItem(gtx layout.Context, window *app.Window, theme *material.
 					lbl := material.Body1(theme, lang)
 					lbl.Color = AppColors.Text
 					if isSelected {
-						lbl.Color = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
+						lbl.Color = color.NRGBA{R: 0, G: 0, B: 0, A: 255}
 						lbl.Font.Weight = font.Bold
 					}
 					return lbl.Layout(gtx)
@@ -2184,7 +2205,16 @@ func layoutModalHeader(window *app.Window, theme *material.Theme, title string, 
 func LoadFontCollection() ([]font.FontFace, error) {
 	var collection []font.FontFace
 
-	f1, err := reading_data.LoadAndParseFont("fonts/Montserrat-Bold.ttf")
+	var f1 font.FontFace
+	var err error
+
+	if runtime.GOOS == "linux" {
+		// Use Kanit-Regular instead of Montserrat-Bold on Linux to avoid artifacts
+		f1, err = reading_data.LoadAndParseFont("fonts/Kanit-Regular.ttf")
+	} else {
+		f1, err = reading_data.LoadAndParseFont("fonts/Montserrat-Bold.ttf")
+	}
+
 	if err == nil {
 		f1.Font.Typeface = "Montserrat"
 		collection = append(collection, f1)
@@ -2206,48 +2236,53 @@ func LoadFontCollection() ([]font.FontFace, error) {
 }
 
 // layoutNotch renders a UI "notch" element with dynamic alpha, displaying contextually relevant information to the user.
-func layoutNotch(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
-	if state.UI.IsMobile {
-		return layout.Dimensions{}
-	}
-
+func layoutNotch(gtx layout.Context, theme *material.Theme, state *AppState, center bool) layout.Dimensions {
 	alphaVal := state.UI.NotchState.CurrentAlpha
 	if alphaVal <= 0.01 {
 		return layout.Dimensions{}
 	}
 
 	info := state.UI.NotchState.LastContent
-	gtx.Constraints.Min.X = gtx.Constraints.Max.X
-
-	return layout.N.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	render := func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				macro := op.Record(gtx.Ops)
-				dims := renderNotchContent(gtx, theme, info, alphaVal, state)
-				call := macro.Stop()
+			gtx.Constraints.Min.X = 0
 
-				drawNotchBackground(gtx, dims.Size, alphaVal, state)
-				call.Add(gtx.Ops)
-				return dims
-			})
+			macro := op.Record(gtx.Ops)
+			dims := renderNotchContent(gtx, theme, info, alphaVal, state)
+			call := macro.Stop()
+
+			drawNotchBackground(gtx, dims.Size, alphaVal, state)
+
+			// Clip the content to the notch background size
+			stack := clip.Rect(image.Rectangle{Max: dims.Size}).Push(gtx.Ops)
+			call.Add(gtx.Ops)
+			stack.Pop()
+
+			return dims
 		})
-	})
+	}
+
+	if center {
+		return layout.N.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Center.Layout(gtx, render)
+		})
+	}
+	return render(gtx)
 }
 
 // renderNotchContent renders the main content of the notch, including a title and subtitle.
 func renderNotchContent(gtx layout.Context, theme *material.Theme, info HoverInfo, alpha float32, state *AppState) layout.Dimensions {
 	return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		gtx.Constraints.Min.X = gtx.Dp(unit.Dp(200))
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return renderNotchExtra(gtx, theme, info.Extra, alpha)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				titleCol := color.NRGBA{R: 255, G: 255, B: 255, A: 255}
 				subCol := color.NRGBA{R: 160, G: 160, B: 170, A: 255}
 				if state.UI.LightMode {
-					titleCol = color.NRGBA{R: 20, G: 20, B: 25, A: 255}
-					subCol = color.NRGBA{R: 80, G: 80, B: 90, A: 255}
+					titleCol = color.NRGBA{R: 10, G: 10, B: 15, A: 255}
+					subCol = color.NRGBA{R: 60, G: 60, B: 70, A: 255}
 				}
 
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -2255,11 +2290,13 @@ func renderNotchContent(gtx layout.Context, theme *material.Theme, info HoverInf
 						lbl := material.Body2(theme, info.Title)
 						lbl.Color = scaleAlpha(titleCol, alpha)
 						lbl.Font.Weight = font.Bold
+						lbl.MaxLines = 1
 						return lbl.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						lbl := material.Caption(theme, info.Subtitle)
 						lbl.Color = scaleAlpha(subCol, alpha)
+						lbl.MaxLines = 1
 						return lbl.Layout(gtx)
 					}),
 				)
@@ -2276,7 +2313,7 @@ func renderNotchExtra(gtx layout.Context, theme *material.Theme, extra string, a
 	return layout.Inset{Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		m := op.Record(gtx.Ops)
 		lbl := material.Caption(theme, extra)
-		lbl.Color = scaleAlpha(color.NRGBA{R: 20, G: 20, B: 20, A: 255}, alpha)
+		lbl.Color = scaleAlpha(color.NRGBA{R: 0, G: 0, B: 0, A: 255}, alpha)
 		lbl.Font.Weight = font.Bold
 		d := layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, lbl.Layout)
 		c := m.Stop()
@@ -2324,6 +2361,8 @@ func drawSmoothTrend(gtx layout.Context, width, height int, col color.NRGBA, pro
 
 	// Clip based on progress (reveal from left to right)
 	revealWidth := int(float32(width) * progress)
+
+	// Anchoring: we keep the path at its full size but reveal it using clip.Rect
 	defer clip.Rect{Max: image.Point{X: revealWidth, Y: height}}.Push(gtx.Ops).Pop()
 
 	var path clip.Path
@@ -2332,12 +2371,9 @@ func drawSmoothTrend(gtx layout.Context, width, height int, col color.NRGBA, pro
 	steps := 100
 	getVal := func(x float64) float64 {
 		trend := math.Pow(x, 1.2)
-
 		volatility := 0.08 * math.Sin(x*12.0) * math.Sin(x*3.14)
-
 		y := trend + volatility
 
-		// Clamp 0..1
 		if y < 0 {
 			y = 0
 		}
@@ -2346,11 +2382,8 @@ func drawSmoothTrend(gtx layout.Context, width, height int, col color.NRGBA, pro
 		}
 
 		if isBearish {
-			// Bearish: Visual "Down". 0 -> 1
 			return y
 		}
-
-		// Bullish: Visual Up. 1 -> 0
 		return 1.0 - y
 	}
 
@@ -2366,6 +2399,7 @@ func drawSmoothTrend(gtx layout.Context, width, height int, col color.NRGBA, pro
 		path.LineTo(f32.Point{X: px, Y: py})
 	}
 
+	// Draw ONLY the main line (outline) on top, no fill
 	paint.FillShape(gtx.Ops, col, clip.Stroke{Path: path.End(), Width: 3.0}.Op())
 
 	return layout.Dimensions{Size: image.Point{X: width, Y: height}}
@@ -2377,13 +2411,10 @@ func layoutIntroAnimation(gtx layout.Context, window *app.Window, state *AppStat
 		return layout.Dimensions{}
 	}
 
-	// Background
-	bg := AppColors.Background
-	bg.A = 255
-	paint.Fill(gtx.Ops, bg)
-
 	elapsed := time.Since(state.UI.IntroAnim.StartTime).Seconds()
-	duration := 2.0
+	duration := 2.2     // Total duration including fade
+	fadeStart := 1.7    // Start fading out at this point
+	animDuration := 1.5 // Time for the line reveal
 
 	if elapsed > duration {
 		state.UI.IntroAnim.Active = false
@@ -2393,23 +2424,38 @@ func layoutIntroAnimation(gtx layout.Context, window *app.Window, state *AppStat
 
 	window.Invalidate()
 
-	progress := float32(elapsed / duration)
+	// Calculate overall opacity for the fade out
+	opacity := float32(1.0)
+	if elapsed > fadeStart {
+		opacity = 1.0 - float32((elapsed-fadeStart)/(duration-fadeStart))
+	}
+
+	// Background
+	bg := AppColors.Background
+	bg.A = uint8(255 * opacity)
+	paint.Fill(gtx.Ops, bg)
+
+	// Reveal progress
+	progress := float32(elapsed / animDuration)
+	if progress > 1.0 {
+		progress = 1.0
+	}
+
+	lineCol := AppColors.Accent1
+	lineCol.A = uint8(255 * opacity)
 
 	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		// Use a large portion of the screen
 		w := int(float32(gtx.Constraints.Max.X) * 0.8)
 		h := int(float32(gtx.Constraints.Max.Y) * 0.6)
 
-		// Ensure reasonable aspect ratio limits
 		if h > w {
 			h = w
 		}
 
 		return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Bottom: unit.Dp(0)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return drawSmoothTrend(gtx, w, h, AppColors.Accent1, progress, false) // False = Bullish (Intro)
-				})
+				return drawSmoothTrend(gtx, w, h, lineCol, progress, false)
 			}),
 		)
 	})

@@ -16,6 +16,7 @@ import (
 
 	// External utilities
 	pb "github.com/Niutaq/Gix/api/proto/v1"
+	"github.com/Niutaq/Gix/pkg/finops"
 	"github.com/Niutaq/Gix/pkg/scrapers"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -160,6 +161,14 @@ func main() {
 		}
 	}()
 
+	// FinOps Summary Report on startup
+	log.Println("--- FinOps Analysis ---")
+	log.Println(finops.DefaultRates.Summary(1, 1)) // Assuming 1 node, 1 LB for now
+	for _, tip := range finops.GenerateTips(1, 1) {
+		log.Printf("[TIP] %s: %s (Potential: $%.2f/mo)", tip.Title, tip.Description, tip.Potential)
+	}
+	log.Println("-----------------------")
+
 	appState := &AppState{
 		DB:    dbpool,
 		Cache: rdb,
@@ -190,6 +199,7 @@ func main() {
 		v1.GET("/cantors", handleCantorsList(appState))
 		v1.GET("/rates", handleGetRates(appState))
 		v1.GET("/history", handleGetHistory(appState))
+		v1.GET("/finops", handleFinOps())
 	}
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
@@ -730,9 +740,12 @@ func fetchAllCantors(ctx context.Context, db *pgxpool.Pool) ([]CantorInfo, error
 
 // processCantorCurrency handles scraping and saving data for a single cantor and currency.
 func processCantorCurrency(ctx context.Context, app *AppState, ci CantorInfo, curr string) {
+	start := time.Now()
 	time.Sleep(500 * time.Millisecond) // Throttling to be polite
 
 	_, rates, err := scrapeAndProcess(app, ci, ci.ID, curr)
+	duration := time.Since(start)
+
 	if err != nil {
 		return
 	}
@@ -741,10 +754,21 @@ func processCantorCurrency(ctx context.Context, app *AppState, ci CantorInfo, cu
 		return
 	}
 
-	log.Printf("Harvesting: %s -> %s (%.3f / %.3f)", ci.DisplayName, curr, rates.Buy, rates.Sell)
+	log.Printf("Harvesting: %s -> %s (%.3f / %.3f) [Perf: %v]", ci.DisplayName, curr, rates.Buy, rates.Sell, duration)
+	finops.Stats.Record(ci.DisplayName, duration)
 
 	saveToArchive(app.DB, ci.ID, curr, rates.Buy, rates.Sell)
 	updateCacheAndNotify(ctx, app, ci.ID, curr, rates)
+}
+
+// handleFinOps provides a handler that generates a FinOps summary including cost breakdown and optimization tips.
+func handleFinOps() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		summary := finops.Stats.GetSummary()
+		summary["infrastructure"] = finops.DefaultRates.Summary(1, 1)
+		summary["tips"] = finops.GenerateTips(1, 1)
+		c.JSON(http.StatusOK, summary)
+	}
 }
 
 // updateCacheAndNotify updates Redis cache and publishes the event via Pub/Sub.
