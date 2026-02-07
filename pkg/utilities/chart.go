@@ -8,6 +8,8 @@ import (
 	"math"
 	"time"
 
+	"runtime"
+
 	// Gio utilities
 	"gioui.org/app"
 	"gioui.org/f32"
@@ -152,23 +154,28 @@ func drawGrid(gtx layout.Context, ctx chartLayoutContext, alpha uint8) {
 // drawChartLines renders the line chart's lines and fills.
 func drawChartLines(gtx layout.Context, window *app.Window, ctx chartLayoutContext, lc *LineChart, alpha uint8) {
 	var path clip.Path
-	path.Begin(gtx.Ops)
 
 	total := len(lc.Data)
 	startPt := getPoint(ctx, 0, total, lc.Data[0])
+	lastPt := getPoint(ctx, total-1, total, lc.Data[total-1])
+
+	// Gradient Fill
+	gradAlpha := alpha / 4
+	if runtime.GOOS == "linux" {
+		gradAlpha = alpha / 8
+	}
+	fillStartColor := applyAlpha(AppColors.Accent1, gradAlpha)
+	fillEndColor := applyAlpha(AppColors.Accent1, 0)
+
+	path.Begin(gtx.Ops)
 	path.MoveTo(startPt)
 	for i := 1; i < total; i++ {
 		path.LineTo(getPoint(ctx, i, total, lc.Data[i]))
 	}
 
-	lastPt := getPoint(ctx, total-1, total, lc.Data[total-1])
 	path.LineTo(f32.Point{X: lastPt.X, Y: ctx.height})
 	path.LineTo(f32.Point{X: startPt.X, Y: ctx.height})
 	path.Close()
-
-	// Gradient Fill
-	fillStartColor := applyAlpha(AppColors.Accent1, alpha/4)
-	fillEndColor := applyAlpha(AppColors.Accent1, 0)
 
 	stack := clip.Outline{Path: path.End()}.Op().Push(gtx.Ops)
 	paint.LinearGradientOp{
@@ -189,12 +196,25 @@ func drawChartLines(gtx layout.Context, window *app.Window, ctx chartLayoutConte
 	pathSpec := linePath.End()
 
 	strokeColor := applyAlpha(AppColors.Accent1, alpha)
-	// Subtle, wide glow for the sexy neon effect
-	glowColor := applyAlpha(AppColors.Accent1, alpha/6)
-	paint.FillShape(gtx.Ops, glowColor, clip.Stroke{Path: pathSpec, Width: 10.0}.Op())
+
+	glowAlpha := alpha / 6
+	glowWidth := float32(10.0)
+	if runtime.GOOS == "linux" {
+		glowAlpha = alpha / 12
+		glowWidth = 4.0
+	}
+	glowColor := applyAlpha(AppColors.Accent1, glowAlpha)
+
+	paint.FillShape(gtx.Ops, glowColor, clip.Stroke{
+		Path:  pathSpec,
+		Width: glowWidth,
+	}.Op())
 
 	// Sharp core line
-	paint.FillShape(gtx.Ops, strokeColor, clip.Stroke{Path: pathSpec, Width: 2.0}.Op())
+	paint.FillShape(gtx.Ops, strokeColor, clip.Stroke{
+		Path:  pathSpec,
+		Width: 2.0,
+	}.Op())
 
 	// End Point Dots with Pulse
 	drawEndDots(gtx, window, lastPt, alpha)
@@ -208,13 +228,13 @@ func drawEndDots(gtx layout.Context, window *app.Window, pt f32.Point, alpha uin
 	// Outer Pulse Circle - more subtle in Light Mode
 	baseAlpha := 0.3
 	if AppColors.Background.R > 200 {
-		baseAlpha = 0.15
+		baseAlpha = 0.40
 	}
 	pulseAlpha := uint8(float32(alpha) * (1.0 - pulse) * float32(baseAlpha))
 
 	pCircle := clip.Ellipse{
-		Min: image.Point{X: int(pt.X) - int(5.0 + pulse*10.0), Y: int(pt.Y) - int(5.0 + pulse*10.0)},
-		Max: image.Point{X: int(pt.X) + int(5.0 + pulse*10.0), Y: int(pt.Y) + int(5.0 + pulse*10.0)},
+		Min: image.Point{X: int(pt.X) - int(5.0+pulse*10.0), Y: int(pt.Y) - int(5.0+pulse*10.0)},
+		Max: image.Point{X: int(pt.X) + int(5.0+pulse*10.0), Y: int(pt.Y) + int(5.0+pulse*10.0)},
 	}.Op(gtx.Ops)
 	paint.FillShape(gtx.Ops, applyAlpha(AppColors.Accent1, pulseAlpha), pCircle)
 
@@ -254,7 +274,6 @@ func drawChartLabels(gtx layout.Context, theme *material.Theme, ctx chartLayoutC
 	lblVal.TextSize = unit.Sp(11)
 
 	{
-		// Draw without background for cleaner look
 		labelOffset := image.Point{
 			X: int(lastPt.X) - 45,
 			Y: int(lastPt.Y) - 20,
@@ -367,7 +386,7 @@ func drawTooltip(gtx layout.Context, theme *material.Theme, ctx chartLayoutConte
 	// Calculate pixel dimensions for background
 	pxWidth := gtx.Dp(tipWidth)
 	pxHeight := gtx.Dp(tipHeight)
-	
+
 	tipOffset := image.Point{
 		X: int(hoverPt.X) - (pxWidth / 2),
 		Y: int(hoverPt.Y) - pxHeight - gtx.Dp(unit.Dp(10)),
@@ -388,13 +407,13 @@ func drawTooltip(gtx layout.Context, theme *material.Theme, ctx chartLayoutConte
 
 	// Tooltip Container
 	tipRect := image.Rectangle{Max: image.Point{X: pxWidth, Y: pxHeight}}
-	
+
 	// Draw Background & Border
 	{
 		radius := unit.Dp(8)
 		pxRadius := gtx.Dp(radius)
 		paint.FillShape(gtx.Ops, color.NRGBA{R: 10, G: 10, B: 15, A: 252}, clip.UniformRRect(tipRect, pxRadius).Op(gtx.Ops))
-		
+
 		widget.Border{
 			Color:        applyAlpha(AppColors.Accent1, 100),
 			Width:        unit.Dp(1),
