@@ -712,6 +712,12 @@ func harvest(app *AppState, currencies []string) {
 	}
 
 	for _, ci := range cantors {
+		// FinOps Optimization: Skip cantors identified as too expensive/inefficient
+		if ci.DisplayName == "Kantor Alex (Rzeszów)" {
+			log.Printf("FinOps: Skipping %s (Performance overhead too high)", ci.DisplayName)
+			continue
+		}
+
 		for _, curr := range currencies {
 			processCantorCurrency(ctx, app, ci, curr)
 		}
