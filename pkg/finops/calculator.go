@@ -88,7 +88,7 @@ type OptimizationTip struct {
 }
 
 // GenerateTips analyzes the current state and suggests savings
-func GenerateTips(lbCount int) []OptimizationTip {
+func GenerateTips(dropletCount, lbCount int) []OptimizationTip {
 	var tips []OptimizationTip
 
 	// Tip 1: Load Balancer is expensive for small projects
@@ -103,6 +103,7 @@ func GenerateTips(lbCount int) []OptimizationTip {
 	return tips
 }
 
+// Summary calculates the estimated monthly cost based on the number of droplets and load balancers provided.
 func (r ResourceRates) Summary(droplets, lbs int) string {
 	hourly := (float64(droplets) * r.DropletStandardBasic) + (float64(lbs) * r.LoadBalancerStandard)
 	return fmt.Sprintf("FinOps Profile: Estimated spend $%.2f/mo", hourly*672)
