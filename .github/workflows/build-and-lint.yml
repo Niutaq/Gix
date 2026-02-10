@@ -8,10 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe5da7ef0b # v5.0.2
         with:
           go-version: '1.25.3'
           cache: true
@@ -49,12 +49,12 @@ jobs:
         run: go build ./...
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@aaa42aa0628b4bc2573c7547ed6a1278fcc51f0d # v6.0.1
         with:
           version: v2.7.2
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4f5590c0b60009554cd888090c296 # v0.24.0
         with:
           scan-type: 'fs'
           ignore-unfixed: true
