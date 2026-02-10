@@ -91,6 +91,9 @@ type UIState struct {
 	CurrencyList widget.List
 	SearchEditor widget.Editor
 	SearchText   string
+	SearchActive bool
+	SearchClickable widget.Clickable
+	FilteredIDs  []string
 
 	ChartMode        string             // "BUY" or "SELL"
 	ChartModeButtons []widget.Clickable // [0] -> Buy, [1] -> Sell
@@ -110,10 +113,11 @@ type UIState struct {
 	StatusClickable widget.Clickable
 	HoverInfo       HoverInfo
 	NotchState      struct {
-		CurrentAlpha  float32
-		LastContent   HoverInfo
-		LastTime      time.Time
-		LastHoverTime time.Time
+		CurrentAlpha   float32
+		LastContent    HoverInfo
+		LastTime       time.Time
+		LastHoverTime  time.Time
+		HoverStartTime time.Time
 	}
 
 	PulseState struct {
