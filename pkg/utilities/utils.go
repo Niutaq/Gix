@@ -646,7 +646,6 @@ func layoutToggleButton(gtx layout.Context, theme *material.Theme, btn *widget.C
 // updateNotchAnimation handles the fade-in/out logic for the dynamic notch.
 func updateNotchAnimation(window *app.Window, state *AppState) {
 	now := time.Now()
-
 	if state.UI.NotchState.LastTime.IsZero() {
 		state.UI.NotchState.LastTime = now
 	}
@@ -656,7 +655,27 @@ func updateNotchAnimation(window *app.Window, state *AppState) {
 	}
 	state.UI.NotchState.LastTime = now
 
-	// Desktop Settle Logic: Only show notch if hovered for >1500ms to avoid flicker
+	shouldShow := shouldShowNotch(state, now)
+
+	targetAlpha := float32(0.0)
+	if shouldShow {
+		targetAlpha = 1.0
+		state.UI.NotchState.LastContent = state.UI.HoverInfo
+	}
+
+	speed := float32(8.0)
+	if targetAlpha == 0 {
+		speed = 4.0
+	}
+	state.UI.NotchState.CurrentAlpha = moveTowards(state.UI.NotchState.CurrentAlpha, targetAlpha, speed*float32(dt))
+
+	if state.UI.NotchState.CurrentAlpha > 0.01 || state.UI.HoverInfo.Active {
+		window.Invalidate()
+	}
+	state.UI.HoverInfo = HoverInfo{Active: false}
+}
+
+func shouldShowNotch(state *AppState, now time.Time) bool {
 	if state.UI.HoverInfo.Active {
 		if state.UI.NotchState.HoverStartTime.IsZero() {
 			state.UI.NotchState.HoverStartTime = now
@@ -668,32 +687,11 @@ func updateNotchAnimation(window *app.Window, state *AppState) {
 
 	settleDelay := 1500 * time.Millisecond
 	if state.UI.IsMobile {
-		settleDelay = 0 // Instant on mobile
+		settleDelay = 0
 	}
 
 	isSettled := !state.UI.NotchState.HoverStartTime.IsZero() && now.Sub(state.UI.NotchState.HoverStartTime) > settleDelay
-	shouldShow := isSettled || (state.UI.NotchState.CurrentAlpha > 0.01 && now.Sub(state.UI.NotchState.LastHoverTime) < 500*time.Millisecond)
-
-	targetAlpha := float32(0.0)
-	if shouldShow {
-		targetAlpha = 1.0
-		if isSettled {
-			state.UI.NotchState.LastContent = state.UI.HoverInfo
-		}
-	}
-
-	speed := float32(8.0)
-	if targetAlpha == 0 {
-		speed = 4.0
-	}
-	change := speed * float32(dt)
-	state.UI.NotchState.CurrentAlpha = moveTowards(state.UI.NotchState.CurrentAlpha, targetAlpha, change)
-
-	if state.UI.NotchState.CurrentAlpha > 0.01 || state.UI.HoverInfo.Active {
-		window.Invalidate()
-	}
-
-	state.UI.HoverInfo = HoverInfo{Active: false}
+	return isSettled || (state.UI.NotchState.CurrentAlpha > 0.01 && now.Sub(state.UI.NotchState.LastHoverTime) < 500*time.Millisecond)
 }
 
 // moveTowards linearly interpolates from the current value toward the target by a maximum change of maxDelta.
@@ -1757,50 +1755,11 @@ func layoutHeader(gtx layout.Context, window *app.Window,
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-					// Mobile Menu Button
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						return layoutMobileMenuButton(gtx, window, state)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										h2 := material.H5(theme, GetTranslation(state.UI.Language, "market_title"))
-										h2.Color = AppColors.Text
-										h2.Font.Weight = font.Bold
-										return h2.Layout(gtx)
-									}),
-									layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										return layoutStatusIndicator(gtx, window, state)
-									}),
-									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										if !state.UI.IsMobile {
-											return layout.Dimensions{}
-										}
-										if state.UI.SearchClickable.Clicked(gtx) {
-											state.UI.SearchActive = !state.UI.SearchActive
-											window.Invalidate()
-										}
-										return layout.Inset{Left: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-											return state.UI.SearchClickable.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-												col := AppColors.Text
-												if state.UI.SearchActive {
-													col = AppColors.Accent1
-												}
-												return DrawIconSearch(gtx, col)
-											})
-										})
-									}),
-								)
-							}),
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								caption := material.Caption(theme, GetTranslation(state.UI.Language, "market_subtitle"))
-								caption.Color = color.NRGBA{R: 150, G: 150, B: 150, A: 255}
-								return caption.Layout(gtx)
-							}),
-						)
+						return renderHeaderMainSection(gtx, window, theme, state)
 					}),
 				)
 			}),
@@ -1811,6 +1770,52 @@ func layoutHeader(gtx layout.Context, window *app.Window,
 				return layoutThemeButton(gtx, window, state)
 			}),
 		)
+	})
+}
+
+func renderHeaderMainSection(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					h2 := material.H5(theme, GetTranslation(state.UI.Language, "market_title"))
+					h2.Color = AppColors.Text
+					h2.Font.Weight = font.Bold
+					return h2.Layout(gtx)
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layoutStatusIndicator(gtx, window, state)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return renderHeaderSearchToggle(gtx, window, state)
+				}),
+			)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			caption := material.Caption(theme, GetTranslation(state.UI.Language, "market_subtitle"))
+			caption.Color = color.NRGBA{R: 150, G: 150, B: 150, A: 255}
+			return caption.Layout(gtx)
+		}),
+	)
+}
+
+func renderHeaderSearchToggle(gtx layout.Context, window *app.Window, state *AppState) layout.Dimensions {
+	if !state.UI.IsMobile {
+		return layout.Dimensions{}
+	}
+	if state.UI.SearchClickable.Clicked(gtx) {
+		state.UI.SearchActive = !state.UI.SearchActive
+		window.Invalidate()
+	}
+	return layout.Inset{Left: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return state.UI.SearchClickable.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			col := AppColors.Text
+			if state.UI.SearchActive {
+				col = AppColors.Accent1
+			}
+			return DrawIconSearch(gtx, col)
+		})
 	})
 }
 
@@ -1973,45 +1978,6 @@ func drawSearchLocateButton(gtx layout.Context, window *app.Window, theme *mater
 	return layout.Inset{Left: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layoutLocateButton(gtx, window, theme, state)
 	})
-}
-
-// layoutCantorInfoBar displays cantor details (address, distance) in the search bar area.
-func layoutCantorInfoBar(gtx layout.Context, theme *material.Theme, info HoverInfo) layout.Dimensions {
-	macro := op.Record(gtx.Ops)
-	dims := layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				lbl := material.Caption(theme, info.Title)
-				lbl.Color = AppColors.Accent1
-				lbl.Font.Weight = font.Bold
-				lbl.MaxLines = 1
-				return lbl.Layout(gtx)
-			}),
-			layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				txt := info.Extra // Distance
-				if txt == "" {
-					txt = info.Subtitle
-				} // Fallback to address if no distance
-
-				lbl := material.Caption(theme, txt)
-				lbl.Color = color.NRGBA{R: 200, G: 200, B: 210, A: 255}
-				lbl.MaxLines = 1
-				return lbl.Layout(gtx)
-			}),
-		)
-	})
-	call := macro.Stop()
-
-	shape := clip.UniformRRect(image.Rectangle{Max: dims.Size}, gtx.Dp(10))
-	paint.FillShape(gtx.Ops, color.NRGBA{R: 35, G: 35, B: 40, A: 255}, shape.Op(gtx.Ops))
-
-	// Render content with clipping
-	stack := clip.Rect(image.Rectangle{Max: dims.Size}).Push(gtx.Ops)
-	call.Add(gtx.Ops)
-	stack.Pop()
-
-	return dims
 }
 
 // layoutLocateButton renders the Locate button, handles its click events, and dynamically updates the UI state.
