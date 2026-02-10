@@ -16,7 +16,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: gix-backend
-          image: niutaq/gix-backend:1.2.6
+          image: niutaq/gix-backend:v1.2.7
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -54,7 +54,7 @@ spec:
             - name: DD_ENV
               value: "production"
             - name: DD_VERSION
-              value: "1.2.6"
+              value: "v1.2.7"
           livenessProbe:
             httpGet:
               path: /healthz

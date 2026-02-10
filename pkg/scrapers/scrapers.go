@@ -59,7 +59,7 @@ func init() {
 	Register("C1", FetchC1)
 	Register("C2", FetchC2)
 	Register("C3", FetchC3)
-	Register("C4", FetchC4)
+	// Register("C4", FetchC4) // Kantor Alex - Disabled due to poor performance (expensive task)
 	Register("C5", FetchC5)
 	Register("C6", FetchC6)
 	Register("C7", FetchGenericTable)
