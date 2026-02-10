@@ -259,6 +259,12 @@ func handleCantorsList(app *AppState) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": internalServerError})
 				return
 			}
+
+			// FinOps: Skip cantors identified as too expensive/inefficient
+			if cr.DisplayName == "Kantor Alex (Rzeszów)" {
+				continue
+			}
+
 			cantors = append(cantors, cr)
 		}
 

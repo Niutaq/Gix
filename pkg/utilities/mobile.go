@@ -4,10 +4,12 @@ import (
 	// Standard libraries
 	"image"
 	"image/color"
+	"math"
 	"time"
 
 	// Gio utilities
 	"gioui.org/app"
+	"gioui.org/f32"
 	"gioui.org/layout"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
@@ -127,6 +129,71 @@ func DrawIconMenu(gtx layout.Context, col color.NRGBA) layout.Dimensions {
 		rect := image.Rect(xOffset, y-thickness/2, xOffset+width, y+thickness/2)
 		paint.FillShape(gtx.Ops, col, clip.UniformRRect(rect, thickness/2).Op(gtx.Ops))
 	}
+
+	return layout.Dimensions{Size: image.Point{X: size, Y: size}}
+}
+
+// DrawIconClose draws a Material-style close (X) icon.
+func DrawIconClose(gtx layout.Context, col color.NRGBA) layout.Dimensions {
+	size := gtx.Dp(unit.Dp(24))
+	gtx.Constraints.Min = image.Point{X: size, Y: size}
+
+	thickness := float32(gtx.Dp(unit.Dp(2)))
+	padding := float32(size) * 0.25
+
+	// Diagonal 1
+	var path1 clip.Path
+	path1.Begin(gtx.Ops)
+	path1.MoveTo(f32.Point{X: padding, Y: padding})
+	path1.LineTo(f32.Point{X: float32(size) - padding, Y: float32(size) - padding})
+	paint.FillShape(gtx.Ops, col, clip.Stroke{Path: path1.End(), Width: thickness}.Op())
+
+	// Diagonal 2
+	var path2 clip.Path
+	path2.Begin(gtx.Ops)
+	path2.MoveTo(f32.Point{X: float32(size) - padding, Y: padding})
+	path2.LineTo(f32.Point{X: padding, Y: float32(size) - padding})
+	paint.FillShape(gtx.Ops, col, clip.Stroke{Path: path2.End(), Width: thickness}.Op())
+
+	return layout.Dimensions{Size: image.Point{X: size, Y: size}}
+}
+
+// DrawIconSearch draws a Material-style search icon (magnifying glass).
+func DrawIconSearch(gtx layout.Context, col color.NRGBA) layout.Dimensions {
+	size := gtx.Dp(unit.Dp(24))
+	gtx.Constraints.Min = image.Point{X: size, Y: size}
+
+	thickness := float32(gtx.Dp(unit.Dp(2)))
+	radius := float32(size) * 0.25
+	center := f32.Point{X: float32(size) * 0.45, Y: float32(size) * 0.45}
+
+	// Circle
+	var path clip.Path
+	path.Begin(gtx.Ops)
+	path.MoveTo(f32.Point{X: center.X + radius, Y: center.Y})
+	path.Arc(f32.Point{X: -radius, Y: 0}, f32.Point{X: -radius, Y: 0}, 2*math.Pi)
+	
+	paint.FillShape(gtx.Ops, col, clip.Stroke{
+		Path:  path.End(),
+		Width: thickness,
+	}.Op())
+
+	// Handle
+	handleStart := f32.Point{
+		X: center.X + radius*float32(math.Cos(math.Pi/4)),
+		Y: center.Y + radius*float32(math.Sin(math.Pi/4)),
+	}
+	handleEnd := f32.Point{X: float32(size) * 0.85, Y: float32(size) * 0.85}
+
+	var handlePath clip.Path
+	handlePath.Begin(gtx.Ops)
+	handlePath.MoveTo(handleStart)
+	handlePath.LineTo(handleEnd)
+	
+	paint.FillShape(gtx.Ops, col, clip.Stroke{
+		Path:  handlePath.End(),
+		Width: thickness,
+	}.Op())
 
 	return layout.Dimensions{Size: image.Point{X: size, Y: size}}
 }
