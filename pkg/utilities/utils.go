@@ -210,29 +210,34 @@ func layoutCenterPanel(gtx layout.Context, window *app.Window, theme *material.T
 // layoutInfoBar lays out the information bar at the top of the main content panel.
 func layoutInfoBar(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	return layout.Inset{Bottom: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		// Dynamic Notch Overlay (replaces Top Movers when active)
-		if state.UI.NotchState.CurrentAlpha > 0.01 {
-			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return layoutNotch(gtx, theme, state)
-			})
-		}
-
-		if !state.UI.IsMobile {
-			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return layoutTopMovers(gtx, theme, state)
-			})
-		}
-
-		height := gtx.Dp(unit.Dp(36))
-		if gtx.Constraints.Max.X < gtx.Dp(unit.Dp(350)) {
-			height = gtx.Dp(unit.Dp(72)) // Double height for vertical movers
-		}
-		gtx.Constraints.Min.Y = height
-		gtx.Constraints.Max.Y = height
-
-		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return layoutTopMovers(gtx, theme, state)
-		})
+		// Use Stack to overlay Notch on top of Movers for smooth transition
+		return layout.Stack{Alignment: layout.Center}.Layout(gtx,
+			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+				if !state.UI.IsMobile {
+					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return layoutTopMovers(gtx, theme, state)
+					})
+				}
+				// Mobile logic for Movers height/layout
+				height := gtx.Dp(unit.Dp(36))
+				if gtx.Constraints.Max.X < gtx.Dp(unit.Dp(350)) {
+					height = gtx.Dp(unit.Dp(72))
+				}
+				gtx.Constraints.Min.Y = height
+				gtx.Constraints.Max.Y = height
+				return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layoutTopMovers(gtx, theme, state)
+				})
+			}),
+			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+				if state.UI.NotchState.CurrentAlpha <= 0.001 {
+					return layout.Dimensions{}
+				}
+				return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layoutNotch(gtx, theme, state)
+				})
+			}),
+		)
 	})
 }
 
@@ -1023,9 +1028,12 @@ func layoutCantorSelection(gtx layout.Context, window *app.Window, theme *materi
 	bestBuy, bestSell := calculateBestRates(state.Vault.Rates)
 
 	currentSearch := state.UI.SearchEditor.Text()
-	// Robust re-filter logic: always filter if searching or location is active to ensure accuracy
-	if state.UI.SearchText != currentSearch || state.UI.UserLocation.Active || len(state.UI.FilteredIDs) == 0 {
+	currentSort := state.UI.SortMode
+
+	// Robust re-filter logic: filter if search text changed, sort mode changed, location active, or list empty
+	if state.UI.SearchText != currentSearch || state.UI.LastSortMode != currentSort || state.UI.UserLocation.Active || len(state.UI.FilteredIDs) == 0 {
 		state.UI.SearchText = currentSearch
+		state.UI.LastSortMode = currentSort
 		state.UI.FilteredIDs = filterCantorList(state, state.UI.SearchText)
 	}
 	filteredIDs := state.UI.FilteredIDs

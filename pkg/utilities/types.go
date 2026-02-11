@@ -23,8 +23,8 @@ type CantorInfo struct {
 	Button      widget.Clickable `json:"-"`
 
 	// Long Press Logic
-	PressStart        time.Time `json:"-"`
-	IsPressing        bool      `json:"-"`
+	PressStart         time.Time `json:"-"`
+	IsPressing         bool      `json:"-"`
 	LongPressTriggered bool      `json:"-"`
 }
 
@@ -81,19 +81,19 @@ type UIState struct {
 	ModalList           widget.List
 	ModalClose          widget.Clickable
 
-	MobileMenuOpen     bool
-	MobileMenuBtn      widget.Clickable
-	MobileMenuBackdrop widget.Clickable
-	BgClick            widget.Clickable
-	IsMobile           bool
+	MobileMenuOpen       bool
+	MobileMenuBtn        widget.Clickable
+	MobileMenuBackdrop   widget.Clickable
+	BgClick              widget.Clickable
+	IsMobile             bool
 	LayoutTransitionTime time.Time
 
-	CurrencyList widget.List
-	SearchEditor widget.Editor
-	SearchText   string
-	SearchActive bool
+	CurrencyList    widget.List
+	SearchEditor    widget.Editor
+	SearchText      string
+	SearchActive    bool
 	SearchClickable widget.Clickable
-	FilteredIDs  []string
+	FilteredIDs     []string
 
 	ChartMode        string             // "BUY" or "SELL"
 	ChartModeButtons []widget.Clickable // [0] -> Buy, [1] -> Sell
@@ -144,10 +144,11 @@ type UIState struct {
 	Language string
 	Currency string
 
-	LightMode       bool
-	ThemeButton     widget.Clickable
+	LightMode   bool
+	ThemeButton widget.Clickable
 
 	SortMode         string // "NAME", "BUY", "SELL", "DIST"
+	LastSortMode     string // To detect changes
 	SortButtons      []widget.Clickable
 	Timeframe        string // "1D", "7D", "30D"
 	TimeframeButtons []widget.Clickable
