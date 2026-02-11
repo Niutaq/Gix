@@ -102,12 +102,12 @@ go install github.com/go-task/task/v3/cmd/task@latest
 ```
 **3.** Run using commands
 
-| Action        | Command              | Description                               |
-|:--------------|:---------------------|:------------------------------------------|
-| **Run App**   | `task run`           | Runs frontend connected to live API       |
-| **Build Mac** | `task build:macos`   | Creates `Gix.app` (fixes fonts & signing) |
-| **Build Win** | `task build:windows` | Creates `gix.exe` with icon               |
-| **Clean**     | `task clean`         | Removes build artifacts                   |
+| Platform | Command | Description |
+|:---:|:---|:---|
+| <img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" height="28"/> | `task build:macos` | Creates `Gix.app` (fixes fonts & signing) |
+| <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" height="28"/> | `task build:windows` | Creates `gix.exe` with icon |
+| <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" height="28"/> | `task build:linux` | Creates `gix_linux` binary |
+| <img src="https://img.shields.io/badge/Clean-D00000?style=for-the-badge" height="28"/> | `task clean` | Removes build artifacts |
 
 ---
 

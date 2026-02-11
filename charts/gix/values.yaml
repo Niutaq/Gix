@@ -1,0 +1,45 @@
+# Default values for gix.
+
+replicaCount: 1
+
+image:
+  repository: niutaq/gix-backend
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+nameOverride: ""
+fullnameOverride: "gix-backend"
+
+service:
+  type: LoadBalancer
+  ports:
+    http: 8080
+    drpc: 8081
+  nodePorts:
+    http: 30080
+    drpc: 30081
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+    ephemeral-storage: 128Mi
+  limits:
+    memory: 512Mi
+    ephemeral-storage: 1Gi
+
+env:
+  natsUrl: "nats://gix-nats:4222"
+  swaggerHost: "165.227.246.100:8080"
+
+# Secret and ConfigMap references
+externalSecrets:
+  enabled: true
+  secretName: gix-secrets
+  configMapName: gix-config
+
+datadog:
+  enabled: true
+  service: "gix-backend"
+  env: "production"

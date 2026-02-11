@@ -1,6 +1,7 @@
 package utilities
 
 import (
+	// Standard libraries
 	"encoding/json"
 	"log"
 	"os"
@@ -8,12 +9,14 @@ import (
 	"time"
 )
 
+// CachedData represents the cached application state.
 type CachedData struct {
 	Cantors map[string]*CantorInfo  `json:"cantors"`
 	Rates   map[string]*CantorEntry `json:"rates"`
 	SavedAt time.Time               `json:"savedAt"`
 }
 
+// GetCachePath returns the path to the cache file.
 func GetCachePath() string {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
@@ -79,6 +82,10 @@ func LoadCache(state *AppState) {
 		log.Printf("Failed to decode cache: %v", err)
 		return
 	}
+
+	// Filter out 'alex' (legacy/performance issue)
+	delete(data.Cantors, "alex")
+	delete(data.Rates, "alex")
 
 	state.CantorsMu.Lock()
 	state.Cantors = data.Cantors
