@@ -32,14 +32,14 @@ func (s *GlobalStats) Record(cantorID string, duration time.Duration) {
 }
 
 // GetSummary returns a summary of the statistics, including total scrapes, average duration, and expensive tasks.
-func (s *GlobalStats) GetSummary() map[string]interface{} {
+func (s *GlobalStats) GetSummary() map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	avg := 0.0
 	if s.TotalScrapes > 0 {
 		avg = s.TotalDuration.Seconds() / float64(s.TotalScrapes)
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"total_scrapes":    s.TotalScrapes,
 		"avg_duration_sec": fmt.Sprintf("%.2fs", avg),
 		"expensive_tasks":  s.ExpensiveTasks,

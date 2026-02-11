@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gix.fullname" . }}
+  labels:
+    {{- include "gix.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "gix.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gix.selectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.ports.http }}
+            - name: drpc
+              containerPort: {{ .Values.service.ports.drpc }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.service.ports.http }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.secretName }}
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.externalSecrets.configMapName }}
+                  key: REDIS_URL
+            - name: NATS_URL
+              value: {{ .Values.env.natsUrl | quote }}
+            - name: SWAGGER_HOST
+              value: {{ .Values.env.swaggerHost | quote }}
+            {{- if .Values.datadog.enabled }}
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: DD_SERVICE
+              value: {{ .Values.datadog.service | quote }}
+            - name: DD_ENV
+              value: {{ .Values.datadog.env | quote }}
+            - name: DD_VERSION
+              value: {{ .Chart.AppVersion | quote }}
+            {{- end }}

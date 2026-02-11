@@ -48,3 +48,7 @@ k8s/.secrets.yaml
 /gix-server
 trace.out
 /pkg/scrapers/*_test*.go
+# Binaries and profiling
+cpu.pprof
+gix_linux
+gix-server-bin
