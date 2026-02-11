@@ -30,7 +30,7 @@ type LineChart struct {
 	Data       []float64
 	Timestamps []int64 // Unix timestamps corresponding to Data points
 	StartLabel string
-	Tag        interface{} // Tag for pointer events
+	Tag        any // Tag for pointer events
 }
 
 // chartLayoutContext holds pre-calculated layout values to avoid passing too many arguments.
@@ -357,7 +357,7 @@ func drawTooltip(gtx layout.Context, theme *material.Theme, ctx chartLayoutConte
 	lineRect := image.Rect(int(hoverPt.X), 0, int(hoverPt.X)+1, int(ctx.height))
 	lineCol := color.NRGBA{R: 255, G: 255, B: 255, A: 50}
 	if AppColors.Background.R > 200 {
-		lineCol = color.NRGBA{R: 0, G: 0, B: 0, A: 40}
+		lineCol = color.NRGBA{R: 0, G: 0, B: 0, A: 70}
 	}
 	paint.FillShape(gtx.Ops, applyAlpha(lineCol, alpha), clip.Rect(lineRect).Op())
 

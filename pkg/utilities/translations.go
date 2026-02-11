@@ -14,6 +14,7 @@ import (
 //go:embed locales/*.json
 var localesFS embed.FS
 
+// Map for translations and once check variable
 var translationsMap map[string]map[string]string
 var once sync.Once
 
@@ -44,10 +45,10 @@ func GetFormattedDate(lang string, t time.Time) string {
 	if !ok {
 		months = monthNames["EN"]
 	}
-	
+
 	m := t.Month() // 1-12
 	monthStr := months[m-1]
-	
+
 	return fmt.Sprintf("%02d %s", t.Day(), monthStr)
 }
 

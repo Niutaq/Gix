@@ -124,7 +124,7 @@ func DrawIconMenu(gtx layout.Context, col color.NRGBA) layout.Dimensions {
 	xOffset := (size - width) / 2
 
 	// Draw 3 bars
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		y := (size / 4) * (i + 1)
 		rect := image.Rect(xOffset, y-thickness/2, xOffset+width, y+thickness/2)
 		paint.FillShape(gtx.Ops, col, clip.UniformRRect(rect, thickness/2).Op(gtx.Ops))
@@ -172,7 +172,7 @@ func DrawIconSearch(gtx layout.Context, col color.NRGBA) layout.Dimensions {
 	path.Begin(gtx.Ops)
 	path.MoveTo(f32.Point{X: center.X + radius, Y: center.Y})
 	path.Arc(f32.Point{X: -radius, Y: 0}, f32.Point{X: -radius, Y: 0}, 2*math.Pi)
-	
+
 	paint.FillShape(gtx.Ops, col, clip.Stroke{
 		Path:  path.End(),
 		Width: thickness,
@@ -189,7 +189,7 @@ func DrawIconSearch(gtx layout.Context, col color.NRGBA) layout.Dimensions {
 	handlePath.Begin(gtx.Ops)
 	handlePath.MoveTo(handleStart)
 	handlePath.LineTo(handleEnd)
-	
+
 	paint.FillShape(gtx.Ops, col, clip.Stroke{
 		Path:  handlePath.End(),
 		Width: thickness,

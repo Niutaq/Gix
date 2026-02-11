@@ -547,7 +547,7 @@ func generateMockChartData(state *AppState, basePrice float64) ([]float64, []int
 	now := time.Now().Unix()
 	step := int64(3600 * 24 * 7 / 100) // Spread 7 days over 100 points
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		timestamps[i] = now - int64(100-i)*step
 	}
 
@@ -1206,9 +1206,7 @@ func renderMovers(gtx layout.Context, theme *material.Theme, state *AppState, ga
 // layoutMoverNotch renders a single "Top Mover" notch.
 func layoutMoverNotch(gtx layout.Context, theme *material.Theme, name string, change float64, col color.NRGBA) layout.Dimensions {
 	fixedWidth := gtx.Dp(unit.Dp(170))
-	if gtx.Constraints.Max.X < fixedWidth {
-		fixedWidth = gtx.Constraints.Max.X
-	}
+	fixedWidth = min(fixedWidth, gtx.Constraints.Max.X)
 	gtx.Constraints.Min.X = fixedWidth
 	gtx.Constraints.Max.X = fixedWidth
 
@@ -2231,7 +2229,7 @@ func layoutLanguageGrid(gtx layout.Context, window *app.Window, theme *material.
 		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 			func() []layout.FlexChild {
 				children := make([]layout.FlexChild, cols)
-				for c := 0; c < cols; c++ {
+				for c := range cols {
 					idx := row*cols + c
 					if idx < len(options) {
 						children[c] = layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -2530,9 +2528,7 @@ func layoutIntroAnimation(gtx layout.Context, window *app.Window, state *AppStat
 		w := int(float32(gtx.Constraints.Max.X) * 0.8)
 		h := int(float32(gtx.Constraints.Max.Y) * 0.6)
 
-		if h > w {
-			h = w
-		}
+		h = min(h, w)
 
 		return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {

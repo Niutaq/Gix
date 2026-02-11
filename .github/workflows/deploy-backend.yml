@@ -21,6 +21,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Get version from Chart.yaml
+        id: get_version
+        run: |
+          VERSION=$(grep 'appVersion:' charts/gix/Chart.yaml | awk '{print $2}' | tr -d '"')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
@@ -29,6 +35,7 @@ jobs:
           push: true
           tags: |
             niutaq/gix-backend:${{ github.sha }}
+            niutaq/gix-backend:${{ env.VERSION }}
             niutaq/gix-backend:latest
 
   deploy:
@@ -37,6 +44,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Get version from Chart.yaml
+        id: get_version
+        run: |
+          VERSION=$(grep 'appVersion:' charts/gix/Chart.yaml | awk '{print $2}' | tr -d '"')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -48,5 +61,5 @@ jobs:
 
       - name: Update Kubernetes Deployment
         run: |
-          kubectl set image deployment/gix-backend gix-backend=niutaq/gix-backend:${{ github.sha }}
+          kubectl set image deployment/gix-backend gix-backend=niutaq/gix-backend:${{ env.VERSION }}
           kubectl rollout status deployment/gix-backend
