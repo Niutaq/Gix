@@ -83,6 +83,10 @@ func LoadCache(state *AppState) {
 		return
 	}
 
+	// Filter out 'alex' (legacy/performance issue)
+	delete(data.Cantors, "alex")
+	delete(data.Rates, "alex")
+
 	state.CantorsMu.Lock()
 	state.Cantors = data.Cantors
 	state.CantorsMu.Unlock()
