@@ -74,9 +74,28 @@ tasks:
       - gogio -target windows -icon {{.ICON}} -o {{.OUT_WIN}} ./cmd/gix
 
   build:linux:
-    desc: "Building a Linux binary"
+    desc: "Building a Linux binary and installing it locally (~/.local)"
     cmds:
       - go build -o {{.OUT_LINUX}} ./cmd/gix
+      - mkdir -p ~/.local/bin
+      - mkdir -p ~/.local/share/icons/gix
+      - mkdir -p ~/.local/share/applications
+      - cp {{.OUT_LINUX}} ~/.local/bin/gix
+      - cp {{.ICON}} ~/.local/share/icons/gix/{{.ICON}}
+      - |
+        cat <<EOF > ~/.local/share/applications/gix.desktop
+        [Desktop Entry]
+        Name={{.APP_NAME}}
+        Comment=Currency Exchange Rate Monitor
+        Exec=$HOME/.local/bin/gix
+        Icon=$HOME/.local/share/icons/gix/{{.ICON}}
+        Terminal=false
+        Type=Application
+        Categories=Finance;Utility;
+        Keywords=currency;exchange;rates;
+        StartupWMClass={{.APP_NAME}}
+        EOF
+      - update-desktop-database ~/.local/share/applications || true
 
   build:macos:
     desc: "Builds a valid .app package for macOS (with fonts and signature)"
