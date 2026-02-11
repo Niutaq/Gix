@@ -708,21 +708,6 @@ func shouldShowNotch(state *AppState, now time.Time) bool {
 	return isSettled || (state.UI.NotchState.CurrentAlpha > 0.01 && now.Sub(state.UI.NotchState.LastHoverTime) < 500*time.Millisecond)
 }
 
-// moveTowards linearly interpolates from the current value toward the target by a maximum change of maxDelta.
-func moveTowards(current, target, maxDelta float32) float32 {
-	if diff := target - current; diff < 0 {
-		diff = -diff
-		if diff <= maxDelta {
-			return target
-		}
-		return current - maxDelta
-	}
-	if diff := target - current; diff <= maxDelta {
-		return target
-	}
-	return current + maxDelta
-}
-
 // mulAlpha scales the alpha channel of a color by a float factor [0..1]
 // handling the 0-255 range correctly.
 func mulAlpha(c color.NRGBA, alpha float32) color.NRGBA {
