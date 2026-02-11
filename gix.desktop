@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Gix
+Comment=Currency Exchange Rate Monitor
+Exec=/usr/local/bin/gix_linux
+Icon=/usr/local/share/icons/gix/appicon2.png
+Terminal=false
+Type=Application
+Categories=Finance;Utility;
+Keywords=currency;exchange;rates;
+StartupWMClass=Gix

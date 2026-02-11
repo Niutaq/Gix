@@ -4,12 +4,6 @@ on:
   push:
     branches:
       - develop
-    paths:
-      - 'cmd/gix-server/**'
-      - 'pkg/**'
-      - 'k8s/**'
-      - 'Dockerfile'
-      - '.github/workflows/deploy-backend.yml'
 
 jobs:
   build-and-push:

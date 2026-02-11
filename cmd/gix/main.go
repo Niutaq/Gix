@@ -204,6 +204,10 @@ func updateCantors(window *app.Window, state *utilities.AppState, config utiliti
 	case list := <-cantorChan:
 		state.CantorsMu.Lock()
 		for _, c := range list {
+			// Explicitly ignore "alex" due to performance issues/request
+			if c.Name == "alex" {
+				continue
+			}
 			state.Cantors[c.Name] = &utilities.CantorInfo{
 				ID:          c.ID,
 				DisplayName: c.DisplayName,

@@ -89,9 +89,6 @@ func LayoutUI(gtx layout.Context, window *app.Window, theme *material.Theme, sta
 			return layoutModal(gtx, window, theme, state)
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return layoutNotch(gtx, theme, state, true)
-		}),
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			return layoutIntroAnimation(gtx, window, state)
 		}),
 	)
@@ -213,6 +210,13 @@ func layoutCenterPanel(gtx layout.Context, window *app.Window, theme *material.T
 // layoutInfoBar lays out the information bar at the top of the main content panel.
 func layoutInfoBar(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	return layout.Inset{Bottom: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		// Dynamic Notch Overlay (replaces Top Movers when active)
+		if state.UI.NotchState.CurrentAlpha > 0.01 {
+			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layoutNotch(gtx, theme, state)
+			})
+		}
+
 		if !state.UI.IsMobile {
 			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layoutTopMovers(gtx, theme, state)
@@ -547,7 +551,7 @@ func generateMockChartData(state *AppState, basePrice float64) ([]float64, []int
 	now := time.Now().Unix()
 	step := int64(3600 * 24 * 7 / 100) // Spread 7 days over 100 points
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		timestamps[i] = now - int64(100-i)*step
 	}
 
@@ -667,7 +671,16 @@ func updateNotchAnimation(window *app.Window, state *AppState) {
 	if targetAlpha == 0 {
 		speed = 4.0
 	}
-	state.UI.NotchState.CurrentAlpha = moveTowards(state.UI.NotchState.CurrentAlpha, targetAlpha, speed*float32(dt))
+
+	// Exponential smoothing for fluid animation (Lerp)
+	// 1 - exp(-dt * speed) makes it frame-rate independent
+	factor := float32(1.0 - math.Exp(-float64(dt)*float64(speed)))
+	diff := targetAlpha - state.UI.NotchState.CurrentAlpha
+	if math.Abs(float64(diff)) < 0.001 {
+		state.UI.NotchState.CurrentAlpha = targetAlpha
+	} else {
+		state.UI.NotchState.CurrentAlpha += diff * factor
+	}
 
 	if state.UI.NotchState.CurrentAlpha > 0.01 || state.UI.HoverInfo.Active {
 		window.Invalidate()
@@ -675,6 +688,7 @@ func updateNotchAnimation(window *app.Window, state *AppState) {
 	state.UI.HoverInfo = HoverInfo{Active: false}
 }
 
+// shouldShowNotch determines whether the notch should be shown based on the current state and time.
 func shouldShowNotch(state *AppState, now time.Time) bool {
 	if state.UI.HoverInfo.Active {
 		if state.UI.NotchState.HoverStartTime.IsZero() {
@@ -694,24 +708,23 @@ func shouldShowNotch(state *AppState, now time.Time) bool {
 	return isSettled || (state.UI.NotchState.CurrentAlpha > 0.01 && now.Sub(state.UI.NotchState.LastHoverTime) < 500*time.Millisecond)
 }
 
-// moveTowards linearly interpolates from the current value toward the target by a maximum change of maxDelta.
-func moveTowards(current, target, maxDelta float32) float32 {
-	if diff := target - current; diff < 0 {
-		diff = -diff
-		if diff <= maxDelta {
-			return target
-		}
-		return current - maxDelta
+// mulAlpha scales the alpha channel of a color by a float factor [0..1]
+// handling the 0-255 range correctly.
+func mulAlpha(c color.NRGBA, alpha float32) color.NRGBA {
+	if alpha <= 0 {
+		c.A = 0
+		return c
 	}
-	if diff := target - current; diff <= maxDelta {
-		return target
+	if alpha >= 1.0 {
+		return c
 	}
-	return current + maxDelta
-}
-
-// scaleAlpha scales the alpha value of a color.NRGBA by a given factor.
-func scaleAlpha(c color.NRGBA, a float32) color.NRGBA {
-	c.A = uint8(float32(c.A) * a)
+	// We must scale the alpha channel, but NRGBA assumes non-premultiplied alpha.
+	// So we just scale A.
+	newA := float32(c.A) * alpha
+	if newA > 255 {
+		newA = 255
+	}
+	c.A = uint8(newA)
 	return c
 }
 
@@ -1206,9 +1219,7 @@ func renderMovers(gtx layout.Context, theme *material.Theme, state *AppState, ga
 // layoutMoverNotch renders a single "Top Mover" notch.
 func layoutMoverNotch(gtx layout.Context, theme *material.Theme, name string, change float64, col color.NRGBA) layout.Dimensions {
 	fixedWidth := gtx.Dp(unit.Dp(170))
-	if gtx.Constraints.Max.X < fixedWidth {
-		fixedWidth = gtx.Constraints.Max.X
-	}
+	fixedWidth = min(fixedWidth, gtx.Constraints.Max.X)
 	gtx.Constraints.Min.X = fixedWidth
 	gtx.Constraints.Max.X = fixedWidth
 
@@ -1495,8 +1506,6 @@ func getCantorAddress(state *AppState, cantor *CantorInfo, cantorKey string) str
 		return "Gen. Okulickiego 1b, 37-450 Stalowa Wola"
 	case "exchange":
 		return "Grottgera 20, 35-001 Rzeszów"
-	case "alex":
-		return "Al. Tadeusza Rejtana 65, 35-310 Rzeszów"
 	case "grosz":
 		return "Sławkowska 4, 31-014 Kraków"
 	case "centrum":
@@ -2231,7 +2240,7 @@ func layoutLanguageGrid(gtx layout.Context, window *app.Window, theme *material.
 		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 			func() []layout.FlexChild {
 				children := make([]layout.FlexChild, cols)
-				for c := 0; c < cols; c++ {
+				for c := range cols {
 					idx := row*cols + c
 					if idx < len(options) {
 						children[c] = layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -2313,47 +2322,32 @@ func LoadFontCollection() ([]font.FontFace, error) {
 }
 
 // layoutNotch renders a UI "notch" element with dynamic alpha, displaying contextually relevant information to the user.
-func layoutNotch(gtx layout.Context, theme *material.Theme, state *AppState, center bool) layout.Dimensions {
+func layoutNotch(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	alphaVal := state.UI.NotchState.CurrentAlpha
 	if alphaVal <= 0.01 {
 		return layout.Dimensions{}
 	}
 
 	info := state.UI.NotchState.LastContent
-	render := func(gtx layout.Context) layout.Dimensions {
-		topInset := unit.Dp(10)
-		if state.UI.IsMobile {
-			topInset = unit.Dp(12) // Slightly more on mobile for status bars
-		}
 
-		return layout.Inset{Top: topInset}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			gtx.Constraints.Min.X = 0
+	gtx.Constraints.Min.X = 0
+	macro := op.Record(gtx.Ops)
+	dims := renderNotchContent(gtx, theme, info, alphaVal, state)
+	call := macro.Stop()
 
-			macro := op.Record(gtx.Ops)
-			dims := renderNotchContent(gtx, theme, info, alphaVal, state)
-			call := macro.Stop()
+	drawNotchBackground(gtx, dims.Size, alphaVal)
 
-			drawNotchBackground(gtx, dims.Size, alphaVal, state)
+	// Clip the content to the notch background size
+	stack := clip.Rect(image.Rectangle{Max: dims.Size}).Push(gtx.Ops)
+	call.Add(gtx.Ops)
+	stack.Pop()
 
-			// Clip the content to the notch background size
-			stack := clip.Rect(image.Rectangle{Max: dims.Size}).Push(gtx.Ops)
-			call.Add(gtx.Ops)
-			stack.Pop()
-
-			return dims
-		})
-	}
-
-	if center {
-		// layout.N already centers horizontally at the top
-		return layout.N.Layout(gtx, render)
-	}
-	return render(gtx)
+	return dims
 }
 
 // renderNotchContent renders the main content of the notch, including a title and subtitle.
 func renderNotchContent(gtx layout.Context, theme *material.Theme, info HoverInfo, alpha float32, state *AppState) layout.Dimensions {
-	return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return layout.UniformInset(unit.Dp(8)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return renderNotchExtra(gtx, theme, info.Extra, alpha)
@@ -2361,22 +2355,22 @@ func renderNotchContent(gtx layout.Context, theme *material.Theme, info HoverInf
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				titleCol := color.NRGBA{R: 255, G: 255, B: 255, A: 255}
 				subCol := color.NRGBA{R: 160, G: 160, B: 170, A: 255}
-				if state.UI.LightMode {
-					titleCol = color.NRGBA{R: 10, G: 10, B: 15, A: 255}
-					subCol = color.NRGBA{R: 60, G: 60, B: 70, A: 255}
+				if AppColors.Background.R > 200 {
+					titleCol = AppColors.Text
+					subCol = applyAlpha(AppColors.Text, 150)
 				}
 
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						lbl := material.Body2(theme, info.Title)
-						lbl.Color = scaleAlpha(titleCol, alpha)
+						lbl.Color = mulAlpha(titleCol, alpha)
 						lbl.Font.Weight = font.Bold
 						lbl.MaxLines = 1
 						return lbl.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						lbl := material.Caption(theme, info.Subtitle)
-						lbl.Color = scaleAlpha(subCol, alpha)
+						lbl.Color = mulAlpha(subCol, alpha)
 						lbl.MaxLines = 1
 						return lbl.Layout(gtx)
 					}),
@@ -2391,16 +2385,16 @@ func renderNotchExtra(gtx layout.Context, theme *material.Theme, extra string, a
 	if extra == "" {
 		return layout.Dimensions{}
 	}
-	return layout.Inset{Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return layout.Inset{Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		m := op.Record(gtx.Ops)
 		lbl := material.Caption(theme, extra)
-		lbl.Color = scaleAlpha(color.NRGBA{R: 0, G: 0, B: 0, A: 255}, alpha)
+		lbl.Color = mulAlpha(color.NRGBA{R: 0, G: 0, B: 0, A: 255}, alpha)
 		lbl.Font.Weight = font.Bold
-		d := layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, lbl.Layout)
+		d := layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, lbl.Layout)
 		c := m.Stop()
 
-		rr := gtx.Dp(10)
-		bg := scaleAlpha(AppColors.Accent1, alpha)
+		rr := gtx.Dp(6)
+		bg := mulAlpha(AppColors.Accent1, alpha)
 		paint.FillShape(gtx.Ops, bg, clip.UniformRRect(image.Rectangle{Max: d.Size}, rr).Op(gtx.Ops))
 
 		c.Add(gtx.Ops)
@@ -2409,29 +2403,18 @@ func renderNotchExtra(gtx layout.Context, theme *material.Theme, extra string, a
 }
 
 // drawNotchBackground fills the notch background with a rounded rectangle shape.
-func drawNotchBackground(gtx layout.Context, sz image.Point, alpha float32, state *AppState) {
-	rr := gtx.Dp(24)
+func drawNotchBackground(gtx layout.Context, sz image.Point, alpha float32) {
+	rr := gtx.Dp(6)
 	rect := image.Rectangle{Max: sz}
 
-	bgCol := color.NRGBA{R: 20, G: 20, B: 20, A: 245}
-	borderCol := color.NRGBA{R: 255, G: 255, B: 255, A: 40}
-	if state.UI.LightMode {
-		bgCol = color.NRGBA{R: 245, G: 245, B: 250, A: 245}
-		borderCol = color.NRGBA{R: 0, G: 0, B: 0, A: 40}
+	// Match TopMovers colors
+	bgCol := color.NRGBA{R: 35, G: 35, B: 40, A: 255}
+	if AppColors.Background.R > 200 {
+		bgCol = color.NRGBA{R: 0, G: 0, B: 0, A: 20}
 	}
 
-	bgColor := scaleAlpha(bgCol, alpha)
-	borderColor := scaleAlpha(borderCol, alpha)
-
+	bgColor := mulAlpha(bgCol, alpha)
 	paint.FillShape(gtx.Ops, bgColor, clip.UniformRRect(rect, rr).Op(gtx.Ops))
-
-	widget.Border{
-		Color:        borderColor,
-		Width:        unit.Dp(1),
-		CornerRadius: unit.Dp(24),
-	}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Dimensions{Size: sz}
-	})
 }
 
 // drawSmoothTrend draws a mathematically generated smooth trend line.
@@ -2530,9 +2513,7 @@ func layoutIntroAnimation(gtx layout.Context, window *app.Window, state *AppStat
 		w := int(float32(gtx.Constraints.Max.X) * 0.8)
 		h := int(float32(gtx.Constraints.Max.Y) * 0.6)
 
-		if h > w {
-			h = w
-		}
+		h = min(h, w)
 
 		return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
