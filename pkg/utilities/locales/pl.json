@@ -38,6 +38,8 @@
     "notch_lang_desc": "Zmień język aplikacji",
     "notch_loc_title": "Filtr Lokalizacji",
     "notch_loc_desc": "Filtruj kantory po odległości",
+    "notch_theme_title": "Motyw",
+    "notch_theme_desc": "Przełącz między trybem jasnym i ciemnym",
     "chart_7d_ago": "-7 Dni",
     "chart_today": "Dzisiaj",
     "status_live_desc": "Połączono. Dane są aktualizowane na żywo.",

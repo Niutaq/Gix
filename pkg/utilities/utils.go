@@ -210,34 +210,9 @@ func layoutCenterPanel(gtx layout.Context, window *app.Window, theme *material.T
 // layoutInfoBar lays out the information bar at the top of the main content panel.
 func layoutInfoBar(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	return layout.Inset{Bottom: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		// Use Stack to overlay Notch on top of Movers for smooth transition
-		return layout.Stack{Alignment: layout.Center}.Layout(gtx,
-			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-				if !state.UI.IsMobile {
-					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return layoutTopMovers(gtx, theme, state)
-					})
-				}
-				// Mobile logic for Movers height/layout
-				height := gtx.Dp(unit.Dp(36))
-				if gtx.Constraints.Max.X < gtx.Dp(unit.Dp(350)) {
-					height = gtx.Dp(unit.Dp(72))
-				}
-				gtx.Constraints.Min.Y = height
-				gtx.Constraints.Max.Y = height
-				return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return layoutTopMovers(gtx, theme, state)
-				})
-			}),
-			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if state.UI.NotchState.CurrentAlpha <= 0.001 {
-					return layout.Dimensions{}
-				}
-				return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return layoutNotch(gtx, theme, state)
-				})
-			}),
-		)
+		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layoutTopMovers(gtx, theme, state)
+		})
 	})
 }
 
@@ -363,7 +338,7 @@ func layoutChartSection(gtx layout.Context, window *app.Window, theme *material.
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						// Currency Pair Label
-						pair := fmt.Sprintf("%s/PLN ", state.UI.Currency)
+						pair := fmt.Sprintf("%s/PLN   ", state.UI.Currency)
 						lbl := material.Caption(theme, pair)
 						lbl.Color = AppColors.Text
 						lbl.Font.Weight = font.Bold
@@ -428,6 +403,24 @@ func layoutChartSection(gtx layout.Context, window *app.Window, theme *material.
 				}),
 			)
 		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			// Always reserve space for the notch below the chart to prevent jumping
+			gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(40))
+			gtx.Constraints.Max.Y = gtx.Dp(unit.Dp(40))
+
+			alpha := state.UI.NotchState.CurrentAlpha
+			if alpha <= 0.001 {
+				return layout.Dimensions{Size: image.Point{X: gtx.Constraints.Max.X, Y: gtx.Constraints.Max.Y}}
+			}
+			info := state.UI.NotchState.LastContent
+			if info.Extra == "UI" {
+				return layout.Dimensions{Size: image.Point{X: gtx.Constraints.Max.X, Y: gtx.Constraints.Max.Y}}
+			}
+
+			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layoutNotch(gtx, theme, state)
+			})
+		}),
 	)
 }
 
@@ -457,6 +450,7 @@ type TimeframeButtonArgs struct {
 	Text   string
 }
 
+// layoutTimeframeButton lays out a timeframe selection button.
 func layoutTimeframeButton(gtx layout.Context, theme *material.Theme, state *AppState, args TimeframeButtonArgs) layout.Dimensions {
 	btn := &state.UI.TimeframeButtons[args.Index]
 	if btn.Clicked(gtx) {
@@ -1916,9 +1910,11 @@ func LayoutSearchBar(gtx layout.Context, window *app.Window, theme *material.The
 
 	return layout.Inset{Bottom: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		state.UI.SearchText = state.UI.SearchEditor.Text()
-		gtx.Constraints.Min.X = gtx.Constraints.Max.X
-		return layout.Flex{Axis: layout.Horizontal, Spacing: layout.SpaceBetween, Alignment: layout.Middle}.Layout(gtx,
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Horizontal, Spacing: layout.SpaceEnd, Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if !state.UI.IsMobile {
+					gtx.Constraints.Max.X = gtx.Dp(unit.Dp(400))
+				}
 				return drawSearchInput(gtx, theme, state, window)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -2332,54 +2328,51 @@ func LoadFontCollection() ([]font.FontFace, error) {
 // layoutNotch renders a UI "notch" element with dynamic alpha, displaying contextually relevant information to the user.
 func layoutNotch(gtx layout.Context, theme *material.Theme, state *AppState) layout.Dimensions {
 	alphaVal := state.UI.NotchState.CurrentAlpha
-	if alphaVal <= 0.01 {
+	if alphaVal <= 0.001 {
 		return layout.Dimensions{}
 	}
 
 	info := state.UI.NotchState.LastContent
 
+	// Allow it to grow up to available space to prevent "..."
 	gtx.Constraints.Min.X = 0
-	macro := op.Record(gtx.Ops)
-	dims := renderNotchContent(gtx, theme, info, alphaVal, state)
-	call := macro.Stop()
-
-	drawNotchBackground(gtx, dims.Size, alphaVal)
-
-	// Clip the content to the notch background size
-	stack := clip.Rect(image.Rectangle{Max: dims.Size}).Push(gtx.Ops)
-	call.Add(gtx.Ops)
-	stack.Pop()
-
-	return dims
+	return renderNotchContent(gtx, theme, info, alphaVal, state)
 }
 
 // renderNotchContent renders the main content of the notch, including a title and subtitle.
 func renderNotchContent(gtx layout.Context, theme *material.Theme, info HoverInfo, alpha float32, state *AppState) layout.Dimensions {
-	return layout.UniformInset(unit.Dp(8)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return renderNotchExtra(gtx, theme, info.Extra, alpha)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				titleCol := color.NRGBA{R: 255, G: 255, B: 255, A: 255}
-				subCol := color.NRGBA{R: 160, G: 160, B: 170, A: 255}
+				titleCol := color.NRGBA{R: 255, G: 255, B: 255, A: uint8(255 * alpha)}
+				subCol := color.NRGBA{R: 200, G: 200, B: 210, A: uint8(255 * alpha)}
+
 				if AppColors.Background.R > 200 {
 					titleCol = AppColors.Text
-					subCol = applyAlpha(AppColors.Text, 150)
+					titleCol.A = uint8(255 * alpha)
+					subCol = color.NRGBA{R: 80, G: 80, B: 90, A: uint8(255 * alpha)}
 				}
 
-				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				return layout.Flex{Axis: layout.Vertical, Alignment: layout.Start}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						lbl := material.Body2(theme, info.Title)
-						lbl.Color = mulAlpha(titleCol, alpha)
+						lbl.Color = titleCol
 						lbl.Font.Weight = font.Bold
 						lbl.MaxLines = 1
+						lbl.TextSize = unit.Sp(11) // Match Mover text size
 						return lbl.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						if info.Subtitle == "" {
+							return layout.Dimensions{}
+						}
 						lbl := material.Caption(theme, info.Subtitle)
-						lbl.Color = mulAlpha(subCol, alpha)
+						lbl.Color = subCol
 						lbl.MaxLines = 1
+						lbl.TextSize = unit.Sp(10)
 						return lbl.Layout(gtx)
 					}),
 				)
@@ -2393,36 +2386,23 @@ func renderNotchExtra(gtx layout.Context, theme *material.Theme, extra string, a
 	if extra == "" {
 		return layout.Dimensions{}
 	}
-	return layout.Inset{Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return layout.Inset{Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		m := op.Record(gtx.Ops)
 		lbl := material.Caption(theme, extra)
-		lbl.Color = mulAlpha(color.NRGBA{R: 0, G: 0, B: 0, A: 255}, alpha)
+		lbl.Color = color.NRGBA{R: 0, G: 0, B: 0, A: uint8(255 * alpha)}
 		lbl.Font.Weight = font.Bold
+		lbl.TextSize = unit.Sp(10)
 		d := layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, lbl.Layout)
 		c := m.Stop()
 
 		rr := gtx.Dp(6)
-		bg := mulAlpha(AppColors.Accent1, alpha)
+		bg := AppColors.Accent1
+		bg.A = uint8(255 * alpha)
 		paint.FillShape(gtx.Ops, bg, clip.UniformRRect(image.Rectangle{Max: d.Size}, rr).Op(gtx.Ops))
 
 		c.Add(gtx.Ops)
 		return d
 	})
-}
-
-// drawNotchBackground fills the notch background with a rounded rectangle shape.
-func drawNotchBackground(gtx layout.Context, sz image.Point, alpha float32) {
-	rr := gtx.Dp(6)
-	rect := image.Rectangle{Max: sz}
-
-	// Match TopMovers colors
-	bgCol := color.NRGBA{R: 35, G: 35, B: 40, A: 255}
-	if AppColors.Background.R > 200 {
-		bgCol = color.NRGBA{R: 0, G: 0, B: 0, A: 20}
-	}
-
-	bgColor := mulAlpha(bgCol, alpha)
-	paint.FillShape(gtx.Ops, bgColor, clip.UniformRRect(rect, rr).Op(gtx.Ops))
 }
 
 // drawSmoothTrend draws a mathematically generated smooth trend line.

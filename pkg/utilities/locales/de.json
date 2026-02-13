@@ -38,6 +38,8 @@
   "notch_lang_desc": "App-Sprache ändern",
   "notch_loc_title": "Standortfilter",
   "notch_loc_desc": "Nach Entfernung filtern",
+  "notch_theme_title": "Thema",
+  "notch_theme_desc": "Zwischen hellem und dunklem Modus umschalten",
   "chart_7d_ago": "-7 Tage",
   "status_live_desc": "Verbunden. Die Daten werden in Echtzeit aktualisiert.",
   "status_offline_desc": "Keine Verbindung. Es werden Cache-Daten angezeigt.",
