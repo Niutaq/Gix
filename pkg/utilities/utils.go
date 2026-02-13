@@ -707,26 +707,6 @@ func shouldShowNotch(state *AppState, now time.Time) bool {
 	return isSettled || (state.UI.NotchState.CurrentAlpha > 0.01 && now.Sub(state.UI.NotchState.LastHoverTime) < 500*time.Millisecond)
 }
 
-// mulAlpha scales the alpha channel of a color by a float factor [0..1]
-// handling the 0-255 range correctly.
-func mulAlpha(c color.NRGBA, alpha float32) color.NRGBA {
-	if alpha <= 0 {
-		c.A = 0
-		return c
-	}
-	if alpha >= 1.0 {
-		return c
-	}
-	// We must scale the alpha channel, but NRGBA assumes non-premultiplied alpha.
-	// So we just scale A.
-	newA := float32(c.A) * alpha
-	if newA > 255 {
-		newA = 255
-	}
-	c.A = uint8(newA)
-	return c
-}
-
 // drawPatternBackground fills the background with the current theme's background color.
 func drawPatternBackground(gtx layout.Context) {
 	bg := AppColors.Background
