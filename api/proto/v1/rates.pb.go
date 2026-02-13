@@ -28,7 +28,7 @@ type RateResponse struct {
 	CantorId      int32                  `protobuf:"varint,3,opt,name=cantorId,json=cantorID,proto3" json:"cantorId,omitempty"`
 	Currency      string                 `protobuf:"bytes,4,opt,name=currency,proto3" json:"currency,omitempty"`
 	FetchedAt     int64                  `protobuf:"varint,5,opt,name=fetchedAt,proto3" json:"fetchedAt,omitempty"`
-	Change24H     float64                `protobuf:"fixed64,6,opt,name=change24h,proto3" json:"change24h,omitempty"`
+	Change24H     int64                  `protobuf:"varint,6,opt,name=change24h,proto3" json:"change24h,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -98,7 +98,7 @@ func (x *RateResponse) GetFetchedAt() int64 {
 	return 0
 }
 
-func (x *RateResponse) GetChange24H() float64 {
+func (x *RateResponse) GetChange24H() int64 {
 	if x != nil {
 		return x.Change24H
 	}
@@ -108,8 +108,8 @@ func (x *RateResponse) GetChange24H() float64 {
 type HistoryPoint struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Time          int64                  `protobuf:"varint,1,opt,name=time,proto3" json:"time,omitempty"`
-	BuyRate       float64                `protobuf:"fixed64,2,opt,name=buyRate,proto3" json:"buyRate,omitempty"`
-	SellRate      float64                `protobuf:"fixed64,3,opt,name=sellRate,proto3" json:"sellRate,omitempty"`
+	BuyRate       int64                  `protobuf:"varint,2,opt,name=buyRate,proto3" json:"buyRate,omitempty"`
+	SellRate      int64                  `protobuf:"varint,3,opt,name=sellRate,proto3" json:"sellRate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -151,14 +151,14 @@ func (x *HistoryPoint) GetTime() int64 {
 	return 0
 }
 
-func (x *HistoryPoint) GetBuyRate() float64 {
+func (x *HistoryPoint) GetBuyRate() int64 {
 	if x != nil {
 		return x.BuyRate
 	}
 	return 0
 }
 
-func (x *HistoryPoint) GetSellRate() float64 {
+func (x *HistoryPoint) GetSellRate() int64 {
 	if x != nil {
 		return x.SellRate
 	}
@@ -360,11 +360,11 @@ const file_api_proto_v1_rates_proto_rawDesc = "" +
 	"\bcantorId\x18\x03 \x01(\x05R\bcantorID\x12\x1a\n" +
 	"\bcurrency\x18\x04 \x01(\tR\bcurrency\x12\x1c\n" +
 	"\tfetchedAt\x18\x05 \x01(\x03R\tfetchedAt\x12\x1c\n" +
-	"\tchange24h\x18\x06 \x01(\x01R\tchange24h\"X\n" +
+	"\tchange24h\x18\x06 \x01(\x03R\tchange24h\"X\n" +
 	"\fHistoryPoint\x12\x12\n" +
 	"\x04time\x18\x01 \x01(\x03R\x04time\x12\x18\n" +
-	"\abuyRate\x18\x02 \x01(\x01R\abuyRate\x12\x1a\n" +
-	"\bsellRate\x18\x03 \x01(\x01R\bsellRate\"W\n" +
+	"\abuyRate\x18\x02 \x01(\x03R\abuyRate\x12\x1a\n" +
+	"\bsellRate\x18\x03 \x01(\x03R\bsellRate\"W\n" +
 	"\x0fHistoryResponse\x12(\n" +
 	"\x06points\x18\x01 \x03(\v2\x10.v1.HistoryPointR\x06points\x12\x1a\n" +
 	"\bcurrency\x18\x02 \x01(\tR\bcurrency\")\n" +

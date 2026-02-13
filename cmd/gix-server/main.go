@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	// External utilities
@@ -39,8 +41,8 @@ import (
 // Constants
 const (
 	contentTypeProtoBuf = "application/x-protobuf"
-
 	internalServerError = "Internal server error"
+	moneyMultiplier    = 1000 // Multiplier for 3 decimal places
 )
 
 // AppState struct holds all app-wide components like DB pools
@@ -77,8 +79,8 @@ type historyParams struct {
 
 // processedRates - a struct for holding the final rates after processing
 type processedRates struct {
-	Buy  float64
-	Sell float64
+	Buy  int64
+	Sell int64
 }
 
 // RatesResponse - a response struct for the /api/v1/rates endpoint
@@ -387,8 +389,8 @@ func scrapeAndProcess(app *AppState, ci CantorInfo, id int, currency string) (*p
 	}
 
 	response := &pb.RateResponse{
-		BuyRate:   fmt.Sprintf("%.3f", rates.Buy),
-		SellRate:  fmt.Sprintf("%.3f", rates.Sell),
+		BuyRate:   fmt.Sprintf("%.3f", float64(rates.Buy)/moneyMultiplier),
+		SellRate:  fmt.Sprintf("%.3f", float64(rates.Sell)/moneyMultiplier),
 		CantorId:  int32(id),
 		Currency:  currency,
 		FetchedAt: time.Now().Unix(),
@@ -396,7 +398,8 @@ func scrapeAndProcess(app *AppState, ci CantorInfo, id int, currency string) (*p
 
 	// Calculate change from 24h ago
 	if prevBuy, err := getPreviousRate(app.DB, id, currency); err == nil && prevBuy > 0 {
-		change := ((rates.Buy - prevBuy) / prevBuy) * 100
+		// Use a multiplier of 100 to keep 2 decimal places of percentage precision in an int64
+		change := ((rates.Buy - prevBuy) * 10000) / prevBuy 
 		response.Change24H = change
 	}
 
@@ -404,15 +407,16 @@ func scrapeAndProcess(app *AppState, ci CantorInfo, id int, currency string) (*p
 }
 
 // getPreviousRate retrieves the rate from approximately 24 hours ago.
-func getPreviousRate(db *pgxpool.Pool, id int, currency string) (float64, error) {
-	var buyRate float64
+func getPreviousRate(db *pgxpool.Pool, id int, currency string) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	// Scaning NUMERIC from DB into int64 (Postgres driver handles this if we multiply by 1000 in SQL or handle float conversion)
+	var buyRateFloat float64
 	err := db.QueryRow(ctx,
 		"SELECT buy_rate FROM rates WHERE cantor_id=$1 AND currency=$2 AND time <= NOW() - INTERVAL '24 hours' ORDER BY time DESC LIMIT 1",
-		id, currency).Scan(&buyRate)
-	return buyRate, err
+		id, currency).Scan(&buyRateFloat)
+	return int64(buyRateFloat * moneyMultiplier), err
 }
 
 // cacheAndArchive - a helper function to cache and archive the response
@@ -545,12 +549,15 @@ func processRates(result scrapers.ScrapeResult, units int) (processedRates, erro
 		return processedRates{}, fmt.Errorf("couldn't parse data")
 	}
 
+	buyRateInt := int64(buyRateF * moneyMultiplier)
+	sellRateInt := int64(sellRateF * moneyMultiplier)
+
 	if units > 1 {
-		buyRateF = buyRateF / float64(units)
-		sellRateF = sellRateF / float64(units)
+		buyRateInt = buyRateInt / int64(units)
+		sellRateInt = sellRateInt / int64(units)
 	}
 
-	return processedRates{Buy: buyRateF, Sell: sellRateF}, nil
+	return processedRates{Buy: buyRateInt, Sell: sellRateInt}, nil
 }
 
 // cleanRate - a helper function to clean the raw rate string
@@ -567,12 +574,17 @@ func cleanRate(raw string) string {
 }
 
 // saveToArchive - a helper function to save the rates to the archive table
-func saveToArchive(db *pgxpool.Pool, cantorID int, currency string, buyRate, sellRate float64) {
+func saveToArchive(db *pgxpool.Pool, cantorID int, currency string, buyRate, sellRate int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	// Convert back to float for NUMERIC column in DB
+	buyF := float64(buyRate) / moneyMultiplier
+	sellF := float64(sellRate) / moneyMultiplier
+
 	_, err := db.Exec(ctx,
 		"INSERT INTO rates (time, cantor_id, currency, buy_rate, sell_rate) VALUES (NOW(), $1, $2, $3, $4)",
-		cantorID, currency, buyRate, sellRate,
+		cantorID, currency, buyF, sellF,
 	)
 	if err != nil {
 		log.Printf("Archive Error: %v", err)
@@ -655,10 +667,11 @@ func buildHistoryQuery(currency string, params historyParams) (string, []interfa
 func scanHistoryPoints(rows pgx.Rows) []*pb.HistoryPoint {
 	var points []*pb.HistoryPoint
 	for rows.Next() {
-
 		var t time.Time
 		var buy, sell float64
 
+		// Postgres NUMERIC is best scanned into float64 or decimal. 
+		// Here we use float64 and then multiply by our constant.
 		if err := rows.Scan(&t, &buy, &sell); err != nil {
 			log.Printf("History Scan Error: %v", err)
 			continue
@@ -666,8 +679,8 @@ func scanHistoryPoints(rows pgx.Rows) []*pb.HistoryPoint {
 
 		points = append(points, &pb.HistoryPoint{
 			Time:     t.Unix(),
-			BuyRate:  buy,
-			SellRate: sell,
+			BuyRate:  int64(math.Round(buy * moneyMultiplier)),
+			SellRate: int64(math.Round(sell * moneyMultiplier)),
 		})
 	}
 	return points
@@ -708,7 +721,7 @@ func startBackgroundHarvester(app *AppState) {
 
 // harvest iterates through all cantors and currencies to fetch and save rates.
 func harvest(app *AppState, currencies []string) {
-	log.Println("Background Harvest: Starting collection cycle...")
+	log.Println("Background Harvest: Starting parallel collection cycle...")
 	ctx := context.Background()
 
 	cantors, err := fetchAllCantors(ctx, app.DB)
@@ -717,6 +730,7 @@ func harvest(app *AppState, currencies []string) {
 		return
 	}
 
+	var wg sync.WaitGroup
 	for _, ci := range cantors {
 		// FinOps Optimization: Skip cantors identified as too expensive/inefficient
 		if ci.DisplayName == "Kantor Alex (Rzeszów)" {
@@ -724,11 +738,16 @@ func harvest(app *AppState, currencies []string) {
 			continue
 		}
 
-		for _, curr := range currencies {
-			processCantorCurrency(ctx, app, ci, curr)
-		}
+		wg.Add(1)
+		go func(info CantorInfo) {
+			defer wg.Done()
+			for _, curr := range currencies {
+				processCantorCurrency(ctx, app, info, curr)
+			}
+		}(ci)
 	}
-	log.Println("Background Harvest: Cycle completed.")
+	wg.Wait()
+	log.Println("Background Harvest: Parallel cycle completed.")
 }
 
 // fetchAllCantors retrieves all cantors from the database.
@@ -766,7 +785,7 @@ func processCantorCurrency(ctx context.Context, app *AppState, ci CantorInfo, cu
 		return
 	}
 
-	log.Printf("Harvesting: %s -> %s (%.3f / %.3f) [Perf: %v]", ci.DisplayName, curr, rates.Buy, rates.Sell, duration)
+	log.Printf("Harvesting: %s -> %s (%.3f / %.3f) [Perf: %v]", ci.DisplayName, curr, float64(rates.Buy)/moneyMultiplier, float64(rates.Sell)/moneyMultiplier, duration)
 	finops.Stats.Record(ci.DisplayName, duration)
 
 	saveToArchive(app.DB, ci.ID, curr, rates.Buy, rates.Sell)
@@ -787,8 +806,8 @@ func handleFinOps() gin.HandlerFunc {
 func updateCacheAndNotify(ctx context.Context, app *AppState, cantorID int, curr string, rates processedRates) {
 	cacheKey := fmt.Sprintf("rates:proto%d:%s", cantorID, curr)
 	response := &pb.RateResponse{
-		BuyRate:   fmt.Sprintf("%.3f", rates.Buy),
-		SellRate:  fmt.Sprintf("%.3f", rates.Sell),
+		BuyRate:   fmt.Sprintf("%.3f", float64(rates.Buy)/moneyMultiplier),
+		SellRate:  fmt.Sprintf("%.3f", float64(rates.Sell)/moneyMultiplier),
 		CantorId:  int32(cantorID),
 		Currency:  curr,
 		FetchedAt: time.Now().Unix(),

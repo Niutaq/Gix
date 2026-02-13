@@ -503,14 +503,22 @@ func prepareChartData(state *AppState) ([]float64, []int64, string) {
 
 // extractHistoryData processes historical data points for chart rendering, returning the data, timestamps, and a start label.
 func extractHistoryData(history *pb.HistoryResponse, mode string) ([]float64, []int64, string) {
+	if history == nil || len(history.Points) == 0 {
+		return nil, nil, ""
+	}
 	var data []float64
 	var timestamps []int64
-	for _, p := range history.Points {
+	for i, p := range history.Points {
+		val := float64(p.BuyRate) / 1000.0
 		if mode == "SELL" {
-			data = append(data, p.SellRate)
-		} else {
-			data = append(data, p.BuyRate)
+			val = float64(p.SellRate) / 1000.0
 		}
+		
+		if i < 5 { // Log first 5 points for debugging
+			log.Printf("Chart Debug [%s]: Point %d = %f (Raw Buy: %d, Raw Sell: %d)", mode, i, val, p.BuyRate, p.SellRate)
+		}
+
+		data = append(data, val)
 		timestamps = append(timestamps, p.Time)
 	}
 	startTime := time.Unix(history.Points[0].Time, 0)
