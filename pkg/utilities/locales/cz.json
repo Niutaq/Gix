@@ -38,6 +38,8 @@
   "notch_lang_desc": "Změnit jazyk aplikace",
   "notch_loc_title": "Filtr polohy",
   "notch_loc_desc": "Filtrovat podle vzdálenosti",
+  "notch_theme_title": "Motiv",
+  "notch_theme_desc": "Přepnout mezi světlým a tmavým režimem",
   "chart_7d_ago": "-7 Dní",
   "status_live_desc": "Připojeno. Data se aktualizují v reálném čase.",
   "status_offline_desc": "Odpojeno. Zobrazení mezipaměti.",

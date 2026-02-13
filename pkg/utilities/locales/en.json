@@ -38,6 +38,8 @@
   "notch_lang_desc": "Change app language",
   "notch_loc_title": "Location Filter",
   "notch_loc_desc": "Filter cantors by distance",
+  "notch_theme_title": "Theme",
+  "notch_theme_desc": "Toggle between light and dark mode",
       "chart_7d_ago": "-7 Days",
       "chart_today": "Today",
       "status_live_desc": "Connected. Data is updating in real-time.",

@@ -13,7 +13,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.3'
+          go-version: "1.26.0"
           cache: true
 
       - name: Install System Dependencies for Gio UI
@@ -56,8 +56,8 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'fs'
+          scan-type: "fs"
           ignore-unfixed: true
-          format: 'table'
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH'
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"

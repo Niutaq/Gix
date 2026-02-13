@@ -24,6 +24,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"runtime"
 	"runtime/trace"
@@ -74,10 +75,18 @@ func main() {
 		APIHistoryURL: base + "/api/v1/history",
 	}
 
+	// Start pprof server for performance analysis
+	go func() {
+		log.Println("Pprof server started at localhost:6060")
+		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+			log.Printf("pprof server failed: %v", err)
+		}
+	}()
+
 	// Prepare window options
 	opts := []app.Option{
 		app.Title("Gix"),
-		app.Size(unit.Dp(1280), unit.Dp(1280)),
+		app.Size(unit.Dp(1800), unit.Dp(1280)),
 	}
 
 	window := new(app.Window)
