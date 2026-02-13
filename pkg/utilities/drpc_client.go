@@ -64,14 +64,10 @@ func FetchAllRatesRPC(window *app.Window, state *AppState, apiURL string) {
 		log.Printf("FetchAllRatesRPC dial error: %v", err)
 		return
 	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			log.Printf("Error closing connection: %v", err)
-		}
-	}()
 
 	drpcConn := drpcconn.New(conn)
 	defer func() {
+		// Closing drpcConn also closes the underlying net.Conn
 		if err := drpcConn.Close(); err != nil {
 			log.Printf("Error closing dRPC connection: %v", err)
 		}
@@ -113,7 +109,7 @@ func updateStateWithRates(state *AppState, results []*pb.RateResponse) {
 
 		entry.Rate.BuyRate = rate.BuyRate
 		entry.Rate.SellRate = rate.SellRate
-		entry.Rate.Change24h = rate.Change24H
+		entry.Rate.Change24h = float64(rate.Change24H) / 100.0
 		entry.LoadedAt = time.Now()
 		entry.Error = ""
 	}
@@ -165,7 +161,7 @@ func UpdateStateWithRate(window *app.Window, state *AppState, rate *pb.RateRespo
 
 	entry.Rate.BuyRate = rate.BuyRate
 	entry.Rate.SellRate = rate.SellRate
-	entry.Rate.Change24h = rate.Change24H
+	entry.Rate.Change24h = float64(rate.Change24H) / 100.0
 	entry.LoadedAt = time.Now()
 	entry.Error = ""
 

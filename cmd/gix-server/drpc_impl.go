@@ -63,9 +63,10 @@ func (s *RatesDRPCServer) GetAllRates(ctx context.Context, req *pb.RateRequest) 
 			continue
 		}
 
-		change := 0.0
+		change := int64(0)
 		if pastBuy > 0 {
-			change = ((buy - pastBuy) / pastBuy) * 100
+			// Multiply by 10000 to keep 2 decimal places of percentage in an int64
+			change = int64(((buy - pastBuy) / pastBuy) * 10000)
 		}
 
 		results = append(results, &pb.RateResponse{

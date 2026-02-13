@@ -39,6 +39,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
+      - "8081:8081"
     develop:
       watch:
         - action: sync
@@ -58,6 +59,7 @@ services:
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable"
       REDIS_URL: "redis://redis:6379/0"
       NATS_URL: "nats://nats:4222"
+      DD_TRACE_ENABLED: "false"
     depends_on:
       - db
       - redis

@@ -53,7 +53,7 @@ tasks:
   backend:
     desc: "Starts the backend (Docker Compose)"
     cmds:
-      - docker-compose up
+      - docker-compose up --build
 
   # --- UTILITIES ---
   swagger:

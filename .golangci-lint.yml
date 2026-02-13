@@ -1,6 +1,6 @@
 run:
   timeout: 3m
-  go: '1.25.3'
+  go: "1.25"
 
 linters:
   enable:
@@ -28,11 +28,11 @@ issues:
         - errcheck
 
     - path: gioui\.org/app/internal/xkb
-      source: "^import \"gioui.org/app/internal/xkb\""
+      source: '^import "gioui.org/app/internal/xkb"'
       linters:
         - govet
         - staticcheck
 
 linters-settings:
   staticcheck:
-    go: '1.25.3'
+    go: "1.25"
