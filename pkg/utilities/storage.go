@@ -11,9 +11,9 @@ import (
 
 // CachedData represents the cached application state.
 type CachedData struct {
-	Cantors map[string]*CantorInfo  `json:"cantors"`
-	Rates   map[string]*CantorEntry `json:"rates"`
-	SavedAt time.Time               `json:"savedAt"`
+	Cantors map[string]*CantorInfo            `json:"cantors"`
+	Rates   map[string]map[string]*CantorEntry `json:"rates"`
+	SavedAt time.Time                         `json:"savedAt"`
 }
 
 // GetCachePath returns the path to the cache file.
@@ -66,26 +66,46 @@ func SaveCache(state *AppState) {
 // LoadCache loads the application state from a local JSON file.
 func LoadCache(state *AppState) {
 	path := GetCachePath()
-	file, err := os.Open(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		log.Println("No cache found or failed to open:", err)
 		return
 	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			log.Printf("Error closing cache file (load): %v", err)
-		}
-	}()
 
 	var data CachedData
-	if err := json.NewDecoder(file).Decode(&data); err != nil {
-		log.Printf("Failed to decode cache: %v", err)
-		return
+	if err := json.Unmarshal(content, &data); err != nil {
+		// Migration: try to load old format
+		type oldCachedData struct {
+			Cantors map[string]*CantorInfo  `json:"cantors"`
+			Rates   map[string]*CantorEntry `json:"rates"`
+			SavedAt time.Time               `json:"savedAt"`
+		}
+		var oldData oldCachedData
+		if err2 := json.Unmarshal(content, &oldData); err2 == nil {
+			log.Println("Migrating old cache format...")
+			data.Cantors = oldData.Cantors
+			data.SavedAt = oldData.SavedAt
+			data.Rates = make(map[string]map[string]*CantorEntry)
+			// Put old rates under EUR as a guess, or just leave empty and wait for first save
+			data.Rates["EUR"] = oldData.Rates
+		} else {
+			log.Printf("Failed to decode cache (new and old format): %v", err)
+			return
+		}
+	}
+
+	if data.Rates == nil {
+		data.Rates = make(map[string]map[string]*CantorEntry)
 	}
 
 	// Filter out 'alex' (legacy/performance issue)
 	delete(data.Cantors, "alex")
-	delete(data.Rates, "alex")
+	for curr := range data.Rates {
+		if data.Rates[curr] == nil {
+			data.Rates[curr] = make(map[string]*CantorEntry)
+		}
+		delete(data.Rates[curr], "alex")
+	}
 
 	state.CantorsMu.Lock()
 	state.Cantors = data.Cantors
@@ -93,7 +113,18 @@ func LoadCache(state *AppState) {
 
 	state.Vault.Mu.Lock()
 	state.Vault.Rates = data.Rates
+	// Reset animations so they "fly in" on startup
+	for _, currMap := range state.Vault.Rates {
+		for _, entry := range currMap {
+			entry.AppearanceSpring.Current = 0
+			entry.AppearanceSpring.Target = 1
+			entry.AppearanceSpring.Velocity = 0
+			entry.AppearanceSpring.Tension = 150
+			entry.AppearanceSpring.Friction = 22
+		}
+	}
 	state.Vault.Mu.Unlock()
 
-	log.Printf("Cache loaded successfully (SavedAt: %s)", data.SavedAt.Format(time.RFC3339))
+	log.Printf("Cache loaded successfully (SavedAt: %s). Cantors: %d, Currencies in cache: %d",
+		data.SavedAt.Format(time.RFC3339), len(data.Cantors), len(data.Rates))
 }

@@ -58,17 +58,37 @@ type ExchangeRates struct {
 
 // CantorEntry represents data fetched from a single cantor.
 type CantorEntry struct {
-	URL      string
-	Rate     ExchangeRates
-	Error    string
-	LoadedAt time.Time
+	URL              string
+	Rate             ExchangeRates
+	Error            string
+	LoadedAt         time.Time
+	AppearanceSpring Spring
+
+	// Display cache (optimizes GC by avoiding fmt.Sprintf in every frame)
+	DisplayBuy    string
+	DisplaySell   string
+	DisplaySpread string
+	DisplayChange string
+
+	// Real-time flash effect
+	LastUpdate  time.Time
+	UpdatePulse float32 // 0 to 1, fades out
 }
 
-// CantorVault stores the entries from all cantors
+// CantorVault stores the entries from all cantors grouped by currency.
 type CantorVault struct {
 	Mu        sync.Mutex
-	Rates     map[string]*CantorEntry
+	Rates     map[string]map[string]*CantorEntry // Currency -> CantorName -> Entry
 	LastEntry *CantorEntry
+}
+
+// Spring holds state for physics-based animations.
+type Spring struct {
+	Target   float32
+	Current  float32
+	Velocity float32
+	Tension  float32 // e.g., 150
+	Friction float32 // e.g., 15
 }
 
 // UIState holds UI-specific state and widgets.
@@ -110,6 +130,11 @@ type UIState struct {
 	MaxDistance     float64
 	DistanceSlider  widget.Float
 	LocateButton    widget.Clickable
+	// Long Press for Locate
+	LocatePressStart         time.Time
+	LocateIsPressing         bool
+	LocateLongPressTriggered bool
+
 	StatusClickable widget.Clickable
 	HoverInfo       HoverInfo
 	NotchState      struct {
