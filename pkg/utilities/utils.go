@@ -1737,24 +1737,6 @@ func drawCantorItemBackground(gtx layout.Context, theme *material.Theme, state *
 	)
 }
 
-// getCantorItemBackgroundColor returns the background color for a cantor row based on selection or hover state.
-func getCantorItemBackgroundColor(args CantorItemArgs) color.NRGBA {
-	if args.IsSelected {
-		col := AppColors.Accent1
-		col.A = 40
-		if !args.IsMobile && AppColors.Background.R < 100 {
-			return color.NRGBA{R: 90, G: 65, B: 25, A: 255}
-		}
-		if AppColors.Background.R < 100 {
-			return color.NRGBA{R: 90, G: 65, B: 25, A: 255}
-		}
-		return col
-	} else if args.Cantor.Button.Hovered() {
-		return applyAlpha(AppColors.Secondary, 30)
-	}
-	return applyAlpha(AppColors.Dark, 120)
-}
-
 // renderCantorRowContent lays out the content for a cantor item row, including labels, values, and highlight state.
 func renderCantorRowContent(gtx layout.Context, theme *material.Theme, state *AppState, args CantorItemArgs) layout.Dimensions {
 	displayChange := ""
