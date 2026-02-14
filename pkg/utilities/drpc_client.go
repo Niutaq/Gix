@@ -59,6 +59,11 @@ func StartDRPCStream(window *app.Window, state *AppState, apiURL string) {
 func FetchAllRatesRPC(window *app.Window, state *AppState, apiURL string) {
 	target := DeriveDRPCTarget(apiURL)
 
+	defer func() {
+		state.IsLoading.Store(false)
+		window.Invalidate()
+	}()
+
 	conn, err := net.Dial("tcp", target)
 	if err != nil {
 		log.Printf("FetchAllRatesRPC dial error: %v", err)
@@ -82,18 +87,23 @@ func FetchAllRatesRPC(window *app.Window, state *AppState, apiURL string) {
 		return
 	}
 
-	updateStateWithRates(state, resp.Results)
+	updateStateWithRates(state, resp.Results, state.UI.Currency)
 
 	SaveCache(state)
-
-	state.IsLoading.Store(false)
-	window.Invalidate()
 	log.Printf("Fetched %d rates via dRPC.", len(resp.Results))
 }
 
-func updateStateWithRates(state *AppState, results []*pb.RateResponse) {
+// updateStateWithRates updates rates for states
+func updateStateWithRates(state *AppState, results []*pb.RateResponse, currency string) {
 	state.Vault.Mu.Lock()
 	defer state.Vault.Mu.Unlock()
+
+	if state.Vault.Rates == nil {
+		state.Vault.Rates = make(map[string]map[string]*CantorEntry)
+	}
+	if state.Vault.Rates[currency] == nil {
+		state.Vault.Rates[currency] = make(map[string]*CantorEntry)
+	}
 
 	for _, rate := range results {
 		cantorName := findCantorNameByID(state, int(rate.CantorId))
@@ -101,10 +111,12 @@ func updateStateWithRates(state *AppState, results []*pb.RateResponse) {
 			continue
 		}
 
-		entry, ok := state.Vault.Rates[cantorName]
+		entry, ok := state.Vault.Rates[currency][cantorName]
 		if !ok {
-			entry = &CantorEntry{}
-			state.Vault.Rates[cantorName] = entry
+			entry = &CantorEntry{
+				AppearanceSpring: Spring{Current: 0, Target: 1, Tension: 150, Friction: 22},
+			}
+			state.Vault.Rates[currency][cantorName] = entry
 		}
 
 		entry.Rate.BuyRate = rate.BuyRate
@@ -112,6 +124,7 @@ func updateStateWithRates(state *AppState, results []*pb.RateResponse) {
 		entry.Rate.Change24h = float64(rate.Change24H) / 100.0
 		entry.LoadedAt = time.Now()
 		entry.Error = ""
+		RefreshDisplayStrings(entry)
 	}
 }
 
@@ -148,15 +161,34 @@ func UpdateStateWithRate(window *app.Window, state *AppState, rate *pb.RateRespo
 	state.Vault.Mu.Lock()
 	defer state.Vault.Mu.Unlock()
 
+	currency := rate.Currency
+	if currency == "" {
+		currency = state.UI.Currency
+	}
+
+	if state.Vault.Rates == nil {
+		state.Vault.Rates = make(map[string]map[string]*CantorEntry)
+	}
+	if state.Vault.Rates[currency] == nil {
+		state.Vault.Rates[currency] = make(map[string]*CantorEntry)
+	}
+
 	cantorName := findCantorNameByID(state, int(rate.CantorId))
 	if cantorName == "" {
 		return
 	}
 
-	entry, ok := state.Vault.Rates[cantorName]
+	entry, ok := state.Vault.Rates[currency][cantorName]
 	if !ok {
-		entry = &CantorEntry{}
-		state.Vault.Rates[cantorName] = entry
+		entry = &CantorEntry{
+			AppearanceSpring: Spring{Current: 0, Target: 1, Tension: 150, Friction: 22},
+		}
+		state.Vault.Rates[currency][cantorName] = entry
+	}
+
+	if entry.Rate.BuyRate != rate.BuyRate || entry.Rate.SellRate != rate.SellRate {
+		entry.UpdatePulse = 1.0
+		entry.LastUpdate = time.Now()
 	}
 
 	entry.Rate.BuyRate = rate.BuyRate
@@ -164,10 +196,10 @@ func UpdateStateWithRate(window *app.Window, state *AppState, rate *pb.RateRespo
 	entry.Rate.Change24h = float64(rate.Change24H) / 100.0
 	entry.LoadedAt = time.Now()
 	entry.Error = ""
+	RefreshDisplayStrings(entry)
 
 	window.Invalidate()
 }
-
 
 // DeriveDRPCTarget parses the given API URL, extracts the host, and appends a default port of 8081 for dRPC connections.
 func DeriveDRPCTarget(apiURL string) string {

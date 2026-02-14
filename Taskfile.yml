@@ -56,6 +56,17 @@ tasks:
       - docker-compose up --build
 
   # --- UTILITIES ---
+  trace:
+    desc: "Runs the app with tracing and opens the result in standard go tool trace"
+    cmds:
+      - go run {{.ENTRY_POINT}} -trace trace.out
+      - go tool trace trace.out
+
+  pprof:
+    desc: "Collects 10s CPU profile from a running app and opens browser"
+    cmds:
+      - go tool pprof -http=:8081 http://localhost:6060/debug/pprof/profile?seconds=10
+
   swagger:
     desc: "Generates Swagger documentation"
     cmds:

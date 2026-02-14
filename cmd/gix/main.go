@@ -148,7 +148,9 @@ func setupApplication(window *app.Window, config utilities.AppConfig) (*utilitie
 // initializeAppState initializes the application state with default values.
 func initializeAppState() *utilities.AppState {
 	state := &utilities.AppState{
-		Vault:   &utilities.CantorVault{},
+		Vault: &utilities.CantorVault{
+			Rates: make(map[string]map[string]*utilities.CantorEntry),
+		},
 		Cantors: make(map[string]*utilities.CantorInfo),
 		UI: utilities.UIState{
 			Language:              "EN",
@@ -171,6 +173,7 @@ func initializeAppState() *utilities.AppState {
 	return state
 }
 
+// setupUILists handles language and currency options
 func setupUILists(state *utilities.AppState) {
 	state.UI.LanguageOptions = []string{
 		"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ",
@@ -195,8 +198,8 @@ func handleFrame(window *app.Window, ops *op.Ops, e app.FrameEvent, state *utili
 
 	// Adjust scaling for iOS ONLY
 	if runtime.GOOS == "ios" {
-		e.Metric.PxPerDp *= 0.825
-		e.Metric.PxPerSp *= 0.825
+		e.Metric.PxPerDp *= 0.895
+		e.Metric.PxPerSp *= 0.895
 	}
 
 	ops.Reset()
