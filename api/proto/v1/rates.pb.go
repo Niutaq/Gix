@@ -261,6 +261,82 @@ func (x *RateRequest) GetCurrency() string {
 	return ""
 }
 
+type ScrapeCompletedEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId    string                 `protobuf:"bytes,1,opt,name=providerId,json=providerID,proto3" json:"providerId,omitempty"`
+	ScraperType   string                 `protobuf:"bytes,2,opt,name=scraperType,proto3" json:"scraperType,omitempty"`
+	DurationMs    int64                  `protobuf:"varint,3,opt,name=durationMs,json=durationMS,proto3" json:"durationMs,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	TraceId       string                 `protobuf:"bytes,5,opt,name=traceId,json=traceID,proto3" json:"traceId,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScrapeCompletedEvent) Reset() {
+	*x = ScrapeCompletedEvent{}
+	mi := &file_api_proto_v1_rates_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScrapeCompletedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScrapeCompletedEvent) ProtoMessage() {}
+
+func (x *ScrapeCompletedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_rates_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScrapeCompletedEvent.ProtoReflect.Descriptor instead.
+func (*ScrapeCompletedEvent) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_rates_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ScrapeCompletedEvent) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *ScrapeCompletedEvent) GetScraperType() string {
+	if x != nil {
+		return x.ScraperType
+	}
+	return ""
+}
+
+func (x *ScrapeCompletedEvent) GetDurationMs() int64 {
+	if x != nil {
+		return x.DurationMs
+	}
+	return 0
+}
+
+func (x *ScrapeCompletedEvent) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *ScrapeCompletedEvent) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
 type RateListResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Results       []*RateResponse        `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
@@ -270,7 +346,7 @@ type RateListResponse struct {
 
 func (x *RateListResponse) Reset() {
 	*x = RateListResponse{}
-	mi := &file_api_proto_v1_rates_proto_msgTypes[4]
+	mi := &file_api_proto_v1_rates_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -282,7 +358,7 @@ func (x *RateListResponse) String() string {
 func (*RateListResponse) ProtoMessage() {}
 
 func (x *RateListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_rates_proto_msgTypes[4]
+	mi := &file_api_proto_v1_rates_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -295,7 +371,7 @@ func (x *RateListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RateListResponse.ProtoReflect.Descriptor instead.
 func (*RateListResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_rates_proto_rawDescGZIP(), []int{4}
+	return file_api_proto_v1_rates_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RateListResponse) GetResults() []*RateResponse {
@@ -314,7 +390,7 @@ type StreamRatesRequest struct {
 
 func (x *StreamRatesRequest) Reset() {
 	*x = StreamRatesRequest{}
-	mi := &file_api_proto_v1_rates_proto_msgTypes[5]
+	mi := &file_api_proto_v1_rates_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -326,7 +402,7 @@ func (x *StreamRatesRequest) String() string {
 func (*StreamRatesRequest) ProtoMessage() {}
 
 func (x *StreamRatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_rates_proto_msgTypes[5]
+	mi := &file_api_proto_v1_rates_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -339,7 +415,7 @@ func (x *StreamRatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamRatesRequest.ProtoReflect.Descriptor instead.
 func (*StreamRatesRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_rates_proto_rawDescGZIP(), []int{5}
+	return file_api_proto_v1_rates_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *StreamRatesRequest) GetCurrencies() []string {
@@ -369,7 +445,17 @@ const file_api_proto_v1_rates_proto_rawDesc = "" +
 	"\x06points\x18\x01 \x03(\v2\x10.v1.HistoryPointR\x06points\x12\x1a\n" +
 	"\bcurrency\x18\x02 \x01(\tR\bcurrency\")\n" +
 	"\vRateRequest\x12\x1a\n" +
-	"\bcurrency\x18\x01 \x01(\tR\bcurrency\">\n" +
+	"\bcurrency\x18\x01 \x01(\tR\bcurrency\"\xb0\x01\n" +
+	"\x14ScrapeCompletedEvent\x12\x1e\n" +
+	"\n" +
+	"providerId\x18\x01 \x01(\tR\n" +
+	"providerID\x12 \n" +
+	"\vscraperType\x18\x02 \x01(\tR\vscraperType\x12\x1e\n" +
+	"\n" +
+	"durationMs\x18\x03 \x01(\x03R\n" +
+	"durationMS\x12\x1c\n" +
+	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\x12\x18\n" +
+	"\atraceId\x18\x05 \x01(\tR\atraceID\">\n" +
 	"\x10RateListResponse\x12*\n" +
 	"\aresults\x18\x01 \x03(\v2\x10.v1.RateResponseR\aresults\"4\n" +
 	"\x12StreamRatesRequest\x12\x1e\n" +
@@ -392,22 +478,23 @@ func file_api_proto_v1_rates_proto_rawDescGZIP() []byte {
 	return file_api_proto_v1_rates_proto_rawDescData
 }
 
-var file_api_proto_v1_rates_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_api_proto_v1_rates_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_api_proto_v1_rates_proto_goTypes = []any{
-	(*RateResponse)(nil),       // 0: v1.RateResponse
-	(*HistoryPoint)(nil),       // 1: v1.HistoryPoint
-	(*HistoryResponse)(nil),    // 2: v1.HistoryResponse
-	(*RateRequest)(nil),        // 3: v1.RateRequest
-	(*RateListResponse)(nil),   // 4: v1.RateListResponse
-	(*StreamRatesRequest)(nil), // 5: v1.StreamRatesRequest
+	(*RateResponse)(nil),         // 0: v1.RateResponse
+	(*HistoryPoint)(nil),         // 1: v1.HistoryPoint
+	(*HistoryResponse)(nil),      // 2: v1.HistoryResponse
+	(*RateRequest)(nil),          // 3: v1.RateRequest
+	(*ScrapeCompletedEvent)(nil), // 4: v1.ScrapeCompletedEvent
+	(*RateListResponse)(nil),     // 5: v1.RateListResponse
+	(*StreamRatesRequest)(nil),   // 6: v1.StreamRatesRequest
 }
 var file_api_proto_v1_rates_proto_depIdxs = []int32{
 	1, // 0: v1.HistoryResponse.points:type_name -> v1.HistoryPoint
 	0, // 1: v1.RateListResponse.results:type_name -> v1.RateResponse
-	5, // 2: v1.RatesService.StreamRates:input_type -> v1.StreamRatesRequest
+	6, // 2: v1.RatesService.StreamRates:input_type -> v1.StreamRatesRequest
 	3, // 3: v1.RatesService.GetAllRates:input_type -> v1.RateRequest
 	0, // 4: v1.RatesService.StreamRates:output_type -> v1.RateResponse
-	4, // 5: v1.RatesService.GetAllRates:output_type -> v1.RateListResponse
+	5, // 5: v1.RatesService.GetAllRates:output_type -> v1.RateListResponse
 	4, // [4:6] is the sub-list for method output_type
 	2, // [2:4] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
@@ -426,7 +513,7 @@ func file_api_proto_v1_rates_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_v1_rates_proto_rawDesc), len(file_api_proto_v1_rates_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
