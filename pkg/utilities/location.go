@@ -86,3 +86,46 @@ func fetchIPLocation() (float64, float64, error) {
 
 	return loc.Lat, loc.Lon, nil
 }
+
+// NominatimResponse matches the OSM geocoding response
+type NominatimResponse struct {
+	Lat string `json:"lat"`
+	Lon string `json:"lon"`
+}
+
+// GeocodeCity turns a city name into coordinates using OpenStreetMap Nominatim API
+func GeocodeCity(city string) (float64, float64, error) {
+	city = strings.TrimSpace(city)
+	if city == "" {
+		return 0, 0, fmt.Errorf("empty city name")
+	}
+
+	url := fmt.Sprintf("https://nominatim.openstreetmap.org/search?q=%s&format=json&limit=1", strings.ReplaceAll(city, " ", "+"))
+	
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	req.Header.Set("User-Agent", "Gix-App/1.0")
+
+	client := http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var results []NominatimResponse
+	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+		return 0, 0, err
+	}
+
+	if len(results) == 0 {
+		return 0, 0, fmt.Errorf("city not found")
+	}
+
+	lat, _ := strconv.ParseFloat(results[0].Lat, 64)
+	lon, _ := strconv.ParseFloat(results[0].Lon, 64)
+
+	return lat, lon, nil
+}
