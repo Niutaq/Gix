@@ -9,7 +9,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /gix-server ./cmd/gix-server
 RUN CGO_ENABLED=0 GOOS=linux go build -o /cost-estimator ./cmd/cost-estimator
 
 # --- Production ---
-FROM alpine:3.20.2
+FROM alpine:3.23.4
 
 # Security: Create a non-root user
 RUN addgroup -S gixgroup && adduser -S gixuser -G gixgroup
