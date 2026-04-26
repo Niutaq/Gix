@@ -52,7 +52,16 @@ jobs:
       - name: Save DigitalOcean kubeconfig
         run: doctl kubernetes cluster kubeconfig save gix-pool-cluster
 
+      - name: Apply Infrastructure and Policies
+        run: |
+          kubectl apply -f k8s/02-db.yaml
+          kubectl apply -f k8s/03-redis.yaml
+          kubectl apply -f k8s/08-policies.yaml
+          kubectl rollout restart deployment gix-redis
+          
       - name: Update Kubernetes Deployment
         run: |
+          kubectl apply -f k8s/04-backend.yaml
           kubectl set image deployment/gix-backend gix-backend=niutaq/gix-backend:${{ github.sha }}
+          kubectl rollout restart deployment gix-backend
           kubectl rollout status deployment/gix-backend
