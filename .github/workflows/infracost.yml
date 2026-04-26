@@ -20,7 +20,7 @@ jobs:
           api-key: ${{ secrets.INFRACOST_API_KEY }}
 
       - name: Checkout PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.ref }}
 
