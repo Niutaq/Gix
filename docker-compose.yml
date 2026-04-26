@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - gix-db-data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -29,6 +29,34 @@ services:
     command: "-js"
     ports:
       - "4222:4222"
+    restart: unless-stopped
+
+  # Elasticsearch for full-text and geo search
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: gix-es
+    environment:
+      - node.name=es01
+      - cluster.name=gix-cluster
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+  # Kibana for visual exploration of ES data
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.2
+    container_name: gix-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
     restart: unless-stopped
 
   # App
@@ -66,5 +94,21 @@ services:
       - nats
     restart: unless-stopped
 
+  # FinOps Cost Estimator (Microservice)
+  cost-estimator:
+    container_name: gix-cost-estimator
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["./cost-estimator"]
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable"
+      NATS_URL: "nats://nats:4222"
+    depends_on:
+      - db
+      - nats
+    restart: unless-stopped
+
 volumes:
   gix-db-data:
+  es-data:
