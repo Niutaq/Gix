@@ -2,10 +2,13 @@ package scrapers
 
 import (
 	// Standard libraries
+	"bytes"
+	"context"
 	"fmt"
 	"io"
-	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -22,12 +25,13 @@ const (
 
 // ScrapeResult - struct for storing the scraped data
 type ScrapeResult struct {
-	BuyRate  string
-	SellRate string
+	BuyRate         string
+	SellRate        string
+	UsedScraperType string // "static", "heuristic", or "llm"
 }
 
 // ScrapeFunc defines the signature for a scraping function
-type ScrapeFunc func(url, currency string) (ScrapeResult, error)
+type ScrapeFunc func(ctx context.Context, url, currency string) (ScrapeResult, error)
 
 var (
 	// registry stores available scraper strategies
@@ -62,6 +66,7 @@ func init() {
 	// Register("C4", FetchC4) // Kantor Alex - Disabled due to poor performance (expensive task)
 	Register("C5", FetchC5)
 	Register("C6", FetchC6)
+	Register("HEURISTIC", HeuristicScrape)
 	Register("C7", FetchGenericTable)
 	Register("C8", FetchGenericTable)
 	Register("C9", FetchGenericTable)
@@ -69,13 +74,14 @@ func init() {
 }
 
 // FetchGenericTable is a fallback scraper that looks for the currency code in any table row
-func FetchGenericTable(url, currency string) (ScrapeResult, error) {
-	doc, err := fetchDocument(url)
+func FetchGenericTable(ctx context.Context, url, currency string) (ScrapeResult, error) {
+	doc, err := fetchDocument(ctx, url)
 	if err != nil {
 		return ScrapeResult{}, err
 	}
 
 	var buyRate, sellRate string
+
 	targetCurrency := strings.ToUpper(strings.TrimSpace(currency))
 
 	doc.Find("tr, div.row, div.rate-row").EachWithBreak(func(i int, s *goquery.Selection) bool {
@@ -106,18 +112,86 @@ func FetchGenericTable(url, currency string) (ScrapeResult, error) {
 	return ScrapeResult{BuyRate: buyRate, SellRate: sellRate}, nil
 }
 
-// httpClient - global http client
+// httpClient - global http client with security timeouts
 var httpClient = &http.Client{
 	Timeout: 15 * time.Second,
 }
 
+// AllowLocalhostForTesting is a flag used to bypass SSRF protections during unit tests.
+var AllowLocalhostForTesting bool
+
+// validateURL checks if the URL is safe to fetch (SSRF protection)
+func validateURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %v", err)
+	}
+
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("unsupported protocol: %s", u.Scheme)
+	}
+
+	host := u.Hostname()
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		// If we can't resolve, we might still allow if it's a direct IP, but we'll be strict
+		ip := net.ParseIP(host)
+		if ip != nil {
+			ips = []net.IP{ip}
+		} else {
+			return fmt.Errorf("could not resolve host: %s", host)
+		}
+	}
+
+	for _, ip := range ips {
+		if AllowLocalhostForTesting && ip.IsLoopback() {
+			continue
+		}
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() || ip.To4() == nil && !ip.IsGlobalUnicast() {
+			return fmt.Errorf("access to internal/private IP blocked: %s", ip.String())
+		}
+		// Metadata service blocking (AWS/GCP/Azure)
+		if ip.String() == "169.254.169.254" {
+			return fmt.Errorf("access to metadata service blocked")
+		}
+	}
+
+	return nil
+}
+
+type cachedDoc struct {
+	data      []byte
+	expiresAt time.Time
+}
+
+var (
+	docCache   = make(map[string]cachedDoc)
+	docCacheMu sync.RWMutex
+)
+
 // fetchDocument - performs HTTP GET and returns a parsed HTML document
-func fetchDocument(url string) (*goquery.Document, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func fetchDocument(ctx context.Context, url string) (*goquery.Document, error) {
+	// Check cache first
+	docCacheMu.RLock()
+	cached, exists := docCache[url]
+	docCacheMu.RUnlock()
+
+	if exists && time.Now().Before(cached.expiresAt) {
+		// Parse document from cached bytes
+		return goquery.NewDocumentFromReader(bytes.NewReader(cached.data))
+	}
+
+	// Security: Validate URL before fetching
+	if err := validateURL(url); err != nil {
+		return nil, fmt.Errorf("security block: %v", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Gix-App/1.2.8; Security-Audited)")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -129,7 +203,25 @@ func fetchDocument(url string) (*goquery.Document, error) {
 		}
 	}(resp.Body)
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned status: %d", resp.StatusCode)
+	}
+
+	// Read body into bytes for caching
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Store in cache for 30 seconds
+	docCacheMu.Lock()
+	docCache[url] = cachedDoc{
+		data:      bodyBytes,
+		expiresAt: time.Now().Add(30 * time.Second),
+	}
+	docCacheMu.Unlock()
+
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -138,8 +230,8 @@ func fetchDocument(url string) (*goquery.Document, error) {
 }
 
 // FetchC1 - scrapes C1
-func FetchC1(url, currency string) (ScrapeResult, error) {
-	doc, err := fetchDocument(url)
+func FetchC1(ctx context.Context, url, currency string) (ScrapeResult, error) {
+	doc, err := fetchDocument(ctx, url)
 	if err != nil {
 		return ScrapeResult{}, err
 	}
@@ -160,13 +252,11 @@ func FetchC1(url, currency string) (ScrapeResult, error) {
 }
 
 // FetchC2 - scrapes C2
-func FetchC2(url, currency string) (ScrapeResult, error) {
-	doc, err := fetchDocument(url)
+func FetchC2(ctx context.Context, url, currency string) (ScrapeResult, error) {
+	doc, err := fetchDocument(ctx, url)
 	if err != nil {
 		return ScrapeResult{}, err
 	}
-
-	log.Printf("DEBUG: --- Starting C2 Analysis for %s ---", url)
 
 	var buyRate, sellRate string
 	targetCurrency := strings.ToUpper(strings.TrimSpace(currency))
@@ -180,7 +270,6 @@ func FetchC2(url, currency string) (ScrapeResult, error) {
 			sellRate = strings.TrimSpace(s.Find(".offerItem__exchangeSell").Text())
 
 			if buyRate != "" && sellRate != "" {
-				log.Printf("DEBUG: Hit for %s! Buy: %s, Sell: %s", currency, buyRate, sellRate)
 				return false
 			}
 		}
@@ -194,8 +283,8 @@ func FetchC2(url, currency string) (ScrapeResult, error) {
 }
 
 // FetchC3 - scrapes C3
-func FetchC3(url, currency string) (ScrapeResult, error) {
-	doc, err := fetchDocument(url)
+func FetchC3(ctx context.Context, url, currency string) (ScrapeResult, error) {
+	doc, err := fetchDocument(ctx, url)
 	if err != nil {
 		return ScrapeResult{}, err
 	}
@@ -239,8 +328,8 @@ func FetchC3(url, currency string) (ScrapeResult, error) {
 }
 
 // FetchC4 - scrapes C4
-func FetchC4(url, currency string) (ScrapeResult, error) {
-	doc, err := fetchDocument(url)
+func FetchC4(ctx context.Context, url, currency string) (ScrapeResult, error) {
+	doc, err := fetchDocument(ctx, url)
 	if err != nil {
 		return ScrapeResult{}, err
 	}
@@ -271,8 +360,8 @@ func FetchC4(url, currency string) (ScrapeResult, error) {
 }
 
 // FetchC5 - scrapes C5
-func FetchC5(url, currency string) (ScrapeResult, error) {
-	doc, err := fetchDocument(url)
+func FetchC5(ctx context.Context, url, currency string) (ScrapeResult, error) {
+	doc, err := fetchDocument(ctx, url)
 	if err != nil {
 		return ScrapeResult{}, err
 	}
@@ -297,8 +386,8 @@ func FetchC5(url, currency string) (ScrapeResult, error) {
 }
 
 // FetchC6 - scrapes C6
-func FetchC6(url, currency string) (ScrapeResult, error) {
-	doc, err := fetchDocument(url)
+func FetchC6(ctx context.Context, url, currency string) (ScrapeResult, error) {
+	doc, err := fetchDocument(ctx, url)
 	if err != nil {
 		return ScrapeResult{}, err
 	}

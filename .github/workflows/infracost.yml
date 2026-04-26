@@ -1,0 +1,37 @@
+name: Infracost
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/**'
+
+jobs:
+  infracost:
+    name: Infracost Estimate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Generate Infracost cost estimate baseline
+        run: |
+          infracost breakdown --path=terraform \
+                              --format=json \
+                              --out-file=/tmp/infracost-base.json
+
+      - name: Post Infracost comment
+        uses: infracost/actions/comment@v3
+        with:
+          path: /tmp/infracost-base.json
+          behavior: update
