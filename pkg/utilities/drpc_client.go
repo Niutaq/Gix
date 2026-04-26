@@ -3,6 +3,7 @@ package utilities
 import (
 	// Standard libraries
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -17,12 +18,10 @@ import (
 )
 
 // StartDRPCStream establishes a connection to the dRPC server and processes streaming rate updates in real-time.
-func StartDRPCStream(window *app.Window, state *AppState, apiURL string) {
-	target := DeriveDRPCTarget(apiURL)
-
+func StartDRPCStream(window *app.Window, state *AppState, drpcURL string) {
 	for {
-		log.Printf("Connecting to dRPC server at %s...", target)
-		conn, err := net.Dial("tcp", target)
+		log.Printf("Connecting to dRPC server at %s...", drpcURL)
+		conn, err := net.Dial("tcp", drpcURL)
 		if err != nil {
 			log.Printf("dRPC dial error: %v. Retrying in 5s...", err)
 			time.Sleep(5 * time.Second)
@@ -56,15 +55,13 @@ func StartDRPCStream(window *app.Window, state *AppState, apiURL string) {
 }
 
 // FetchAllRatesRPC performs a single dRPC call to fetch all rates for the given currency.
-func FetchAllRatesRPC(window *app.Window, state *AppState, apiURL string) {
-	target := DeriveDRPCTarget(apiURL)
-
+func FetchAllRatesRPC(window *app.Window, state *AppState, drpcURL string) {
 	defer func() {
 		state.IsLoading.Store(false)
 		window.Invalidate()
 	}()
 
-	conn, err := net.Dial("tcp", target)
+	conn, err := net.Dial("tcp", drpcURL)
 	if err != nil {
 		log.Printf("FetchAllRatesRPC dial error: %v", err)
 		return
@@ -106,17 +103,14 @@ func updateStateWithRates(state *AppState, results []*pb.RateResponse, currency 
 	}
 
 	for _, rate := range results {
-		cantorName := findCantorNameByID(state, int(rate.CantorId))
-		if cantorName == "" {
-			continue
-		}
+		idStr := fmt.Sprintf("%d", rate.CantorId)
 
-		entry, ok := state.Vault.Rates[currency][cantorName]
+		entry, ok := state.Vault.Rates[currency][idStr]
 		if !ok {
 			entry = &CantorEntry{
 				AppearanceSpring: Spring{Current: 0, Target: 1, Tension: 150, Friction: 22},
 			}
-			state.Vault.Rates[currency][cantorName] = entry
+			state.Vault.Rates[currency][idStr] = entry
 		}
 
 		entry.Rate.BuyRate = rate.BuyRate
@@ -126,17 +120,6 @@ func updateStateWithRates(state *AppState, results []*pb.RateResponse, currency 
 		entry.Error = ""
 		RefreshDisplayStrings(entry)
 	}
-}
-
-func findCantorNameByID(state *AppState, id int) string {
-	state.CantorsMu.RLock()
-	defer state.CantorsMu.RUnlock()
-	for name, info := range state.Cantors {
-		if info.ID == id {
-			return name
-		}
-	}
-	return ""
 }
 
 // processStreamUpdates handles the message loop for the dRPC stream.
@@ -173,17 +156,14 @@ func UpdateStateWithRate(window *app.Window, state *AppState, rate *pb.RateRespo
 		state.Vault.Rates[currency] = make(map[string]*CantorEntry)
 	}
 
-	cantorName := findCantorNameByID(state, int(rate.CantorId))
-	if cantorName == "" {
-		return
-	}
+	idStr := fmt.Sprintf("%d", rate.CantorId)
 
-	entry, ok := state.Vault.Rates[currency][cantorName]
+	entry, ok := state.Vault.Rates[currency][idStr]
 	if !ok {
 		entry = &CantorEntry{
 			AppearanceSpring: Spring{Current: 0, Target: 1, Tension: 150, Friction: 22},
 		}
-		state.Vault.Rates[currency][cantorName] = entry
+		state.Vault.Rates[currency][idStr] = entry
 	}
 
 	if entry.Rate.BuyRate != rate.BuyRate || entry.Rate.SellRate != rate.SellRate {

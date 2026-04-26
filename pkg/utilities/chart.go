@@ -27,10 +27,11 @@ import (
 
 // LineChart holds the configuration for a simple line chart.
 type LineChart struct {
-	Data       []float64
-	Timestamps []int64 // Unix timestamps corresponding to Data points
-	StartLabel string
-	Tag        any // Tag for pointer events
+	Data        []float64
+	ExtraSeries [][]float64 // Additional lines for comparison (pinned cantors)
+	Timestamps  []int64     // Unix timestamps corresponding to Data points
+	StartLabel  string
+	Tag         any // Tag for pointer events
 }
 
 // chartLayoutContext holds pre-calculated layout values to avoid passing too many arguments.
@@ -54,12 +55,28 @@ func (lc *LineChart) Layout(gtx layout.Context, window *app.Window, theme *mater
 
 	processChartEvents(gtx, lc, state)
 
-	// Calculate layout context
+	// Calculate layout context (using main data and extra series to find overall min/max)
 	ctx := calculateChartLayout(gtx, lc)
 
 	// Draw components
 	drawGrid(gtx, ctx, alpha)
-	drawChartLines(gtx, window, ctx, lc, alpha)
+
+	// 1. Draw Extra Series (background lines)
+	for i, series := range lc.ExtraSeries {
+		if len(series) < 2 {
+			continue
+		}
+		// Each extra series gets a lower alpha
+		extraAlpha := uint8(float32(alpha) * (0.3 - float32(i)*0.05))
+		if extraAlpha < 20 {
+			extraAlpha = 20
+		}
+		drawSingleChartLine(gtx, window, ctx, series, extraAlpha, false)
+	}
+
+	// 2. Draw Main Series (bold line)
+	drawSingleChartLine(gtx, window, ctx, lc.Data, alpha, true)
+
 	drawChartLabels(gtx, theme, ctx, lc, alpha, state.Language)
 
 	if state.ChartHoverActive {
@@ -67,6 +84,89 @@ func (lc *LineChart) Layout(gtx layout.Context, window *app.Window, theme *mater
 	}
 
 	return layout.Dimensions{Size: gtx.Constraints.Max}
+}
+
+// drawSingleChartLine renders a single line (and optional gradient fill).
+func drawSingleChartLine(gtx layout.Context, window *app.Window, ctx chartLayoutContext, data []float64, alpha uint8, isMain bool) {
+	var path clip.Path
+
+	total := len(data)
+	startPt := getPoint(ctx, 0, total, data[0])
+	lastPt := getPoint(ctx, total-1, total, data[total-1])
+
+	if isMain {
+		// Gradient Fill for main series only
+		gradAlpha := alpha / 4
+		if runtime.GOOS == "linux" {
+			gradAlpha = alpha / 8
+		}
+		fillStartColor := applyAlpha(AppColors.Accent1, gradAlpha)
+		fillEndColor := applyAlpha(AppColors.Accent1, 0)
+
+		path.Begin(gtx.Ops)
+		path.MoveTo(startPt)
+		for i := 1; i < total; i++ {
+			path.LineTo(getPoint(ctx, i, total, data[i]))
+		}
+
+		path.LineTo(f32.Point{X: lastPt.X, Y: ctx.height})
+		path.LineTo(f32.Point{X: startPt.X, Y: ctx.height})
+		path.Close()
+
+		stack := clip.Outline{Path: path.End()}.Op().Push(gtx.Ops)
+		paint.LinearGradientOp{
+			Stop1:  f32.Point{X: 0, Y: 0},
+			Stop2:  f32.Point{X: 0, Y: ctx.height},
+			Color1: fillStartColor,
+			Color2: fillEndColor,
+		}.Add(gtx.Ops)
+		paint.PaintOp{}.Add(gtx.Ops)
+		stack.Pop()
+	}
+
+	var linePath clip.Path
+	linePath.Begin(gtx.Ops)
+	linePath.MoveTo(startPt)
+	for i := 1; i < total; i++ {
+		linePath.LineTo(getPoint(ctx, i, total, data[i]))
+	}
+	pathSpec := linePath.End()
+
+	// Dynamic color: Deep Blue for Light Mode, Accent for Dark Mode
+	baseColor := AppColors.Accent1
+	if AppColors.Background.R > 200 { // Light Mode detection
+		baseColor = color.NRGBA{R: 0, G: 102, B: 204, A: 255} // Professional Deep Blue
+	}
+	strokeColor := applyAlpha(baseColor, alpha)
+
+	if isMain {
+		glowAlpha := alpha / 6
+		glowWidth := float32(10.0)
+		if runtime.GOOS == "linux" {
+			glowAlpha = alpha / 12
+			glowWidth = 4.0
+		}
+		glowColor := applyAlpha(baseColor, glowAlpha)
+
+		paint.FillShape(gtx.Ops, glowColor, clip.Stroke{
+			Path:  pathSpec,
+			Width: glowWidth,
+		}.Op())
+	}
+
+	// Sharp core line
+	width := float32(2.0)
+	if !isMain {
+		width = 1.0
+	}
+	paint.FillShape(gtx.Ops, strokeColor, clip.Stroke{
+		Path:  pathSpec,
+		Width: width,
+	}.Op())
+
+	if isMain {
+		drawEndDots(gtx, window, lastPt, alpha)
+	}
 }
 
 // processChartEvents handles pointer events for a line chart, updating UI interaction states like hover activity and position.
@@ -101,13 +201,18 @@ func calculateChartLayout(gtx layout.Context, lc *LineChart) chartLayoutContext 
 	width := float32(gtx.Constraints.Max.X)
 	height := float32(gtx.Constraints.Max.Y)
 
+	// Find min/max across ALL series
 	minVal, maxVal := lc.Data[0], lc.Data[0]
-	for _, v := range lc.Data {
-		if v < minVal {
-			minVal = v
-		}
-		if v > maxVal {
-			maxVal = v
+
+	allSeries := append([][]float64{lc.Data}, lc.ExtraSeries...)
+	for _, series := range allSeries {
+		for _, v := range series {
+			if v < minVal {
+				minVal = v
+			}
+			if v > maxVal {
+				maxVal = v
+			}
 		}
 	}
 
@@ -152,7 +257,7 @@ func drawGrid(gtx layout.Context, ctx chartLayoutContext, alpha uint8) {
 }
 
 // drawChartLines renders the line chart's lines and fills.
-func drawChartLines(gtx layout.Context, window *app.Window, ctx chartLayoutContext, lc *LineChart, alpha uint8) {
+func DrawChartLines(gtx layout.Context, window *app.Window, ctx chartLayoutContext, lc *LineChart, alpha uint8) {
 	var path clip.Path
 
 	total := len(lc.Data)
@@ -269,17 +374,36 @@ func drawChartLabels(gtx layout.Context, theme *material.Theme, ctx chartLayoutC
 
 	valTxt := fmt.Sprintf("%.3f", lastVal)
 	lblVal := material.Caption(theme, valTxt)
-	lblVal.Color = applyAlpha(AppColors.Text, alpha)
+	lblVal.Color = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
+	if AppColors.Background.R > 200 {
+		lblVal.Color = color.NRGBA{R: 0, G: 0, B: 0, A: 255}
+	}
 	lblVal.Font.Weight = font.Bold
-	lblVal.TextSize = unit.Sp(11)
+	lblVal.TextSize = unit.Sp(12)
 
 	{
+		// Draw a small pill background for the value
 		labelOffset := image.Point{
-			X: int(lastPt.X) - 45,
-			Y: int(lastPt.Y) - 20,
+			X: int(lastPt.X) - 50,
+			Y: int(lastPt.Y) - 45, // Moved even higher for maximum clarity
 		}
 		stack := op.Offset(labelOffset).Push(gtx.Ops)
-		lblVal.Layout(gtx)
+		
+		// Pill Background
+		bgCol := color.NRGBA{R: 30, G: 30, B: 40, A: 200}
+		if AppColors.Background.R > 200 {
+			bgCol = color.NRGBA{R: 240, G: 240, B: 245, A: 220}
+		}
+		
+		rect := image.Rectangle{Max: image.Point{X: 65, Y: 26}}
+		paint.FillShape(gtx.Ops, bgCol, clip.UniformRRect(rect, 6).Op(gtx.Ops))
+		
+		// Center text in pill - FIXED: set constraints to pill size to prevent drifting
+		gtx.Constraints.Min = rect.Max
+		gtx.Constraints.Max = rect.Max
+		layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return lblVal.Layout(gtx)
+		})
 		stack.Pop()
 	}
 

@@ -2,6 +2,7 @@ package utilities
 
 import (
 	// Standard libraries
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
@@ -23,6 +24,7 @@ import (
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
+	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -51,6 +53,7 @@ type MarketValueArgs struct {
 // CantorItemArgs holds arguments for rendering a cantor item row.
 type CantorItemArgs struct {
 	Cantor      *CantorInfo
+	CantorKey   string
 	DisplayName string
 	BuyVal      string
 	SellVal     string
@@ -66,6 +69,24 @@ type CantorItemArgs struct {
 // LayoutUI - Main application layout
 func LayoutUI(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig) {
 	updateNotchAnimation(window, state)
+
+	// Update Loading Alpha (Fade in/out)
+	targetAlpha := float32(0.0)
+	if state.IsLoading.Load() {
+		targetAlpha = 1.0
+	}
+	// Smooth transition
+	if state.LoadingAlpha != targetAlpha {
+		dt := float32(0.016) // Assume 60fps for simplicity, or use real delta
+		speed := float32(4.0)
+		diff := targetAlpha - state.LoadingAlpha
+		if math.Abs(float64(diff)) < 0.01 {
+			state.LoadingAlpha = targetAlpha
+		} else {
+			state.LoadingAlpha += diff * speed * dt
+		}
+		window.Invalidate()
+	}
 
 	// Switch palette based on LightMode
 	if state.UI.LightMode {
@@ -91,18 +112,186 @@ func LayoutUI(gtx layout.Context, window *app.Window, theme *material.Theme, sta
 			return layoutModal(gtx, window, theme, state)
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			if state.IsLoading.Load() {
+				return layoutGlobalLoading(gtx, window, state)
+			}
+			return layout.Dimensions{}
+		}),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			return layoutIntroAnimation(gtx, window, state)
 		}),
 	)
 }
 
+// StartFinOpsMonitoring periodically fetches metrics from the server for the economic dashboard.
+func StartFinOpsMonitoring(window *app.Window, state *AppState, config AppConfig) {
+	ticker := time.NewTicker(15 * time.Second)
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	fetch := func() {
+		resp, err := client.Get(config.APIFinOpsURL)
+		if err != nil {
+			log.Printf("[FinOps] Error fetching metrics: %v", err)
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		var status FinOpsStatus
+		if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+			log.Printf("[FinOps] Error decoding metrics: %v", err)
+			return
+		}
+
+		state.FinOps = status
+		window.Invalidate()
+	}
+
+	// Initial fetch
+	fetch()
+
+	go func() {
+		for range ticker.C {
+			fetch()
+		}
+	}()
+}
+
+// layoutFinOpsDashboard renders the Bloomberg-style terminal for Unit Economics
+func layoutFinOpsDashboard(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+	return layout.Inset{Top: unit.Dp(20), Left: unit.Dp(20), Right: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						lbl := material.H6(theme, "Costs Dashboard")
+						lbl.Color = color.NRGBA{R: 0, G: 220, B: 150, A: 255}
+						lbl.Font.Weight = font.Bold
+						return lbl.Layout(gtx)
+					}),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						// Small Close Button for Side Panel
+						if state.UI.FinOpsBtn.Clicked(gtx) {
+							state.UI.IsFinOpsDashboardOpen = false
+							window.Invalidate()
+						}
+						return state.UI.FinOpsBtn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								bgCol := color.NRGBA{R: 255, G: 50, B: 50, A: 40}
+								if state.UI.FinOpsBtn.Hovered() {
+									bgCol = color.NRGBA{R: 255, G: 50, B: 50, A: 80}
+								}
+								rect := image.Rect(0, 0, gtx.Constraints.Min.X, gtx.Constraints.Min.Y)
+								paint.FillShape(gtx.Ops, bgCol, clip.UniformRRect(rect, 4).Op(gtx.Ops))
+
+								lbl := material.Caption(theme, "X")
+								lbl.Color = color.NRGBA{R: 255, G: 150, B: 150, A: 255}
+								lbl.Font.Weight = font.Bold
+								return layout.Center.Layout(gtx, lbl.Layout)
+							})
+						})
+					}),
+				)
+			}),
+			layout.Rigid(layout.Spacer{Height: unit.Dp(30)}.Layout),
+
+			// Burn Rate
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				spend := "$0.00000000"
+				if state.FinOps.DailySpendUSD != "" {
+					spend = "$" + state.FinOps.DailySpendUSD
+				}
+				lbl := material.H4(theme, spend)
+				lbl.Color = color.NRGBA{R: 100, G: 100, B: 100, A: 255}
+				lbl.Font.Weight = font.Bold
+				return lbl.Layout(gtx)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				lbl := material.Caption(theme, "24H BURN RATE")
+				lbl.Color = color.NRGBA{R: 150, G: 150, B: 160, A: 255}
+				return lbl.Layout(gtx)
+			}),
+			layout.Rigid(layout.Spacer{Height: unit.Dp(40)}.Layout),
+
+			// Stats
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				t := state.FinOps.SystemTime
+				if t == "" {
+					t = time.Now().Format("15:04:05")
+				}
+
+				statusText := "HEALTHY"
+				if len(state.FinOps.BlockedProviders) > 0 {
+					statusText = fmt.Sprintf("THROTTLED (%d)", len(state.FinOps.BlockedProviders))
+				}
+
+				details := fmt.Sprintf("SERVER TIME: %s\nGOVERNANCE: %v\nBREAKER: %s", t, state.FinOps.IsActive, statusText)
+				lbl := material.Body2(theme, details)
+				lbl.Color = color.NRGBA{R: 200, G: 200, B: 210, A: 255}
+				return lbl.Layout(gtx)
+			}),
+
+			layout.Rigid(layout.Spacer{Height: unit.Dp(30)}.Layout),
+
+			// FOCUS Breakdown
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if len(state.FinOps.ServiceBreakdown) == 0 {
+					return layout.Dimensions{}
+				}
+				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						lbl := material.Caption(theme, "FOCUS 1.0 CATEGORIES (24H)")
+						lbl.Color = color.NRGBA{R: 0, G: 220, B: 150, A: 255}
+						lbl.Font.Weight = font.Bold
+						return layout.Inset{Bottom: unit.Dp(10)}.Layout(gtx, lbl.Layout)
+					}),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						var widgets []layout.FlexChild
+						// Sorting categories for stable UI
+						keys := []string{"AI", "Compute", "Network", "Other"}
+						for _, k := range keys {
+							if val, ok := state.FinOps.ServiceBreakdown[k]; ok {
+								cat := k
+								cost := val
+								widgets = append(widgets, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									return layout.Flex{Axis: layout.Horizontal, Spacing: layout.SpaceBetween}.Layout(gtx,
+										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+											lbl := material.Body2(theme, cat)
+											lbl.Color = color.NRGBA{R: 180, G: 180, B: 190, A: 255}
+											return lbl.Layout(gtx)
+										}),
+										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+											lbl := material.Body2(theme, "$"+cost)
+											lbl.Color = color.NRGBA{R: 250, G: 250, B: 250, A: 255}
+											return lbl.Layout(gtx)
+										}),
+									)
+								}))
+								widgets = append(widgets, layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout))
+							}
+						}
+						return layout.Flex{Axis: layout.Vertical}.Layout(gtx, widgets...)
+					}),
+				)
+			}),
+		)
+	})
+}
+
 // layoutContent lays out the main content panel of the application.
 func layoutContent(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig) layout.Dimensions {
-	isMobile := gtx.Constraints.Max.X < gtx.Dp(unit.Dp(1050))
+	var currentView ViewMode
+	if gtx.Constraints.Max.X < gtx.Dp(unit.Dp(1000)) {
+		currentView = ViewMobile
+	} else if gtx.Constraints.Max.X < gtx.Dp(unit.Dp(1350)) {
+		currentView = ViewMid
+	} else {
+		currentView = ViewDesktop
+	}
 
 	// Smooth Transition Logic
-	if state.UI.IsMobile != isMobile {
-		state.UI.IsMobile = isMobile
+	if state.UI.CurrentViewMode != currentView {
+		state.UI.CurrentViewMode = currentView
+		state.UI.IsMobile = (currentView == ViewMobile)
 		state.UI.LayoutTransitionTime = time.Now()
 		window.Invalidate()
 	}
@@ -125,12 +314,26 @@ func layoutContent(gtx layout.Context, window *app.Window, theme *material.Theme
 	// Apply Opacity Wrapper
 	macro := op.Record(gtx.Ops)
 	var dims layout.Dimensions
-	if isMobile {
+	switch currentView {
+	case ViewMobile:
 		dims = layoutContentMobile(gtx, window, theme, state, config)
-	} else {
+	case ViewMid:
 		dims = layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutVerticalCurrencyBar(gtx, window, theme, state, config)
+			}),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return layoutCenterPanel(gtx, window, theme, state, config)
+			}),
+		)
+	default:
+		// Desktop
+		dims = layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return LayoutVerticalCurrencyBar(gtx, window, theme, state, config)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layoutMapSection(gtx, window, theme, state)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layoutCenterPanel(gtx, window, theme, state, config)
@@ -198,7 +401,7 @@ func layoutCenterPanel(gtx layout.Context, window *app.Window, theme *material.T
 				if hideSearch {
 					return layout.Dimensions{}
 				}
-				return LayoutSearchBar(gtx, window, theme, state)
+				return LayoutSearchBar(gtx, window, theme, state, config)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				// Hide Movers when searching on mobile to save CPU and space
@@ -230,19 +433,67 @@ func layoutInfoBar(gtx layout.Context, window *app.Window, theme *material.Theme
 	})
 }
 
-// layoutMobileControls renders the chart and location controls for mobile devices.
+// layoutMobileControls renders the chart and location controls for mobile and mid devices.
 func layoutMobileControls(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig) layout.Dimensions {
-	if !state.UI.IsMobile {
+	if state.UI.CurrentViewMode == ViewDesktop {
 		return layout.Dimensions{}
 	}
+
+	if state.UI.MapBtnMobile.Clicked(gtx) {
+		state.UI.MapVisibleMobile = !state.UI.MapVisibleMobile
+		window.Invalidate()
+	}
+
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layoutChartSection(gtx, window, theme, state, config)
+			return layout.Stack{Alignment: layout.NE}.Layout(gtx,
+				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+					if state.UI.MapVisibleMobile {
+						gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(250))
+						gtx.Constraints.Max.Y = gtx.Dp(unit.Dp(250))
+						
+						rect := image.Rect(0, 0, gtx.Constraints.Max.X, gtx.Constraints.Max.Y)
+						defer clip.UniformRRect(rect, gtx.Dp(16)).Push(gtx.Ops).Pop()
+						
+						return LayoutMap(gtx, window, state)
+					} else {
+						return layoutChartSection(gtx, window, theme, state, config)
+					}
+				}),
+				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+					return layout.Inset{Top: unit.Dp(16), Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return state.UI.MapBtnMobile.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							return renderMapToggleBtn(gtx, state)
+						})
+					})
+				}),
+			)
 		}),
-		layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Inset{Bottom: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return layoutLocateButton(gtx, window, theme, state)
+	)
+}
+
+func renderMapToggleBtn(gtx layout.Context, state *AppState) layout.Dimensions {
+	bgCol := color.NRGBA{R: 30, G: 30, B: 40, A: 200}
+	iconCol := color.NRGBA{R: 255, G: 255, B: 255, A: 255}
+	if state.UI.LightMode {
+		bgCol = color.NRGBA{R: 255, G: 255, B: 255, A: 220}
+		iconCol = color.NRGBA{R: 50, G: 50, B: 60, A: 255}
+	}
+	
+	return layout.Stack{}.Layout(gtx,
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			rect := clip.UniformRRect(image.Rectangle{Max: gtx.Constraints.Min}, gtx.Dp(20)) // Fully rounded
+			paint.FillShape(gtx.Ops, bgCol, rect.Op(gtx.Ops))
+			return layout.Dimensions{Size: gtx.Constraints.Min}
+		}),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				if state.UI.MapVisibleMobile {
+					// Draw Chart Icon
+					return DrawIconChart(gtx, iconCol)
+				}
+				// Draw Map Icon
+				return DrawIconMap(gtx, iconCol)
 			})
 		}),
 	)
@@ -268,7 +519,7 @@ func layoutCenterPanelMobileLandscape(gtx layout.Context, window *app.Window, th
 						return layoutHeader(gtx, window, theme, state)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return LayoutSearchBar(gtx, window, theme, state)
+						return LayoutSearchBar(gtx, window, theme, state, config)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						if state.UI.SearchActive {
@@ -287,9 +538,6 @@ func layoutCenterPanelMobileLandscape(gtx layout.Context, window *app.Window, th
 						}
 						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 							layout.Rigid(layout.Spacer{Height: spacerHeight}.Layout),
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								return layoutLocateButton(gtx, window, theme, state)
-							}),
 						)
 					}),
 				)
@@ -303,6 +551,27 @@ func layoutCenterPanelMobileLandscape(gtx layout.Context, window *app.Window, th
 	})
 }
 
+// layoutMapSection renders the interactive map panel.
+func layoutMapSection(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+	panelWidth := gtx.Dp(unit.Dp(350))
+	gtx.Constraints.Min.X = panelWidth
+	gtx.Constraints.Max.X = panelWidth
+
+	// Draw Background
+	paint.FillShape(gtx.Ops, AppColors.Dark, clip.Rect{Max: gtx.Constraints.Max}.Op())
+
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			// Container for Map and Geocoder UI
+			return layout.Stack{Alignment: layout.NW}.Layout(gtx,
+				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+					return LayoutMap(gtx, window, state)
+				}),
+			)
+		}),
+	)
+}
+
 // LayoutRightPanel lays out the right-side panel of the application.
 func LayoutRightPanel(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig) layout.Dimensions {
 	panelWidth := gtx.Dp(unit.Dp(400))
@@ -310,6 +579,10 @@ func LayoutRightPanel(gtx layout.Context, window *app.Window, theme *material.Th
 	gtx.Constraints.Max.X = panelWidth
 	gtx.Constraints.Min.Y = gtx.Constraints.Max.Y
 	paint.FillShape(gtx.Ops, AppColors.Dark, clip.Rect{Max: gtx.Constraints.Max}.Op())
+
+	if state.UI.IsFinOpsDashboardOpen {
+		return layoutFinOpsDashboard(gtx, window, theme, state)
+	}
 
 	return layout.Inset{Top: unit.Dp(20), Left: unit.Dp(20), Right: unit.Dp(20)}.Layout(
 		gtx, func(gtx layout.Context) layout.Dimensions {
@@ -409,12 +682,6 @@ func layoutChartSection(gtx layout.Context, window *app.Window, theme *material.
 						return chart.Layout(gtx, window, theme, chartAlpha, &state.UI)
 					})
 				}),
-				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-					if state.IsLoading.Load() {
-						return layoutChartLoading(gtx, window, state, height)
-					}
-					return layout.Dimensions{}
-				}),
 			)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -479,27 +746,31 @@ func layoutTimeframeButton(gtx layout.Context, theme *material.Theme, state *App
 	})
 }
 
-// layoutChartLoading renders a loading animation overlay specifically for the chart section.
-func layoutChartLoading(gtx layout.Context, window *app.Window, state *AppState, height int) layout.Dimensions {
-	overlayColor := color.NRGBA{R: 20, G: 20, B: 25, A: 200}
+// layoutGlobalLoading renders a loading animation overlay for the entire application.
+func layoutGlobalLoading(gtx layout.Context, window *app.Window, state *AppState) layout.Dimensions {
+	if state.LoadingAlpha <= 0 {
+		return layout.Dimensions{}
+	}
+
+	alpha := uint8(230 * state.LoadingAlpha)
+	overlayColor := color.NRGBA{R: 20, G: 20, B: 25, A: alpha} // slightly darker overlay
 	trendColor := AppColors.Accent1
 	if state.UI.LightMode {
-		overlayColor = color.NRGBA{R: 245, G: 245, B: 250, A: 150}
-		trendColor = color.NRGBA{R: 100, G: 100, B: 120, A: 200}
+		overlayColor = color.NRGBA{R: 245, G: 245, B: 250, A: alpha}
+		trendColor = color.NRGBA{R: 80, G: 80, B: 180, A: 255}
 	}
-	paint.FillShape(gtx.Ops, overlayColor, clip.Rect{Max: image.Point{X: gtx.Constraints.Max.X, Y: height}}.Op())
+	trendColor.A = uint8(255 * state.LoadingAlpha)
+
+	paint.FillShape(gtx.Ops, overlayColor, clip.Rect{Max: gtx.Constraints.Max}.Op())
 
 	elapsed := time.Since(state.IsLoadingStart).Seconds()
-	duration := 1.5
+	duration := 2.5 // Slightly slower for full screen
 	progress := float32(math.Mod(elapsed, duration) / duration)
 
 	window.Invalidate()
 
-	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		w := gtx.Dp(80)
-		h := gtx.Dp(40)
-		return drawSmoothTrend(gtx, w, h, trendColor, progress, false)
-	})
+	// Draw the smooth trend across the ENTIRE application window
+	return drawSmoothTrend(gtx, gtx.Constraints.Max.X, gtx.Constraints.Max.Y, trendColor, progress, false)
 }
 
 // prepareChartData processes historical or generated data points for chart rendering, returning the data and a start label.
@@ -522,14 +793,10 @@ func extractHistoryData(history *pb.HistoryResponse, mode string) ([]float64, []
 	}
 	var data []float64
 	var timestamps []int64
-	for i, p := range history.Points {
+	for _, p := range history.Points {
 		val := float64(p.BuyRate) / 1000.0
 		if mode == "SELL" {
 			val = float64(p.SellRate) / 1000.0
-		}
-
-		if i < 5 { // Log first 5 points for debugging
-			log.Printf("Chart Debug [%s]: Point %d = %f (Raw Buy: %d, Raw Sell: %d)", mode, i, val, p.BuyRate, p.SellRate)
 		}
 
 		data = append(data, val)
@@ -760,7 +1027,7 @@ func FetchAllRates(window *app.Window, state *AppState, config AppConfig) {
 	}
 	state.Vault.Mu.Unlock()
 
-	go FetchAllRatesRPC(window, state, config.APICantorsURL)
+	go FetchAllRatesRPC(window, state, config.DRPCServerURL)
 	fetchHistory(window, state, config)
 }
 
@@ -1038,8 +1305,8 @@ func layoutCantorSelection(gtx layout.Context, window *app.Window, theme *materi
 	currentSearch := state.UI.SearchEditor.Text()
 	currentSort := state.UI.SortMode
 
-	// Robust re-filter logic: filter if search text changed, sort mode changed, location active, or list empty
-	if state.UI.SearchText != currentSearch || state.UI.LastSortMode != currentSort || state.UI.UserLocation.Active || len(state.UI.FilteredIDs) == 0 {
+	// Robust re-filter logic: filter if search text changed, sort mode changed, or list empty
+	if state.UI.SearchText != currentSearch || state.UI.LastSortMode != currentSort || len(state.UI.FilteredIDs) == 0 {
 		state.UI.SearchText = currentSearch
 		state.UI.LastSortMode = currentSort
 		state.UI.FilteredIDs = filterCantorList(state, state.UI.SearchText)
@@ -1238,7 +1505,7 @@ func updateTopMoversState(state *AppState, gainerID, loserID string) {
 func renderMovers(gtx layout.Context, theme *material.Theme, state *AppState, gainerName, loserName string, topGainer, topLoser *CantorEntry, gScale, lScale float32) layout.Dimensions {
 	resolveName := func(id string) string {
 		if c, ok := state.Cantors[id]; ok {
-			return GetTranslation(state.UI.Language, c.DisplayName)
+			return c.DisplayName
 		}
 		return id
 	}
@@ -1391,8 +1658,8 @@ func sortCantorList(state *AppState, ids []string) {
 		}
 
 		// Absolute fallback to name for perfect stability
-		nameA := GetTranslation(state.UI.Language, cantorA.DisplayName)
-		nameB := GetTranslation(state.UI.Language, cantorB.DisplayName)
+		nameA := cantorA.DisplayName
+		nameB := cantorB.DisplayName
 		return strings.ToLower(nameA) < strings.ToLower(nameB)
 	})
 }
@@ -1442,16 +1709,30 @@ func parseRateFromVault(state *AppState, id string, mode string) float64 {
 
 // isWithinDistance checks if a cantor is within the user's specified maximum distance.
 func isWithinDistance(state *AppState, cantor *CantorInfo) bool {
-	if !state.UI.UserLocation.Active || state.UI.MaxDistance <= 0 {
-		return true
+	if state.UI.UserLocation.Active && state.UI.MaxDistance > 0 {
+		dist := CalculateDistance(
+			state.UI.UserLocation.Latitude,
+			state.UI.UserLocation.Longitude,
+			cantor.Latitude,
+			cantor.Longitude,
+		)
+		return dist <= state.UI.MaxDistance
 	}
-	dist := CalculateDistance(
-		state.UI.UserLocation.Latitude,
-		state.UI.UserLocation.Longitude,
-		cantor.Latitude,
-		cantor.Longitude,
-	)
-	return dist <= state.UI.MaxDistance
+	
+	// If UserLocation is inactive, but we have a map center, filter by the map center
+	// so that when a user searches for a city, they only see cantors in that area.
+	if !state.UI.UserLocation.Active && state.UI.MapState.CenterLat != 0 && state.UI.MapState.CenterLon != 0 {
+		dist := CalculateDistance(
+			state.UI.MapState.CenterLat,
+			state.UI.MapState.CenterLon,
+			cantor.Latitude,
+			cantor.Longitude,
+		)
+		// Return cantors within a reasonable city/search radius
+		return dist <= 50.0 
+	}
+
+	return true
 }
 
 // matchesSearch determines if a cantor's ID or display name matches the search text.
@@ -1459,7 +1740,7 @@ func matchesSearch(state *AppState, id string, cantor *CantorInfo, searchText st
 	if searchText == "" {
 		return true
 	}
-	displayName := strings.ToLower(GetTranslation(state.UI.Language, cantor.DisplayName))
+	displayName := strings.ToLower(cantor.DisplayName)
 	return strings.Contains(strings.ToLower(id), searchText) ||
 		strings.Contains(displayName, searchText)
 }
@@ -1470,7 +1751,7 @@ func layoutCantorItem(
 	state *AppState, config AppConfig, cfg CantorRowConfig) layout.Dimensions {
 	cantorKey := cfg.CantorID
 	cantor := state.Cantors[cantorKey]
-	displayName := GetTranslation(state.UI.Language, cantor.DisplayName)
+	displayName := cantor.DisplayName
 
 	state.Vault.Mu.Lock()
 	var entry *CantorEntry
@@ -1517,8 +1798,9 @@ func layoutCantorItem(
 	handleCantorLongPress(window, state, cantor, cantorKey, displayName)
 
 	isSelected := state.UI.SelectedCantor == cantorKey
-	return renderCantorItem(gtx, theme, state, CantorItemArgs{
+	return renderCantorItem(gtx, window, theme, state, config, CantorItemArgs{
 		Cantor:      cantor,
+		CantorKey:   cantorKey,
 		DisplayName: displayName,
 		BuyVal:      buyVal,
 		SellVal:     sellVal,
@@ -1527,7 +1809,7 @@ func layoutCantorItem(
 		SellColor:   sellColor,
 		Change24h:   change,
 		IsSelected:  isSelected,
-		IsMobile:    state.UI.IsMobile,
+		IsMobile:    state.UI.CurrentViewMode != ViewDesktop,
 		Scale:       scale,
 	}, pulse)
 }
@@ -1594,33 +1876,11 @@ func resetCantorPressState(window *app.Window, cantor *CantorInfo) {
 
 // getCantorAddress retrieves the address for a cantor, falling back to a default translation if not provided.
 func getCantorAddress(state *AppState, cantor *CantorInfo, cantorKey string) string {
-	address := cantor.Address
-	if address != "" {
-		return address
+	if cantor.Address != "" && cantor.Address != "Discovered automatically" {
+		return cantor.Address
 	}
 
-	switch strings.ToLower(cantorKey) {
-	case "supersam":
-		return "Adama Asnyka 12, 35-001 Rzeszów"
-	case "tadek":
-		return "Gen. Okulickiego 1b, 37-450 Stalowa Wola"
-	case "exchange":
-		return "Grottgera 20, 35-001 Rzeszów"
-	case "grosz":
-		return "Sławkowska 4, 31-014 Kraków"
-	case "centrum":
-		return "Świdnicka 3, 50-064 Wrocław"
-	case "lider":
-		return "Wolności 1, 41-800 Zabrze"
-	case "baks":
-		return "Marszałkowska 85, 00-683 Warszawa"
-	case "waluciarz":
-		return "Szewska 21, 31-009 Kraków"
-	case "joker":
-		return "Piłsudskiego 34, 35-001 Rzeszów"
-	default:
-		return GetTranslation(state.UI.Language, "location_unknown")
-	}
+	return GetTranslation(state.UI.Language, "location_unknown")
 }
 
 // handleCantorHover updates the UI hover information based on cantor hover state, user location, and application language.
@@ -1642,6 +1902,12 @@ func handleCantorClick(gtx layout.Context, window *app.Window, state *AppState, 
 			state.UI.SelectedCantor = ""
 		} else {
 			state.UI.SelectedCantor = cantorKey
+			// Center the map on the selected cantor
+			if cantor.Latitude != 0 && cantor.Longitude != 0 {
+				state.UI.MapFocus.Latitude = cantor.Latitude
+				state.UI.MapFocus.Longitude = cantor.Longitude
+				window.Invalidate() // Force UI redraw for map update
+			}
 		}
 		state.ChartAnimStart = time.Now()
 		fetchHistory(window, state, config)
@@ -1649,7 +1915,7 @@ func handleCantorClick(gtx layout.Context, window *app.Window, state *AppState, 
 }
 
 // renderCantorItem renders a single interactive UI element to represent a cantor, including labels, values, and highlight state.
-func renderCantorItem(gtx layout.Context, theme *material.Theme, state *AppState, args CantorItemArgs, pulse float32) layout.Dimensions {
+func renderCantorItem(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig, args CantorItemArgs, pulse float32) layout.Dimensions {
 	bottom := unit.Dp(8)
 	if args.IsMobile && state.UI.SearchActive {
 		bottom = unit.Dp(4)
@@ -1664,66 +1930,66 @@ func renderCantorItem(gtx layout.Context, theme *material.Theme, state *AppState
 			op.Affine(trans).Add(gtx.Ops)
 		}
 
-		return args.Cantor.Button.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return drawCantorItemBackground(gtx, theme, state, args, pulse)
-		})
+		return drawCantorItemBackground(gtx, window, theme, state, config, args, pulse)
 	})
 }
 
 // drawCantorItemBackground renders the background for a cantor item row, including a rounded rectangle shape.
-func drawCantorItemBackground(gtx layout.Context, theme *material.Theme, state *AppState, args CantorItemArgs, pulse float32) layout.Dimensions {
+func drawCantorItemBackground(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig, args CantorItemArgs, pulse float32) layout.Dimensions {
 	cornerRadius := unit.Dp(16) // Slightly smaller radius like in the image
 	pxRadius := gtx.Dp(cornerRadius)
 
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			shape := clip.UniformRRect(image.Rectangle{Max: gtx.Constraints.Min}, pxRadius)
+			return args.Cantor.Button.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				shape := clip.UniformRRect(image.Rectangle{Max: gtx.Constraints.Min}, pxRadius)
 
-			// 1. Ultra-thin Background (Glass)
-			var bgColor color.NRGBA
-			if state.UI.LightMode {
-				// Light Mode: White background with high alpha (milky glass)
-				bgAlpha := uint8(200)
-				if args.IsSelected {
-					bgAlpha = 240
+				// 1. Ultra-thin Background (Glass)
+				var bgColor color.NRGBA
+				if state.UI.LightMode {
+					// Light Mode: White background with high alpha (milky glass)
+					bgAlpha := uint8(200)
+					if args.IsSelected {
+						bgAlpha = 240
+					}
+					bgColor = color.NRGBA{R: 255, G: 255, B: 255, A: bgAlpha}
+				} else {
+					// Dark Mode: Black background with low alpha (dark glass)
+					bgAlpha := uint8(40)
+					if args.IsSelected {
+						bgAlpha = 80
+					}
+					bgColor = color.NRGBA{R: 0, G: 0, B: 0, A: bgAlpha}
 				}
-				bgColor = color.NRGBA{R: 255, G: 255, B: 255, A: bgAlpha}
-			} else {
-				// Dark Mode: Black background with low alpha (dark glass)
-				bgAlpha := uint8(40)
+
+				paint.FillShape(gtx.Ops, bgColor, shape.Op(gtx.Ops))
+
+				// 2. Bright Glass Border
+				borderColor := color.NRGBA{R: 255, G: 255, B: 255, A: 45}
 				if args.IsSelected {
-					bgAlpha = 80
+					borderColor = AppColors.Accent1
+					borderColor.A = 120
+				} else if state.UI.LightMode {
+					borderColor = color.NRGBA{R: 0, G: 0, B: 0, A: 30}
 				}
-				bgColor = color.NRGBA{R: 0, G: 0, B: 0, A: bgAlpha}
-			}
 
-			paint.FillShape(gtx.Ops, bgColor, shape.Op(gtx.Ops))
+				widget.Border{
+					Color:        borderColor,
+					Width:        unit.Dp(1.2),
+					CornerRadius: cornerRadius,
+				}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Dimensions{Size: gtx.Constraints.Min}
+				})
 
-			// 2. Bright Glass Border
-			borderColor := color.NRGBA{R: 255, G: 255, B: 255, A: 45}
-			if args.IsSelected {
-				borderColor = AppColors.Accent1
-				borderColor.A = 120
-			} else if state.UI.LightMode {
-				borderColor = color.NRGBA{R: 0, G: 0, B: 0, A: 30}
-			}
+				// 3. Pulse Flash Overlay
+				if pulse > 0 {
+					flashCol := AppColors.Accent1
+					flashCol.A = uint8(pulse * 60)
+					paint.FillShape(gtx.Ops, flashCol, shape.Op(gtx.Ops))
+				}
 
-			widget.Border{
-				Color:        borderColor,
-				Width:        unit.Dp(1.2),
-				CornerRadius: cornerRadius,
-			}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Dimensions{Size: gtx.Constraints.Min}
 			})
-
-			// 3. Pulse Flash Overlay
-			if pulse > 0 {
-				flashCol := AppColors.Accent1
-				flashCol.A = uint8(pulse * 60)
-				paint.FillShape(gtx.Ops, flashCol, shape.Op(gtx.Ops))
-			}
-
-			return layout.Dimensions{Size: gtx.Constraints.Min}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			inset := unit.Dp(12)
@@ -1731,14 +1997,14 @@ func drawCantorItemBackground(gtx layout.Context, theme *material.Theme, state *
 				inset = unit.Dp(8)
 			}
 			return layout.UniformInset(inset).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return renderCantorRowContent(gtx, theme, state, args)
+				return renderCantorRowContent(gtx, window, theme, state, config, args)
 			})
 		}),
 	)
 }
 
 // renderCantorRowContent lays out the content for a cantor item row, including labels, values, and highlight state.
-func renderCantorRowContent(gtx layout.Context, theme *material.Theme, state *AppState, args CantorItemArgs) layout.Dimensions {
+func renderCantorRowContent(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig, args CantorItemArgs) layout.Dimensions {
 	displayChange := ""
 	state.Vault.Mu.Lock()
 	if currencyRates, ok := state.Vault.Rates[state.UI.Currency]; ok {
@@ -1748,54 +2014,10 @@ func renderCantorRowContent(gtx layout.Context, theme *material.Theme, state *Ap
 	}
 	state.Vault.Mu.Unlock()
 
-	// If search is active on mobile, use a specialized vertical layout that removes labels to save space
-	if args.IsMobile && state.UI.SearchActive {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				lbl := material.Body1(theme, args.DisplayName)
-				lbl.Color = AppColors.Text
-				lbl.TextSize = unit.Sp(16)
-				lbl.Font.Weight = font.Bold
-				lbl.MaxLines = 1
-				return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, lbl.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return layoutMarketValue(gtx, theme, MarketValueArgs{
-							Label:         "", // NO LABEL in search mode
-							Value:         args.BuyVal,
-							Color:         args.BuyColor,
-							Change:        args.Change24h,
-							DisplayChange: displayChange,
-							IsMobile:      true,
-						})
-					}),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(24)}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return layoutMarketValue(gtx, theme, MarketValueArgs{
-							Label:    "", // NO LABEL
-							Value:    args.SellVal,
-							Color:    args.SellColor,
-							IsMobile: true,
-						})
-					}),
-					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-						return layout.E.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							return layoutMarketValue(gtx, theme, MarketValueArgs{
-								Label:    "", // NO LABEL
-								Value:    args.SpreadVal,
-								Color:    AppColors.Spread,
-								IsMobile: true,
-							})
-						})
-					}),
-				)
-			}),
-		)
-	}
+	// Determine if we should hide labels to save horizontal space (mobile)
+	hideLabels := args.IsMobile
 
-	// Default Horizontal Layout (Non-search or Desktop)
+	// Default Horizontal Layout
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			lbl := material.Body1(theme, args.DisplayName)
@@ -1811,10 +2033,14 @@ func renderCantorRowContent(gtx layout.Context, theme *material.Theme, state *Ap
 			if args.IsMobile {
 				spacing = unit.Dp(8)
 			}
-			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					label := GetTranslation(state.UI.Language, "buy_col")
+					if hideLabels {
+						label = ""
+					}
 					return layoutMarketValue(gtx, theme, MarketValueArgs{
-						Label:         GetTranslation(state.UI.Language, "buy_col"),
+						Label:         label,
 						Value:         args.BuyVal,
 						Color:         args.BuyColor,
 						Change:        args.Change24h,
@@ -1824,8 +2050,12 @@ func renderCantorRowContent(gtx layout.Context, theme *material.Theme, state *Ap
 				}),
 				layout.Rigid(layout.Spacer{Width: spacing}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					label := GetTranslation(state.UI.Language, "sell_col")
+					if hideLabels {
+						label = ""
+					}
 					return layoutMarketValue(gtx, theme, MarketValueArgs{
-						Label:    GetTranslation(state.UI.Language, "sell_col"),
+						Label:    label,
 						Value:    args.SellVal,
 						Color:    args.SellColor,
 						IsMobile: args.IsMobile,
@@ -1833,12 +2063,34 @@ func renderCantorRowContent(gtx layout.Context, theme *material.Theme, state *Ap
 				}),
 				layout.Rigid(layout.Spacer{Width: spacing}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					label := GetTranslation(state.UI.Language, "spread_col")
+					if hideLabels {
+						label = ""
+					}
 					return layoutMarketValue(gtx, theme, MarketValueArgs{
-						Label:    GetTranslation(state.UI.Language, "spread_col"),
+						Label:    label,
 						Value:    args.SpreadVal,
 						Color:    AppColors.Spread,
 						IsMobile: args.IsMobile,
 					})
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					if args.IsSelected {
+						return layout.Inset{Left: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							if args.Cantor.DeleteBtn.Clicked(gtx) {
+								log.Printf("DeleteBtn clicked for %s", args.CantorKey)
+								go TriggerDeleteCantor(state, config, args.CantorKey, window)
+							}
+							btn := material.Button(theme, &args.Cantor.DeleteBtn, "×")
+							btn.Background = color.NRGBA{R: 200, G: 50, B: 50, A: 255}
+							btn.Color = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
+							btn.CornerRadius = unit.Dp(6)
+							btn.Inset = layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(2), Left: unit.Dp(6), Right: unit.Dp(6)}
+							btn.TextSize = unit.Sp(12)
+							return btn.Layout(gtx)
+						})
+					}
+					return layout.Dimensions{}
 				}),
 			)
 		}),
@@ -2003,24 +2255,20 @@ func layoutHeader(gtx layout.Context, window *app.Window,
 	theme *material.Theme, state *AppState) layout.Dimensions {
 
 	// On mobile, hide header if search is active to provide space and stability
-	if state.UI.IsMobile && state.UI.SearchActive {
+	if state.UI.CurrentViewMode == ViewMobile && state.UI.SearchActive {
 		return layout.Dimensions{}
 	}
 
 	return layout.Inset{Bottom: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return layoutMobileMenuButton(gtx, window, state)
-					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return renderHeaderMainSection(gtx, window, theme, state)
-					}),
-				)
+				return layoutMobileMenuButton(gtx, window, state)
+			}),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return renderHeaderMainSection(gtx, window, theme, state)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if state.UI.IsMobile {
+				if state.UI.CurrentViewMode == ViewMobile {
 					return layout.Dimensions{}
 				}
 				return layoutThemeButton(gtx, window, state)
@@ -2043,6 +2291,13 @@ func renderHeaderMainSection(gtx layout.Context, window *app.Window, theme *mate
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layoutStatusIndicator(gtx, window, state)
 				}),
+				layout.Flexed(1, layout.Spacer{}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					if state.UI.CurrentViewMode == ViewMobile {
+						return layout.Dimensions{}
+					}
+					return layoutFinOpsButton(gtx, window, state)
+				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return renderHeaderSearchToggle(gtx, window, state)
 				}),
@@ -2056,23 +2311,44 @@ func renderHeaderMainSection(gtx layout.Context, window *app.Window, theme *mate
 	)
 }
 
-func renderHeaderSearchToggle(gtx layout.Context, window *app.Window, state *AppState) layout.Dimensions {
-	if !state.UI.IsMobile {
-		return layout.Dimensions{}
-	}
-	if state.UI.SearchClickable.Clicked(gtx) {
-		state.UI.SearchActive = !state.UI.SearchActive
+// layoutFinOpsButton renders a buttion for FinOps's management area
+func layoutFinOpsButton(gtx layout.Context, window *app.Window, state *AppState) layout.Dimensions {
+	if state.UI.FinOpsBtn.Clicked(gtx) {
+		state.UI.IsFinOpsDashboardOpen = !state.UI.IsFinOpsDashboardOpen
 		window.Invalidate()
 	}
-	return layout.Inset{Left: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return state.UI.SearchClickable.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			col := AppColors.Text
-			if state.UI.SearchActive {
-				col = AppColors.Accent1
+
+	return state.UI.FinOpsBtn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{Top: unit.Dp(18), Bottom: unit.Dp(6), Left: unit.Dp(12), Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			bgCol := color.NRGBA{R: 50, G: 50, B: 60, A: 255}
+			if len(state.FinOps.BlockedProviders) > 0 {
+				bgCol = color.NRGBA{R: 200, G: 50, B: 50, A: 255} // Alert Red
+			} else if state.UI.FinOpsBtn.Hovered() {
+				bgCol = color.NRGBA{R: 70, G: 70, B: 80, A: 255}
 			}
-			return DrawIconSearch(gtx, col)
+
+			rect := image.Rect(0, 0, gtx.Constraints.Min.X, gtx.Constraints.Min.Y)
+			paint.FillShape(gtx.Ops, bgCol, clip.UniformRRect(rect, 8).Op(gtx.Ops))
+
+			shaper := text.NewShaper(text.WithCollection(nil))
+			fontConfig := font.Font{Weight: font.Bold}
+			txtCol := AppColors.Accent1
+
+			macro := op.Record(gtx.Ops)
+			dims := widget.Label{Alignment: text.Middle}.Layout(gtx, shaper, fontConfig, unit.Sp(12), "Control Panel", op.CallOp{})
+			call := macro.Stop()
+
+			paint.ColorOp{Color: txtCol}.Add(gtx.Ops)
+			call.Add(gtx.Ops)
+
+			return dims
 		})
 	})
+}
+
+// renderHeaderSearchToggle renders a header for search toogle
+func renderHeaderSearchToggle(gtx layout.Context, window *app.Window, state *AppState) layout.Dimensions {
+	return layout.Dimensions{}
 }
 
 // layoutMobileMenuButton renders the hamburger menu button for mobile layout.
@@ -2148,32 +2424,32 @@ func layoutLanguageButton(gtx layout.Context, window *app.Window, theme *materia
 }
 
 // LayoutSearchBar renders a search bar component with a text editor and a Locate button, styled and responsive to the current state.
-func LayoutSearchBar(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
-	if state.UI.IsMobile && !state.UI.SearchActive {
-		return layout.Dimensions{}
-	}
-
+func LayoutSearchBar(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig) layout.Dimensions {
 	bottomInset := unit.Dp(20)
-	if state.UI.IsMobile {
+	if state.UI.CurrentViewMode == ViewMobile {
 		bottomInset = unit.Dp(10)
 	}
 
 	return layout.Inset{Bottom: bottomInset}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		state.UI.SearchText = state.UI.SearchEditor.Text()
+		
+		// If on mobile, activate search layout (hiding labels/extra info) ONLY when has text
+		if state.UI.IsMobile {
+			hasText := len(strings.TrimSpace(state.UI.SearchText)) > 0
+			state.UI.SearchActive = hasText
+		}
+
 		return layout.Flex{Axis: layout.Horizontal, Spacing: layout.SpaceEnd, Alignment: layout.Middle}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if !state.UI.IsMobile {
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				if state.UI.CurrentViewMode == ViewDesktop {
 					gtx.Constraints.Max.X = gtx.Dp(unit.Dp(400))
 				}
 				return drawSearchInput(gtx, theme, state, window)
 			}),
+			layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if state.UI.IsMobile {
-					return layout.Dimensions{}
-				}
-				return drawSearchLocateButton(gtx, window, theme, state)
-			}),
-		)
+				return layoutLocateButton(gtx, window, theme, state, config)
+			}),		)
 	})
 }
 
@@ -2236,19 +2512,19 @@ func drawSearchInput(gtx layout.Context, theme *material.Theme, state *AppState,
 	)
 }
 
-// drawSearchLocateButton renders the Locate button for desktop layout.
-func drawSearchLocateButton(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
-	return layout.Inset{Left: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layoutLocateButton(gtx, window, theme, state)
-	})
-}
-
 // layoutLocateButton renders the Locate button, handles its click events, and dynamically updates the UI state.
-func layoutLocateButton(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
-	handleLocateClick(gtx, window, state)
+func layoutLocateButton(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig) layout.Dimensions {
+	isURL := strings.HasPrefix(state.UI.SearchText, "http://") || strings.HasPrefix(state.UI.SearchText, "https://")
+	hasText := len(strings.TrimSpace(state.UI.SearchText)) > 0
+	isCitySearch := !isURL && hasText
+
+	handleLocateClick(gtx, window, state, config, isURL, isCitySearch)
 	handleLocateHover(window, state)
 
 	btnText := GetTranslation(state.UI.Language, "locate_button")
+	if isURL || isCitySearch {
+		btnText = GetTranslation(state.UI.Language, "discover_button")
+	}
 	btn := material.Button(theme, &state.UI.LocateButton, btnText)
 
 	btnBg := color.NRGBA{R: 255, G: 255, B: 255, A: 10}
@@ -2264,16 +2540,64 @@ func layoutLocateButton(gtx layout.Context, window *app.Window, theme *material.
 	btn.Inset = layout.Inset{Top: unit.Dp(12), Bottom: unit.Dp(12), Left: unit.Dp(16), Right: unit.Dp(16)}
 	btn.TextSize = unit.Sp(14)
 
-	if state.UI.UserLocation.Active {
+	if state.UI.UserLocation.Active && !isURL && !isCitySearch {
 		return layoutLocateActiveState(gtx, window, theme, state, btn)
+	}
+
+	if isURL || isCitySearch {
+		return state.UI.LocateButton.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Stack{Alignment: layout.Center}.Layout(gtx,
+				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+					rect := clip.UniformRRect(image.Rectangle{Max: gtx.Constraints.Min}, gtx.Dp(btn.CornerRadius))
+					paint.FillShape(gtx.Ops, btnBg, rect.Op(gtx.Ops))
+					return layout.Dimensions{Size: gtx.Constraints.Min}
+				}),
+				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+					return layout.Inset{Top: unit.Dp(8), Bottom: unit.Dp(8), Left: unit.Dp(12), Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								return DrawIconLocate(gtx, btn.Color)
+							}),
+							layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								lbl := material.Caption(theme, btnText)
+								lbl.Color = btn.Color
+								lbl.Font.Weight = font.Bold
+								return lbl.Layout(gtx)
+							}),
+						)
+					})
+				}),
+			)
+		})
 	}
 
 	return btn.Layout(gtx)
 }
 
 // handleLocateClick handles the click event for the Locate button, fetching and updating user location.
-func handleLocateClick(gtx layout.Context, window *app.Window, state *AppState) {
+func handleLocateClick(gtx layout.Context, window *app.Window, state *AppState, config AppConfig, isURL bool, isCitySearch bool) {
 	if state.UI.LocateButton.Clicked(gtx) {
+		if isURL {
+			url := state.UI.SearchText
+			state.UI.SearchEditor.SetText("")
+			state.UI.SearchText = ""
+			state.UI.SearchActive = false
+			go triggerHeuristicDiscovery(url, "", 0, 0, "", state, config, window)
+			window.Invalidate()
+			return
+		}
+
+		if isCitySearch {
+			city := state.UI.SearchText
+			state.UI.SearchEditor.SetText("")
+			state.UI.SearchText = ""
+			state.UI.SearchActive = false
+			go LLMDiscoverCityCantors(city, state, config, window)
+			window.Invalidate()
+			return
+		}
+
 		if !state.UI.UserLocation.Active {
 			state.UI.UserLocation.Active = true
 			state.UI.FilteredIDs = nil // Force re-filter
@@ -2293,6 +2617,7 @@ func handleLocateClick(gtx layout.Context, window *app.Window, state *AppState) 
 			state.UI.DistanceSlider.Value = float32(state.UI.MaxDistance / 100.0)
 		} else {
 			state.UI.UserLocation.Active = false
+			state.UI.FilteredIDs = nil // Force re-filter
 		}
 		window.Invalidate()
 	}
@@ -2345,6 +2670,7 @@ func layoutLocateActiveState(gtx layout.Context, window *app.Window, theme *mate
 	newVal := float64(state.UI.DistanceSlider.Value) * 100.0
 	if newVal != state.UI.MaxDistance {
 		state.UI.MaxDistance = newVal
+		state.UI.FilteredIDs = nil // Force re-filter on slider drag
 		window.Invalidate()
 	}
 
