@@ -354,7 +354,7 @@ func fetchTileAsync(key string, state *AppState) {
 		}
 		url := fmt.Sprintf("https://basemaps.cartocdn.com/%s/%s/%s/%s.png", tileSource, z, x, y)
 		req, _ := http.NewRequest("GET", url, nil)
-		req.Header.Set("User-Agent", "Gix-App/1.0")
+		req.Header.Set("User-Agent", UserAgentApp)
 
 		client := http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)

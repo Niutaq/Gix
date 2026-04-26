@@ -4,10 +4,10 @@
 echo "--- FinOps Cost Analysis (FOCUS Standard) ---"
 
 # 1. Check if Infracost is installed
-if ! command -v infracost &> /dev/null
-then
-    echo "ERROR: Infracost CLI is not installed. Please install it from https://infracost.io"
+if ! command -v infracost &> /dev/null; then
+    echo "ERROR: Infracost CLI is not installed. Please install it from https://infracost.io" >&2
     exit 1
+fi
 fi
 
 # 2. Generate cost report (breakdown)
@@ -43,3 +43,4 @@ then
 else
     echo "Note: Install 'jq' to see the summary total cost here."
 fi
+i

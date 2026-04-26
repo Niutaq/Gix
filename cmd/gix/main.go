@@ -20,8 +20,8 @@ package main
 import (
 	// Standard libraries
 	"encoding/json"
-	"fmt"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -45,9 +45,11 @@ import (
 	"github.com/Niutaq/Gix/pkg/utilities"
 )
 
+const remoteAPIHost = "165.227.246.100"
+
 // main is the entry point of the application that initializes configuration, sets up the main window, and starts the app loop.
 func main() {
-	apiBase := flag.String("api", "http://165.227.246.100:8080", "API base URL")
+	apiBase := flag.String("api", "http://"+remoteAPIHost+":8080", "API base URL")
 	tracePath := flag.String("trace", "", "Path to write trace file")
 	flag.Parse()
 
@@ -73,8 +75,8 @@ func main() {
 	}
 
 	drpcBase := "localhost:8081"
-	if base == "http://165.227.246.100:8080" {
-		drpcBase = "165.227.246.100:8081"
+	if base == "http://"+remoteAPIHost+":8080" {
+		drpcBase = remoteAPIHost + ":8081"
 	}
 
 	config := utilities.AppConfig{
@@ -231,7 +233,7 @@ func updateCantors(window *app.Window, state *utilities.AppState, config utiliti
 	select {
 	case list := <-cantorChan:
 		state.CantorsMu.Lock()
-		
+
 		// Clear existing cantors if we are doing a fresh discovery scan
 		// This keeps the list small (max 5-10) and focused on the searched area
 		if len(list) > 0 {
@@ -248,11 +250,11 @@ func updateCantors(window *app.Window, state *utilities.AppState, config utiliti
 
 		// Keep track of active IDs
 		activeIDs := make(map[string]bool)
-		
+
 		for _, c := range list {
 			idStr := fmt.Sprintf("%d", c.ID)
 			activeIDs[idStr] = true
-			
+
 			state.Cantors[idStr] = &utilities.CantorInfo{
 				ID:          c.ID,
 				DisplayName: c.DisplayName,
@@ -262,14 +264,14 @@ func updateCantors(window *app.Window, state *utilities.AppState, config utiliti
 				Strategy:    c.Strategy,
 			}
 		}
-		
+
 		// Remove stale cantors that were deleted on backend
 		for idStr := range state.Cantors {
 			if !activeIDs[idStr] {
 				delete(state.Cantors, idStr)
 			}
 		}
-		
+
 		state.CantorsMu.Unlock()
 		utilities.SaveCache(state)
 		utilities.FetchAllRates(window, state, config)

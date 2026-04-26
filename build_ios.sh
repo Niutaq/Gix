@@ -76,7 +76,7 @@ CGO_LDFLAGS="-isysroot $SDK_PATH -arch arm64 -miphoneos-version-min=15.0" \
 go build -tags ios -ldflags "-s -w" -o "${APP_NAME}_bin" ./cmd/gix
 
 if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Go compilation error.${NC}"
+    echo -e "${RED}❌ Go compilation error.${NC}" >&2
     exit 1
 fi
 
