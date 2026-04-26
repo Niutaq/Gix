@@ -19,7 +19,7 @@
   "err_unknown": "Dogodila se nepoznata greška.",
   "market_title": "Tržište valuta",
   "market_subtitle": "Praćenje u realnom vremenu",
-  "search_placeholder": "Traži mjenjačnicu...",
+  "search_placeholder": "Traži grad...",
   "no_cantor_found": "Mjenjačnica nije pronađena...",
   "locate_button": "Lociraj",
   "buy_col": "Kupnja",
@@ -49,5 +49,6 @@
   "sort_dist": "Udaljenost",
   "tf_1d": "1D",
   "tf_7d": "7D",
-  "tf_30d": "30D"
+  "tf_30d": "30D",
+  "discover_button": "Otkrij"
 }

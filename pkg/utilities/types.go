@@ -7,10 +7,14 @@ import (
 	"time"
 
 	// Gio utilities
+	"gioui.org/app"
+	"gioui.org/f32"
 	"gioui.org/widget"
 
 	// External utilities
 	pb "github.com/Niutaq/Gix/api/proto/v1"
+	"github.com/Niutaq/Gix/pkg/search"
+	"github.com/Niutaq/Gix/pkg/types"
 )
 
 // CantorInfo holds information about a cantor.
@@ -20,7 +24,9 @@ type CantorInfo struct {
 	Address     string
 	Latitude    float64
 	Longitude   float64
+	Strategy    string
 	Button      widget.Clickable `json:"-"`
+	DeleteBtn   widget.Clickable `json:"-"`
 
 	// Long Press Logic
 	PressStart         time.Time `json:"-"`
@@ -91,21 +97,35 @@ type Spring struct {
 	Friction float32 // e.g., 15
 }
 
+// ViewMode represents the responsive layout state
+type ViewMode int
+
+const (
+	ViewDesktop ViewMode = iota
+	ViewMid
+	ViewMobile
+)
+
 // UIState holds UI-specific state and widgets.
 type UIState struct {
-	ModalOpen           string
-	ModalAnimStart      time.Time
-	LangModalButton     widget.Clickable
-	CurrencyModalButton widget.Clickable
-	ModalClick          widget.Clickable
-	ModalList           widget.List
-	ModalClose          widget.Clickable
+	IsFinOpsDashboardOpen bool
+	FinOpsBtn             widget.Clickable
+	ModalOpen             string
+	ModalAnimStart        time.Time
+	LangModalButton       widget.Clickable
+	CurrencyModalButton   widget.Clickable
+	ModalClick            widget.Clickable
+	ModalList             widget.List
+	ModalClose            widget.Clickable
 
 	MobileMenuOpen       bool
 	MobileMenuBtn        widget.Clickable
 	MobileMenuBackdrop   widget.Clickable
 	BgClick              widget.Clickable
-	IsMobile             bool
+	IsMobile             bool // Kept for legacy logic, but updated automatically
+	CurrentViewMode      ViewMode
+	MapVisibleMobile     bool
+	MapBtnMobile         widget.Clickable
 	LayoutTransitionTime time.Time
 
 	CurrencyList    widget.List
@@ -114,6 +134,8 @@ type UIState struct {
 	SearchActive    bool
 	SearchClickable widget.Clickable
 	FilteredIDs     []string
+	CityResults     []types.CityRecord
+	CityClickables  []widget.Clickable
 
 	ChartMode        string             // "BUY" or "SELL"
 	ChartModeButtons []widget.Clickable // [0] -> Buy, [1] -> Sell
@@ -126,7 +148,26 @@ type UIState struct {
 		Longitude float64
 		Active    bool
 	}
+	MapFocus struct {
+		Latitude  float64
+		Longitude float64
+		CityName  string
+	}
 
+	MapState struct {
+		CenterLat  float64
+		CenterLon  float64
+		Zoom       float32
+		DragStart  f32.Point
+		Dragging   bool
+		ZoomInBtn  widget.Clickable
+		ZoomOutBtn widget.Clickable
+	}
+
+	PinnedIDs       []string
+	GeocodingActive bool
+	ScannedChunks   map[string]bool
+	LocalHistory    map[string][]float64
 	MaxDistance     float64
 	DistanceSlider  widget.Float
 	LocateButton    widget.Clickable
@@ -188,16 +229,30 @@ type Notification struct {
 	Timeout time.Time
 }
 
+// FinOpsStatus holds real-time infrastructure metrics for the UI terminal.
+type FinOpsStatus struct {
+	DailySpendUSD    string            `json:"real_spend_24h_usd"`
+	BurnRateStatus   string            `json:"burn_rate_status"`
+	BlockedProviders []string          `json:"blocked_providers"`
+	SystemTime       string            `json:"system_time"`
+	IsActive         bool              `json:"is_governance_active"`
+	ServiceBreakdown map[string]string `json:"service_breakdown"` // FOCUS 1.0 categories
+}
+
 // AppState holds the overall state of the application.
 type AppState struct {
+	Window         *app.Window
 	Vault          *CantorVault
 	CantorsMu      sync.RWMutex
 	Cantors        map[string]*CantorInfo
+	Search         *search.SearchEngine
 	History        *pb.HistoryResponse
+	FinOps         FinOpsStatus
 	ChartAnimStart time.Time // Tracks when the chart data was last updated for animation
 	LastFrameTime  time.Time
 	IsLoadingStart time.Time
 	IsLoading      atomic.Bool
+	LoadingAlpha   float32 // For smooth loading fade in/out
 	IsConnected    atomic.Bool
 	Notifications  *Notification
 	UI             UIState
@@ -205,9 +260,12 @@ type AppState struct {
 
 // AppConfig stores app configuration
 type AppConfig struct {
-	APICantorsURL string
-	APIRatesURL   string
-	APIHistoryURL string
+	APICantorsURL  string
+	APIRatesURL    string
+	APIHistoryURL  string
+	APIFinOpsURL   string
+	APIDiscoverURL string
+	DRPCServerURL  string
 }
 
 // ApiCantorResponse for parsing JSON
@@ -217,6 +275,8 @@ type ApiCantorResponse struct {
 	Name        string  `json:"name"`
 	Latitude    float64 `json:"latitude"`
 	Longitude   float64 `json:"longitude"`
+	Strategy    string  `json:"strategy"`
+	Address     string  `json:"address"`
 }
 
 // ModalConfig represents the configuration for a modal UI component.

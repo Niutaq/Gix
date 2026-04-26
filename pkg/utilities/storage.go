@@ -108,7 +108,13 @@ func LoadCache(state *AppState) {
 	}
 
 	state.CantorsMu.Lock()
-	state.Cantors = data.Cantors
+	state.Cantors = make(map[string]*CantorInfo)
+	for k, v := range data.Cantors {
+		// Only migrate entries with numeric keys (IDs)
+		if len(k) > 0 && k[0] >= '0' && k[0] <= '9' {
+			state.Cantors[k] = v
+		}
+	}
 	state.CantorsMu.Unlock()
 
 	state.Vault.Mu.Lock()

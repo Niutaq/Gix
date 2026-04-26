@@ -19,7 +19,7 @@
   "err_unknown": "Došlo k neznámé chybě.",
   "market_title": "Měnový trh",
   "market_subtitle": "Monitorování v reálném čase",
-  "search_placeholder": "Hledat směnárnu...",
+  "search_placeholder": "Hledat město...",
   "no_cantor_found": "Směnárna nebyla nalezena...",
   "locate_button": "Lokalizovat",
   "buy_col": "Nákup",
@@ -50,5 +50,6 @@
   "sort_dist": "Vzdálenost",
   "tf_1d": "1D",
   "tf_7d": "7D",
-  "tf_30d": "30D"
+  "tf_30d": "30D",
+  "discover_button": "Objevte"
 }

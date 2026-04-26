@@ -19,7 +19,7 @@
   "err_unknown": "Der opstod en ukendt fejl.",
   "market_title": "Valutamarked",
   "market_subtitle": "Realtidsovervågning",
-  "search_placeholder": "Søg efter vekselkontor...",
+  "search_placeholder": "Søg efter en by...",
   "no_cantor_found": "Intet vekselkontor fundet...",
   "locate_button": "Lokaliser",
   "buy_col": "Køb",
@@ -49,5 +49,6 @@
   "sort_dist": "Afstand",
   "tf_1d": "1D",
   "tf_7d": "7D",
-  "tf_30d": "30D"
+  "tf_30d": "30D",
+  "discover_button": "Opdag"
 }
