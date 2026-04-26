@@ -1,20 +1,20 @@
 run:
-  timeout: 3m
-  go: '1.25.3'
+  timeout: 5m
+  go: "1.26"
 
 linters:
+  disable-all: true
   enable:
     - govet
     - staticcheck
     - revive
-    - errcheck
-    - unused
-
     - goimports
     - ineffassign
     - goconst
     - gocritic
     - gosimple
+    - gosec
+    - nilerr
 
 issues:
   exclude-dirs:
@@ -22,17 +22,6 @@ issues:
     - res
     - outputDir
 
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-
-    - path: gioui\.org/app/internal/xkb
-      source: "^import \"gioui.org/app/internal/xkb\""
-      linters:
-        - govet
-        - staticcheck
-
 linters-settings:
   staticcheck:
-    go: '1.25.3'
+    go: "1.26"

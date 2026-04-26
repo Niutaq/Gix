@@ -20,10 +20,12 @@ package main
 import (
 	// Standard libraries
 	"encoding/json"
+	"fmt"
 	"flag"
 	"io"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"runtime"
 	"runtime/trace"
@@ -31,6 +33,7 @@ import (
 
 	// Gio utilities
 	"gioui.org/app"
+	"gioui.org/io/key"
 	"gioui.org/op"
 	"gioui.org/text"
 	"gioui.org/unit"
@@ -38,10 +41,11 @@ import (
 	"gioui.org/widget/material"
 
 	// External utilities
+	"github.com/Niutaq/Gix/pkg/types"
 	"github.com/Niutaq/Gix/pkg/utilities"
 )
 
-// the main is the entry point of the application that initializes configuration, sets up the main window, and starts the app loop.
+// main is the entry point of the application that initializes configuration, sets up the main window, and starts the app loop.
 func main() {
 	apiBase := flag.String("api", "http://165.227.246.100:8080", "API base URL")
 	tracePath := flag.String("trace", "", "Path to write trace file")
@@ -68,16 +72,32 @@ func main() {
 		base = base[:len(base)-1]
 	}
 
-	config := utilities.AppConfig{
-		APICantorsURL: base + "/api/v1/cantors",
-		APIRatesURL:   base + "/api/v1/rates",
-		APIHistoryURL: base + "/api/v1/history",
+	drpcBase := "localhost:8081"
+	if base == "http://165.227.246.100:8080" {
+		drpcBase = "165.227.246.100:8081"
 	}
+
+	config := utilities.AppConfig{
+		APICantorsURL:  base + "/api/v1/cantors",
+		APIRatesURL:    base + "/api/v1/rates",
+		APIHistoryURL:  base + "/api/v1/history",
+		APIFinOpsURL:   base + "/api/v1/finops",
+		APIDiscoverURL: base + "/api/v1/discover",
+		DRPCServerURL:  drpcBase,
+	}
+
+	// Start pprof server for performance analysis
+	go func() {
+		log.Println("Pprof server started at localhost:6060")
+		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+			log.Printf("pprof server failed: %v", err)
+		}
+	}()
 
 	// Prepare window options
 	opts := []app.Option{
 		app.Title("Gix"),
-		app.Size(unit.Dp(1280), unit.Dp(1280)),
+		app.Size(unit.Dp(1800), unit.Dp(1280)),
 	}
 
 	window := new(app.Window)
@@ -98,8 +118,9 @@ func run(window *app.Window, config utilities.AppConfig) error {
 
 	state, theme, cantorChan := setupApplication(window, config)
 
-	// Start dRPC client
-	go utilities.StartDRPCStream(window, state, config.APICantorsURL)
+	// Start background services
+	go utilities.StartDRPCStream(window, state, config.DRPCServerURL)
+	go utilities.StartFinOpsMonitoring(window, state, config)
 
 	var ops op.Ops
 	for {
@@ -108,6 +129,17 @@ func run(window *app.Window, config utilities.AppConfig) error {
 			return e.Err
 		case app.FrameEvent:
 			handleFrame(window, &ops, e, state, config, cantorChan, theme)
+		case key.Event:
+			if e.State == key.Press {
+				switch e.Name {
+				case "F", "f":
+					state.UI.IsFinOpsDashboardOpen = !state.UI.IsFinOpsDashboardOpen
+					window.Invalidate()
+				case key.NameEscape:
+					state.UI.IsFinOpsDashboardOpen = false
+					window.Invalidate()
+				}
+			}
 		}
 	}
 }
@@ -139,7 +171,9 @@ func setupApplication(window *app.Window, config utilities.AppConfig) (*utilitie
 // initializeAppState initializes the application state with default values.
 func initializeAppState() *utilities.AppState {
 	state := &utilities.AppState{
-		Vault:   &utilities.CantorVault{},
+		Vault: &utilities.CantorVault{
+			Rates: make(map[string]map[string]*utilities.CantorEntry),
+		},
 		Cantors: make(map[string]*utilities.CantorInfo),
 		UI: utilities.UIState{
 			Language:              "EN",
@@ -162,16 +196,10 @@ func initializeAppState() *utilities.AppState {
 	return state
 }
 
+// setupUILists handles language and currency options
 func setupUILists(state *utilities.AppState) {
-	state.UI.LanguageOptions = []string{
-		"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ",
-		"HR", "HU", "UA", "BU", "RO", "AL", "TR", "IC",
-	}
-	state.UI.CurrencyOptions = []string{
-		"EUR", "USD", "GBP", "AUD", "DKK", "NOK", "CHF",
-		"SEK", "CZK", "HRF", "HUF", "UAH", "BGN",
-		"RON", "LEK", "TRY", "ISK",
-	}
+	state.UI.LanguageOptions = types.GlobalLanguages
+	state.UI.CurrencyOptions = types.GlobalCurrencies
 }
 
 // handleFrame processes the current frame event by updating state, adjusting scaling, and rendering the UI.
@@ -186,8 +214,8 @@ func handleFrame(window *app.Window, ops *op.Ops, e app.FrameEvent, state *utili
 
 	// Adjust scaling for iOS ONLY
 	if runtime.GOOS == "ios" {
-		e.Metric.PxPerDp *= 0.825
-		e.Metric.PxPerSp *= 0.825
+		e.Metric.PxPerDp *= 0.895
+		e.Metric.PxPerSp *= 0.895
 	}
 
 	ops.Reset()
@@ -203,18 +231,45 @@ func updateCantors(window *app.Window, state *utilities.AppState, config utiliti
 	select {
 	case list := <-cantorChan:
 		state.CantorsMu.Lock()
-		for _, c := range list {
-			// Explicitly ignore "alex" due to performance issues/request
-			if c.Name == "alex" {
-				continue
+		
+		// Clear existing cantors if we are doing a fresh discovery scan
+		// This keeps the list small (max 5-10) and focused on the searched area
+		if len(list) > 0 {
+			for id := range state.Cantors {
+				delete(state.Cantors, id)
 			}
-			state.Cantors[c.Name] = &utilities.CantorInfo{
+			// Also clear vault rates to avoid mixing stale data from previous cities
+			state.Vault.Mu.Lock()
+			for curr := range state.Vault.Rates {
+				state.Vault.Rates[curr] = make(map[string]*utilities.CantorEntry)
+			}
+			state.Vault.Mu.Unlock()
+		}
+
+		// Keep track of active IDs
+		activeIDs := make(map[string]bool)
+		
+		for _, c := range list {
+			idStr := fmt.Sprintf("%d", c.ID)
+			activeIDs[idStr] = true
+			
+			state.Cantors[idStr] = &utilities.CantorInfo{
 				ID:          c.ID,
 				DisplayName: c.DisplayName,
+				Address:     c.Address,
 				Latitude:    c.Latitude,
 				Longitude:   c.Longitude,
+				Strategy:    c.Strategy,
 			}
 		}
+		
+		// Remove stale cantors that were deleted on backend
+		for idStr := range state.Cantors {
+			if !activeIDs[idStr] {
+				delete(state.Cantors, idStr)
+			}
+		}
+		
 		state.CantorsMu.Unlock()
 		utilities.SaveCache(state)
 		utilities.FetchAllRates(window, state, config)

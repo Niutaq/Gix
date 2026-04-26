@@ -34,37 +34,31 @@ static char lastError[256];
 
 @end
 
-void fetchLocationBridge(int timeoutSeconds) {
+static LocationDelegate *globalDelegate = nil;
+static CLLocationManager *globalManager = nil;
+
+void startNativeLocationRequest() {
     status = 0;
     lastError[0] = '\0';
 
-    dispatch_sync(dispatch_get_main_queue(), ^{
-        static LocationDelegate *delegate = nil;
-        if (!delegate) delegate = [[LocationDelegate alloc] init];
-
-        CLLocationManager *manager = [[CLLocationManager alloc] init];
-        manager.delegate = delegate;
-        manager.desiredAccuracy = kCLLocationAccuracyBest;
-
-        printf("[CGO] Requesting location (timeout: %d)...\n", timeoutSeconds);
-        [manager requestWhenInUseAuthorization];
-        [manager startUpdatingLocation];
-
-        NSDate *timeoutDate = [NSDate dateWithTimeIntervalSinceNow:timeoutSeconds];
-        while (status == 0 && [timeoutDate timeIntervalSinceNow] > 0) {
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!globalDelegate) globalDelegate = [[LocationDelegate alloc] init];
+        if (!globalManager) {
+            globalManager = [[CLLocationManager alloc] init];
+            globalManager.delegate = globalDelegate;
+            globalManager.desiredAccuracy = kCLLocationAccuracyBest;
         }
 
-        if (status == 0) {
-            printf("[CGO] Timeout reached.\n");
-            status = 3;
-        } else if (status == 1) {
-            printf("[CGO] Success!\n");
-        } else {
-            printf("[CGO] Error occurred.\n");
-        }
+        [globalManager requestWhenInUseAuthorization];
+        [globalManager startUpdatingLocation];
+    });
+}
 
-        [manager stopUpdatingLocation];
+void stopNativeLocationRequest() {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (globalManager) {
+            [globalManager stopUpdatingLocation];
+        }
     });
 }
 
@@ -77,20 +71,30 @@ const char* getLastError() { return lastError; }
 import "C"
 import (
 	"errors"
-	"fmt"
+	"time"
 )
 
 // fetchNativeLocation uses native CoreLocation via CGO.
 func fetchNativeLocation() (float64, float64, error) {
-	C.fetchLocationBridge(20)
+	C.startNativeLocationRequest()
+	defer C.stopNativeLocationRequest()
 
-	status := int(C.getStatus())
-	switch status {
-	case 1:
-		return float64(C.getLatitude()), float64(C.getLongitude()), nil
-	case 2:
-		return 0, 0, errors.New(C.GoString(C.getLastError()))
-	default:
-		return 0, 0, fmt.Errorf("unknown location status: %d", status)
+	// Wait for status update without blocking the main thread (Go's time.Sleep is non-blocking for OS threads)
+	timeout := time.After(15 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return 0, 0, errors.New("location timeout")
+		case <-ticker.C:
+			switch int(C.getStatus()) {
+			case 1:
+				return float64(C.getLatitude()), float64(C.getLongitude()), nil
+			case 2:
+				return 0, 0, errors.New(C.GoString(C.getLastError()))
+			}
+		}
 	}
 }

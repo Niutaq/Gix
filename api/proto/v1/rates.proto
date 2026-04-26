@@ -10,14 +10,14 @@ message RateResponse {
   int32 cantorId = 3 [json_name = "cantorID"];
   string currency = 4 [json_name = "currency"];
   int64 fetchedAt = 5 [json_name = "fetchedAt"];
-  double change24h = 6 [json_name = "change24h"];
+  int64 change24h = 6 [json_name = "change24h"];
 
 }
 
 message HistoryPoint {
   int64 time = 1 [json_name = "time"];
-  double buyRate = 2 [json_name = "buyRate"];
-  double sellRate = 3 [json_name = "sellRate"];
+  int64 buyRate = 2 [json_name = "buyRate"];
+  int64 sellRate = 3 [json_name = "sellRate"];
 
 }
 
@@ -29,6 +29,14 @@ message HistoryResponse {
 
 message RateRequest {
   string currency = 1;
+}
+
+message ScrapeCompletedEvent {
+  string providerId = 1 [json_name = "providerID"];
+  string scraperType = 2 [json_name = "scraperType"];
+  int64 durationMs = 3 [json_name = "durationMS"];
+  int64 timestamp = 4 [json_name = "timestamp"];
+  string traceId = 5 [json_name = "traceID"];
 }
 
 message RateListResponse {

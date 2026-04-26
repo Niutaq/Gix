@@ -11,22 +11,37 @@ spec:
   template:
     metadata:
       labels:
+        app.kubernetes.io/name: gix-backend
+        app.kubernetes.io/component: api
+        focus.finops.org/Environment: production
+        focus.finops.org/Application: gix
         app: gix-backend
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: gix-backend
-          image: niutaq/gix-backend:v1.2.7
+          image: niutaq/gix-backend:v1.2.8
           imagePullPolicy: Always
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8080
             - containerPort: 8081
           resources:
             requests:
-              cpu: 10m
+              cpu: 20m
               memory: 64Mi
               ephemeral-storage: 128Mi
             limits:
+              cpu: 100m
               memory: 512Mi
               ephemeral-storage: 1Gi
           env:
@@ -44,6 +59,11 @@ spec:
               value: "nats://gix-nats:4222"
             - name: SWAGGER_HOST
               value: "165.227.246.100:8080"
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gix-secrets
+                  key: GEMINI_API_KEY
             # DataDog Configuration
             - name: DD_AGENT_HOST
               valueFrom:
@@ -54,8 +74,14 @@ spec:
             - name: DD_ENV
               value: "production"
             - name: DD_VERSION
-              value: "v1.2.7"
+              value: "v1.2.8"
           livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
             httpGet:
               path: /healthz
               port: 8080
