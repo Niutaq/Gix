@@ -1,10 +1,19 @@
 package finops
 
 import (
-	// Standard libraries
 	"fmt"
 	"sync"
 	"time"
+)
+
+// ScraperType defines the complexity of the operation
+type ScraperType string
+
+const (
+	ScraperStatic    ScraperType = "static"
+	ScraperHeuristic ScraperType = "heuristic"
+	ScraperDiscovery ScraperType = "discovery" // e.g., Geocoding/URL Analysis
+	ScraperLLM       ScraperType = "llm"       // AI-powered operations (Gemini)
 )
 
 // GlobalStats tracks real-time performance metrics
@@ -12,12 +21,12 @@ type GlobalStats struct {
 	mu             sync.RWMutex
 	TotalScrapes   int
 	TotalDuration  time.Duration
-	ExpensiveTasks []string // List of cantors that took > 2s
+	ExpensiveTasks []string
 }
 
 var Stats = &GlobalStats{}
 
-// Record updates the statistics with the given cantor ID and task duration, tracking expensive tasks exceeding 2 seconds.
+// Record updates the statistics with the given cantor ID and task duration.
 func (s *GlobalStats) Record(cantorID string, duration time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -31,7 +40,7 @@ func (s *GlobalStats) Record(cantorID string, duration time.Duration) {
 	}
 }
 
-// GetSummary returns a summary of the statistics, including total scrapes, average duration, and expensive tasks.
+// GetSummary returns a summary of the statistics.
 func (s *GlobalStats) GetSummary() map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -46,38 +55,64 @@ func (s *GlobalStats) GetSummary() map[string]any {
 	}
 }
 
-// ResourceRates defines hourly costs for DO resources based on standard pricing.
-// These should ideally be fetched from the DigitalOcean Price API in the future.
-type ResourceRates struct {
-	DropletStandardBasic float64 // e.g., $6/mo -> ~$0.0089/h
-	LoadBalancerStandard float64 // e.g., $15/mo -> ~$0.0223/h
-	BlockStoragePerGB    float64 // e.g., $0.10/GB/mo
+// UnitCost represents the calculated cost for a single operation, aligned with FOCUS 1.0
+type UnitCost struct {
+	Time            time.Time
+	ProviderID      string
+	ScraperType     ScraperType
+	Duration        time.Duration
+	EstimatedCost   float64 // In USD
+	TraceID         string
+	ServiceCategory string // FOCUS: ServiceCategory (e.g., AI, Compute)
+	ResourceName    string // FOCUS: ResourceName
 }
 
-// DefaultRates provides baseline pricing (Standard DO prices as of early 2024)
+// ResourceRates defines hourly costs for resources.
+type ResourceRates struct {
+	CPUCoreHour      float64
+	RAMGBHour        float64
+	HeuristicPremium float64
+	ExternalAPICost  float64
+	AITokenCost      float64 // Cost per AI request (estimated)
+	// Legacy fields for compatibility
+	DropletStandardBasic float64
+	LoadBalancerStandard float64
+}
+
+// DefaultRates for DigitalOcean / K8s managed nodes
 var DefaultRates = ResourceRates{
+	CPUCoreHour:          0.032,
+	RAMGBHour:            0.005,
+	HeuristicPremium:     1.5,
+	ExternalAPICost:      0.0001,
+	AITokenCost:          0.0005, // Gemini 1.5 Flash approx cost per request
 	DropletStandardBasic: 0.00893,
 	LoadBalancerStandard: 0.02232,
-	BlockStoragePerGB:    0.10 / 672, // Hourly per GB
 }
 
-// CostReport represents a calculated cost breakdown
-type CostReport struct {
-	ResourceName string
-	HourlySpend  float64
-	MonthlySpend float64
+// Summary calculates the estimated monthly cost (Legacy compatibility)
+func (r ResourceRates) Summary(droplets, lbs int) string {
+	hourly := (float64(droplets) * r.DropletStandardBasic) + (float64(lbs) * r.LoadBalancerStandard)
+	return fmt.Sprintf("FinOps Profile: Estimated spend $%.2f/mo", hourly*672) // montly hours (estimated for every month)
 }
 
-// ScrapeMetric tracks the efficiency of data collection
-type ScrapeMetric struct {
-	CantorID     string
-	Duration     time.Duration
-	BytesFetched int
-}
+// CalculateTaskCost computes the real-time cost of an operation based on resource consumption
+func (r ResourceRates) CalculateTaskCost(st ScraperType, duration time.Duration, cpuCores float64, memGB float64) float64 {
+	seconds := duration.Seconds()
+	hours := seconds / 3600.0
 
-// CalculateEfficiency returns a score where lower is better (less CPU time per scrape)
-func (m ScrapeMetric) CalculateEfficiency() float64 {
-	return m.Duration.Seconds()
+	baseCost := (hours * cpuCores * r.CPUCoreHour) + (hours * memGB * r.RAMGBHour)
+
+	switch st {
+	case ScraperHeuristic:
+		baseCost *= r.HeuristicPremium
+	case ScraperDiscovery:
+		baseCost += r.ExternalAPICost
+	case ScraperLLM:
+		baseCost += r.AITokenCost
+	}
+
+	return baseCost
 }
 
 // OptimizationTip provides actionable advice
@@ -90,8 +125,6 @@ type OptimizationTip struct {
 // GenerateTips analyzes the current state and suggests savings
 func GenerateTips(dropletCount, lbCount int) []OptimizationTip {
 	var tips []OptimizationTip
-
-	// Tip 1: Load Balancer is expensive for small projects
 	if lbCount > 0 {
 		tips = append(tips, OptimizationTip{
 			Title:       "Consolidate Load Balancer",
@@ -99,12 +132,18 @@ func GenerateTips(dropletCount, lbCount int) []OptimizationTip {
 			Potential:   15.0,
 		})
 	}
-
 	return tips
 }
 
-// Summary calculates the estimated monthly cost based on the number of droplets and load balancers provided.
-func (r ResourceRates) Summary(droplets, lbs int) string {
-	hourly := (float64(droplets) * r.DropletStandardBasic) + (float64(lbs) * r.LoadBalancerStandard)
-	return fmt.Sprintf("FinOps Profile: Estimated spend $%.2f/mo", hourly*672)
+// Estimator interface for different storage/processing backends
+type Estimator interface {
+	Estimate(unit UnitCost) error
+	GetProviderBurnRate(providerID string, lastNDays int) (float64, error)
+}
+
+// ScrapeMetric tracks the efficiency of data collection (Legacy compatibility)
+type ScrapeMetric struct {
+	CantorID     string
+	Duration     time.Duration
+	BytesFetched int
 }

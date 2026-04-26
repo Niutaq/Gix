@@ -19,7 +19,7 @@
   "err_unknown": "Unbekannter Fehler.",
   "market_title": "Währungsmarkt",
   "market_subtitle": "Echtzeit-Überwachung",
-  "search_placeholder": "Wechselstube suchen...",
+  "search_placeholder": "Stadt suchen...",
   "no_cantor_found": "Keine Wechselstube gefunden...",
   "locate_button": "Lokalisieren",
   "buy_col": "Kauf",
@@ -50,5 +50,6 @@
   "sort_dist": "Entfernung",
   "tf_1d": "1T",
   "tf_7d": "7T",
-  "tf_30d": "30T"
+  "tf_30d": "30T",
+  "discover_button": "Entdecken"
 }

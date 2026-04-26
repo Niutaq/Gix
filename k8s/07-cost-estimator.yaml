@@ -1,0 +1,44 @@
+# k8s/07-cost-estimator.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gix-cost-estimator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gix-cost-estimator
+  template:
+    metadata:
+      labels:
+        app: gix-cost-estimator
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: cost-estimator
+          image: niutaq/gix-backend:v1.2.8
+          command: ["./cost-estimator"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gix-secrets
+                  key: DATABASE_URL
+            - name: NATS_URL
+              value: "nats://gix-nats:4222"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 128Mi
