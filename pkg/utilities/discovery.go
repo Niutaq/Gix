@@ -376,7 +376,7 @@ func LLMDiscoverCityCantors(city string, state *AppState, config AppConfig, wind
 			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 			reqOverpass, _ := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(formData.Encode()))
 			reqOverpass.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			reqOverpass.Header.Set("User-Agent", "Gix-App/1.0")
+			reqOverpass.Header.Set(UserAgentHeader, UserAgentApp)
 
 			respOverpass, err := client.Do(reqOverpass)
 			cancel()
@@ -613,3 +613,4 @@ func LLMDiscoverCityCantors(city string, state *AppState, config AppConfig, wind
 	}
 	wg.Wait()
 }
+
