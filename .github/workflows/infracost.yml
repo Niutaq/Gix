@@ -15,12 +15,12 @@ jobs:
 
     steps:
       - name: Setup Infracost
-        uses: infracost/actions/setup@v3
+        uses: infracost/actions/setup@v4
         with:
           api-key: ${{ secrets.INFRACOST_API_KEY }}
 
       - name: Checkout PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.ref }}
 
@@ -31,7 +31,9 @@ jobs:
                               --out-file=/tmp/infracost-base.json
 
       - name: Post Infracost comment
-        uses: infracost/actions/comment@v3
-        with:
-          path: /tmp/infracost-base.json
-          behavior: update
+        run: |
+          infracost comment github --path=/tmp/infracost-base.json \
+                                   --repo=$GITHUB_REPOSITORY \
+                                   --pull-request=${{github.event.pull_request.number}} \
+                                   --github-token=${{github.token}} \
+                                   --behavior=update
