@@ -9,10 +9,8 @@ require (
 	github.com/elastic/go-elasticsearch/v8 v8.19.3
 	github.com/gin-gonic/gin v1.11.0
 	github.com/jackc/pgx/v5 v5.9.2
-	github.com/nats-io/nats.go v1.48.0
-	github.com/jackc/pgx/v5 v5.9.0
 	github.com/nats-io/nats.go v1.51.0
-	github.com/redis/go-redis/v9 v9.16.0
+	github.com/redis/go-redis/v9 v9.18.0
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
 	github.com/swaggo/swag v1.16.6
