@@ -31,7 +31,9 @@ jobs:
                               --out-file=/tmp/infracost-base.json
 
       - name: Post Infracost comment
-        uses: infracost/actions/comment@v4
-        with:
-          path: /tmp/infracost-base.json
-          behavior: update
+        run: |
+          infracost comment github --path=/tmp/infracost-base.json \
+                                   --repo=$GITHUB_REPOSITORY \
+                                   --pull-request=${{github.event.pull_request.number}} \
+                                   --github-token=${{github.token}} \
+                                   --behavior=update
