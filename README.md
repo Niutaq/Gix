@@ -117,6 +117,6 @@ MIT License
 ---
 
 ## Demo
-<div align="center">
-  <img src="demos/app_demo.gif" alt="Gix App Demo" width="600" />
-</div>
+
+https://github.com/user-attachments/assets/cd56a6cf-e0fe-4516-b890-a67a214c8e42
+
