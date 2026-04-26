@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Setup Infracost
-        uses: infracost/actions/setup@v3
+        uses: infracost/actions/setup@v4
         with:
           api-key: ${{ secrets.INFRACOST_API_KEY }}
 
@@ -31,7 +31,7 @@ jobs:
                               --out-file=/tmp/infracost-base.json
 
       - name: Post Infracost comment
-        uses: infracost/actions/comment@v3
+        uses: infracost/actions/comment@v4
         with:
           path: /tmp/infracost-base.json
           behavior: update
