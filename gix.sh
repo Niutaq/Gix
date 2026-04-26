@@ -30,6 +30,7 @@ run_ui() {
     task build:macos
     echo -e "${GREEN}Launching Gix.app connected to $api_url...${NC}"
     ./Gix.app/Contents/MacOS/Gix -api "$api_url"
+    return 0
 }
 
 case "$1" in

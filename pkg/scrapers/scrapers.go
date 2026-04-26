@@ -21,6 +21,7 @@ import (
 const (
 	errorClosingResponseBody = "Error closing response body: %v\n"
 	errorNotFoundRates       = "not found rates for: %s"
+	awsMetadataIP            = "169.254.169.254"
 )
 
 // ScrapeResult - struct for storing the scraped data
@@ -152,7 +153,7 @@ func validateURL(rawURL string) error {
 			return fmt.Errorf("access to internal/private IP blocked: %s", ip.String())
 		}
 		// Metadata service blocking (AWS/GCP/Azure)
-		if ip.String() == "169.254.169.254" {
+		if ip.String() == awsMetadataIP {
 			return fmt.Errorf("access to metadata service blocked")
 		}
 	}
