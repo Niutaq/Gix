@@ -19,7 +19,7 @@
   "err_unknown": "Wystąpił nieznany błąd.",
   "market_title": "Rynek Walutowy",
   "market_subtitle": "Analiza w czasie rzeczywistym",
-  "search_placeholder": "Szukaj kantoru...",
+  "search_placeholder": "Szukaj miasta...",
   "no_cantor_found": "Nie znaleziono kantoru...",
   "locate_button": "Lokalizuj",
   "buy_col": "Skup",
@@ -27,6 +27,9 @@
   "spread_col": "Marża",
   "ai_title": "Analiza",
   "ai_subtitle": "Predykcje trendów",
+  "map_title": "Lokalizacja kantorów",
+  "show_map": "Pokaż mapę",
+  "hide_map": "Ukryj mapę",
   "ai_chart_placeholder": "[ WYKRES]",
   "ai_desc": "Moduł w budowie. Tutaj pojawią się sugestie oparte o TimescaleDB.",
   "error_label": "Błąd",
@@ -38,6 +41,8 @@
     "notch_lang_desc": "Zmień język aplikacji",
     "notch_loc_title": "Filtr Lokalizacji",
     "notch_loc_desc": "Filtruj kantory po odległości",
+    "notch_theme_title": "Motyw",
+    "notch_theme_desc": "Przełącz między trybem jasnym i ciemnym",
     "chart_7d_ago": "-7 Dni",
     "chart_today": "Dzisiaj",
     "status_live_desc": "Połączono. Dane są aktualizowane na żywo.",
@@ -49,6 +54,9 @@
     "sort_dist": "Odległość",
     "tf_1d": "1D",
     "tf_7d": "7D",
-    "tf_30d": "30D"
+    "tf_30d": "30D",
+    "discover_button": "Odkryj",
+    "err_discovery_failed": "Błąd odkrywania! Serwis może być przeciążony.",
+    "err_no_cantors_found": "Nie znaleziono kantorów w tej okolicy."
   }
   

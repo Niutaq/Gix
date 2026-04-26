@@ -1,148 +1,143 @@
-version: '3'
-
-dotenv: ['.env']
-
-vars:
-  ENTRY_POINT: ./cmd/gix
-  SERVER_ENTRY: ./cmd/gix-server
-  APP_NAME: Gix
-  ICON: appicon2.png
-  LOCAL_DB_URL: "postgres://gixuser:{{.POSTGRES_PASSWORD}}@localhost:5432/gix_rates?sslmode=disable"
-  LOCAL_REDIS_URL: "redis://localhost:6379/0"
-  API_URL: "http://165.227.246.100:8080"
-  PROTO_FILE: api/proto/v1/rates.proto
-
-  OUT_WIN: gix.exe
-  OUT_MAC: Gix.app
-  OUT_LINUX: gix_linux
+version: "3"
 
 tasks:
   default:
-    desc: "Launches an application connected to a remote API"
+    desc: "Default task (lint and proto)"
     cmds:
-      - task: run
+      - task: lint
+      - task: proto
 
-  # --- DEVELOPMENT ---
   proto:
     desc: "Generates Go code from Protobuf files"
     cmds:
-      - protoc --go_out=. --go_opt=paths=source_relative --go-drpc_out=. --go-drpc_opt=paths=source_relative {{.PROTO_FILE}}
-
-  server:dev:
-    desc: "Runs the backend server locally (no Docker) with hot Proto generation"
-    deps: [ proto ]
-    cmds:
-      - go mod tidy
-      - DATABASE_URL="{{.LOCAL_DB_URL}}" REDIS_URL="{{.LOCAL_REDIS_URL}}" NATS_URL="nats://localhost:4222" go run {{.SERVER_ENTRY}}
+      - protoc --go_out=. --go-drpc_out=. api/proto/v1/rates.proto
 
   lint:
     desc: "Run golangci-lint"
     cmds:
-      - golangci-lint run
+      - golangci-lint run ./...
 
-  run:
-    desc: "Runs the frontend (Gio) connected to your server"
+  test:
+    desc: "Run unit tests"
     cmds:
-      - go run {{.ENTRY_POINT}} -api "{{.API_URL}}"
+      - go test -race -v ./...
 
-  run:local:
-    desc: "Runs the frontend connected to localhost:8080"
+  vuln:
+    desc: "Run govulncheck on Go code"
     cmds:
-      - go run {{.ENTRY_POINT}} -api "http://localhost:8080"
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-  backend:
-    desc: "Starts the backend (Docker Compose)"
+  run:backend:
+    desc: "Run backend locally"
+    dotenv: ['.env']
+    env:
+      REDIS_URL: "redis://localhost:6379/0"
+      NATS_URL: "nats://localhost:4222"
+      DD_TRACE_ENABLED: "false"
     cmds:
-      - docker-compose up
+      - DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:5433/$POSTGRES_DB?sslmode=disable" go run ./cmd/gix-server
 
-  # --- UTILITIES ---
-  swagger:
-    desc: "Generates Swagger documentation"
+  run:estimator:
+    desc: "Run cost estimator locally"
+    dotenv: ['.env']
+    env:
+      NATS_URL: "nats://localhost:4222"
+      DD_TRACE_ENABLED: "false"
     cmds:
-      - go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/gix-server/main.go -o docs
+      - DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}?sslmode=disable" go run ./cmd/cost-estimator
 
-  deps:
-    desc: "Installs required tools (gogio)"
+  start:gui:local:
+    desc: "Start GUI pointing to local API"
     cmds:
-      - go install gioui.org/cmd/gogio@latest
+      - go run cmd/gix/main.go -api "http://localhost:8080"
 
-  # --- BUILD ---
-  build:windows:
-    desc: "Builds an .exe file for Windows (requires gogio)"
-    deps: [deps]
+  start:gui:remote:
+    desc: "Start GUI pointing to remote DigitalOcean API"
     cmds:
-      - gogio -target windows -icon {{.ICON}} -o {{.OUT_WIN}} ./cmd/gix
+      - go run cmd/gix/main.go -api "http://165.227.246.100:8080"
 
-  build:linux:
-    desc: "Building a Linux binary and installing it locally (~/.local)"
+  deploy:do:
+    desc: "Build, push and deploy backend to DigitalOcean K8s"
     cmds:
-      - go build -o {{.OUT_LINUX}} ./cmd/gix
-      - mkdir -p ~/.local/bin
-      - mkdir -p ~/.local/share/icons/gix
-      - mkdir -p ~/.local/share/applications
-      - cp {{.OUT_LINUX}} ~/.local/bin/gix
-      - cp {{.ICON}} ~/.local/share/icons/gix/{{.ICON}}
-      - |
-        cat <<EOF > ~/.local/share/applications/gix.desktop
-        [Desktop Entry]
-        Name={{.APP_NAME}}
-        Comment=Currency Exchange Rate Monitor
-        Exec=$HOME/.local/bin/gix
-        Icon=$HOME/.local/share/icons/gix/{{.ICON}}
-        Terminal=false
-        Type=Application
-        Categories=Finance;Utility;
-        Keywords=currency;exchange;rates;
-        StartupWMClass={{.APP_NAME}}
-        EOF
-      - update-desktop-database ~/.local/share/applications || true
+      - docker buildx build --platform linux/amd64 -t niutaq/gix-backend:latest --push .
+      - helm upgrade --install gix-backend charts/gix -f charts/gix/values.yaml
+
+  docker:build:
+    desc: "Build docker image"
+    cmds:
+      - docker buildx build --platform linux/amd64 -t niutaq/gix-backend:latest .
+
+  k8s:deploy:
+    desc: "Deploy backend to Kubernetes"
+    cmds:
+      - kubectl apply -f k8s/04-backend.yaml
+      - kubectl rollout restart deployment gix-backend
+
+  clean:
+    desc: "Clean temporary and build files"
+    cmds:
+      - rm -rf Gix.app gix-bin trace.out
 
   build:macos:
-    desc: "Builds a valid .app package for macOS (with fonts and signature)"
+    desc: "Builds a valid .app package for macOS"
     cmds:
-      - rm -rf {{.OUT_MAC}} gix-bin
+      - rm -rf Gix.app gix-bin
       - go build -o gix-bin ./cmd/gix
-      - mkdir -p {{.OUT_MAC}}/Contents/MacOS
-      - mkdir -p {{.OUT_MAC}}/Contents/Resources
-      - mv gix-bin {{.OUT_MAC}}/Contents/MacOS/
-      - cp {{.ICON}} {{.OUT_MAC}}/Contents/Resources/icon.png
+      - mkdir -p Gix.app/Contents/MacOS
+      - mkdir -p Gix.app/Contents/Resources
+      - mv gix-bin Gix.app/Contents/MacOS/
+      - cp appicon.png Gix.app/Contents/Resources/icon.png
       - |
-        cat <<EOF > {{.OUT_MAC}}/Contents/MacOS/{{.APP_NAME}}
+        cat <<EOF > Gix.app/Contents/MacOS/Gix
         #!/bin/bash
         DIR=\$(cd "\$(dirname "\$0")"; pwd)
         cd "\$DIR"
         exec "./gix-bin" "\$@"
         EOF
       - |
-        cat <<EOF > {{.OUT_MAC}}/Contents/Info.plist
+        cat <<EOF > Gix.app/Contents/Info.plist
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
             <key>CFBundleExecutable</key>
-            <string>{{.APP_NAME}}</string>
+            <string>Gix</string>
             <key>CFBundleIconFile</key>
             <string>icon.png</string>
             <key>CFBundleIdentifier</key>
             <string>com.niutaq.gix</string>
             <key>CFBundleName</key>
-            <string>{{.APP_NAME}}</string>
+            <string>Gix</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
-            <key>LSMinimumSystemVersion</key>
-            <string>10.13.0</string>
-            <key>NSHighResolutionCapable</key>
-            <true/>
             <key>NSLocationWhenInUseUsageDescription</key>
             <string>Gix needs your location to find the nearest currency exchange offices.</string>
         </dict>
         </plist>
         EOF
-      - chmod +x {{.OUT_MAC}}/Contents/MacOS/{{.APP_NAME}}
-      - chmod +x {{.OUT_MAC}}/Contents/MacOS/gix-bin
-      - xattr -cr {{.OUT_MAC}}
-      - codesign --force --deep --sign - {{.OUT_MAC}}
-  clean:
-    desc: "Clean temporary and build files"
+      - chmod +x Gix.app/Contents/MacOS/Gix
+      - chmod +x Gix.app/Contents/MacOS/gix-bin
+      - xattr -cr Gix.app
+      - codesign --force --deep --sign - Gix.app
+
+  helm:lint:
+    desc: "Lint Helm chart (using Docker if helm is missing)"
     cmds:
-      - rm -rf {{.OUT_WIN}} {{.OUT_MAC}} {{.OUT_LINUX}} gix-bin trace.out
+      - |
+        if command -v helm &> /dev/null; then
+          helm lint charts/gix
+        else
+          echo "Helm not found locally, using Docker..."
+          docker run --rm -v $(pwd):/apps -w /apps alpine/helm lint charts/gix
+        fi
+
+  trivy:scan:
+    desc: "Scan project for vulnerabilities using Trivy (using Docker if trivy is missing)"
+    cmds:
+      - |
+        if command -v trivy &> /dev/null; then
+          trivy fs --severity CRITICAL,HIGH .
+        else
+          echo "Trivy not found locally, using Docker..."
+          docker run --rm -v $(pwd):/root/.cache/ -v $(pwd):/project aquasec/trivy fs --severity CRITICAL,HIGH /project
+        fi

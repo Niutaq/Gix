@@ -197,3 +197,115 @@ func DrawIconSearch(gtx layout.Context, col color.NRGBA) layout.Dimensions {
 
 	return layout.Dimensions{Size: image.Point{X: size, Y: size}}
 }
+
+// DrawIconLocate draws a modern "paper plane" (send/locate) icon.
+func DrawIconLocate(gtx layout.Context, col color.NRGBA) layout.Dimensions {
+	size := gtx.Dp(unit.Dp(24))
+	gtx.Constraints.Min = image.Point{X: size, Y: size}
+
+	s := float32(size)
+	
+	// Main body
+	var path clip.Path
+	path.Begin(gtx.Ops)
+	path.MoveTo(f32.Point{X: s * 0.9, Y: s * 0.1})
+	path.LineTo(f32.Point{X: s * 0.1, Y: s * 0.5})
+	path.LineTo(f32.Point{X: s * 0.45, Y: s * 0.55})
+	path.LineTo(f32.Point{X: s * 0.6, Y: s * 0.9})
+	path.Close()
+	paint.FillShape(gtx.Ops, col, clip.Outline{Path: path.End()}.Op())
+
+	// Fold line
+	var fold clip.Path
+	fold.Begin(gtx.Ops)
+	fold.MoveTo(f32.Point{X: s * 0.45, Y: s * 0.55})
+	fold.LineTo(f32.Point{X: s * 0.9, Y: s * 0.1})
+	
+	foldCol := col
+	foldCol.A = 180
+	
+	// Use a separate stack for the stroke to avoid mixing ops
+	spec := clip.Stroke{Path: fold.End(), Width: float32(gtx.Dp(unit.Dp(1)))}.Op()
+	paint.FillShape(gtx.Ops, foldCol, spec)
+
+	return layout.Dimensions{Size: image.Point{X: size, Y: size}}
+}
+
+// DrawIconMap draws a Material-style map pin icon.
+func DrawIconMap(gtx layout.Context, col color.NRGBA) layout.Dimensions {
+	size := gtx.Dp(unit.Dp(24))
+	gtx.Constraints.Min = image.Point{X: size, Y: size}
+
+	center := f32.Point{X: float32(size) / 2, Y: float32(size) * 0.4}
+	radius := float32(size) * 0.25
+
+	// Head (Circle)
+	var path clip.Path
+	path.Begin(gtx.Ops)
+	path.MoveTo(f32.Point{X: center.X + radius, Y: center.Y})
+	path.Arc(f32.Point{X: -radius, Y: 0}, f32.Point{X: -radius, Y: 0}, 2*math.Pi)
+	paint.FillShape(gtx.Ops, col, clip.Outline{Path: path.End()}.Op())
+
+	// Inner Hole
+	var hole clip.Path
+	hole.Begin(gtx.Ops)
+	hole.MoveTo(f32.Point{X: center.X + radius*0.4, Y: center.Y})
+	hole.Arc(f32.Point{X: -radius * 0.4, Y: 0}, f32.Point{X: -radius * 0.4, Y: 0}, 2*math.Pi)
+	paint.FillShape(gtx.Ops, AppColors.Background, clip.Outline{Path: hole.End()}.Op())
+
+	// Pointy tail
+	var tail clip.Path
+	tail.Begin(gtx.Ops)
+	tail.MoveTo(f32.Point{X: center.X - radius*float32(math.Cos(math.Pi/6)), Y: center.Y + radius*float32(math.Sin(math.Pi/6))})
+	tail.LineTo(f32.Point{X: center.X, Y: float32(size) * 0.9})
+	tail.LineTo(f32.Point{X: center.X + radius*float32(math.Cos(math.Pi/6)), Y: center.Y + radius*float32(math.Sin(math.Pi/6))})
+	tail.Close()
+	paint.FillShape(gtx.Ops, col, clip.Outline{Path: tail.End()}.Op())
+
+	return layout.Dimensions{Size: image.Point{X: size, Y: size}}
+}
+
+// DrawIconChart draws a simple line chart icon.
+func DrawIconChart(gtx layout.Context, col color.NRGBA) layout.Dimensions {
+	size := gtx.Dp(unit.Dp(24))
+	gtx.Constraints.Min = image.Point{X: size, Y: size}
+
+	s := float32(size)
+
+	// Axes
+	var axes clip.Path
+	axes.Begin(gtx.Ops)
+	axes.MoveTo(f32.Point{X: s * 0.1, Y: s * 0.1})
+	axes.LineTo(f32.Point{X: s * 0.1, Y: s * 0.9})
+	axes.LineTo(f32.Point{X: s * 0.9, Y: s * 0.9})
+
+	paint.FillShape(gtx.Ops, col, clip.Stroke{Path: axes.End(), Width: float32(gtx.Dp(unit.Dp(2)))}.Op())
+
+	// Line chart
+	var line clip.Path
+	line.Begin(gtx.Ops)
+	line.MoveTo(f32.Point{X: s * 0.2, Y: s * 0.7})
+	line.LineTo(f32.Point{X: s * 0.4, Y: s * 0.5})
+	line.LineTo(f32.Point{X: s * 0.6, Y: s * 0.6})
+	line.LineTo(f32.Point{X: s * 0.8, Y: s * 0.2})
+
+	paint.FillShape(gtx.Ops, col, clip.Stroke{Path: line.End(), Width: float32(gtx.Dp(unit.Dp(2)))}.Op())
+
+	// Points
+	points := []f32.Point{
+		{X: s * 0.2, Y: s * 0.7},
+		{X: s * 0.4, Y: s * 0.5},
+		{X: s * 0.6, Y: s * 0.6},
+		{X: s * 0.8, Y: s * 0.2},
+	}
+	
+	for _, p := range points {
+		var pt clip.Path
+		pt.Begin(gtx.Ops)
+		pt.MoveTo(f32.Point{X: p.X + float32(gtx.Dp(unit.Dp(2))), Y: p.Y})
+		pt.Arc(f32.Point{X: -float32(gtx.Dp(unit.Dp(2))), Y: 0}, f32.Point{X: -float32(gtx.Dp(unit.Dp(2))), Y: 0}, 2*math.Pi)
+		paint.FillShape(gtx.Ops, col, clip.Outline{Path: pt.End()}.Op())
+	}
+
+	return layout.Dimensions{Size: image.Point{X: size, Y: size}}
+}

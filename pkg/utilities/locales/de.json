@@ -19,7 +19,7 @@
   "err_unknown": "Unbekannter Fehler.",
   "market_title": "Währungsmarkt",
   "market_subtitle": "Echtzeit-Überwachung",
-  "search_placeholder": "Wechselstube suchen...",
+  "search_placeholder": "Stadt suchen...",
   "no_cantor_found": "Keine Wechselstube gefunden...",
   "locate_button": "Lokalisieren",
   "buy_col": "Kauf",
@@ -38,6 +38,8 @@
   "notch_lang_desc": "App-Sprache ändern",
   "notch_loc_title": "Standortfilter",
   "notch_loc_desc": "Nach Entfernung filtern",
+  "notch_theme_title": "Thema",
+  "notch_theme_desc": "Zwischen hellem und dunklem Modus umschalten",
   "chart_7d_ago": "-7 Tage",
   "status_live_desc": "Verbunden. Die Daten werden in Echtzeit aktualisiert.",
   "status_offline_desc": "Keine Verbindung. Es werden Cache-Daten angezeigt.",
@@ -48,5 +50,6 @@
   "sort_dist": "Entfernung",
   "tf_1d": "1T",
   "tf_7d": "7T",
-  "tf_30d": "30T"
+  "tf_30d": "30T",
+  "discover_button": "Entdecken"
 }

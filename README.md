@@ -1,116 +1,122 @@
 <div align="center">
-    
-<img src="appicon2.png" alt="GIX Logo" width="192"/>
-
-# GIX
-
-*Real-time Currency Exchange Monitor (PLN-based)*
-
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com)
-[![License](https://img.shields.io/badge/License-MIT-b45f00?style=flat)](LICENSE)
-
-[![SonarQube Cloud](https://sonarcloud.io/images/project_badges/sonarcloud-dark.svg)](https://sonarcloud.io/summary/new_code?id=Niutaq_Gix)
-[![DataDog](https://img.shields.io/badge/DataDog-Monitoring-632CA6?style=flat&logo=datadog&logoColor=white)](https://www.datadoghq.com/)
-
----
+  <img src="appicon.png" alt="Gix Logo" width="150" />
+  <h1>Gix</h1>
 </div>
 
-## Architecture
+Gix is a distributed currency exchange rate monitor designed specifically for the Polish cantor market. It leverages a blazing-fast vector-based UI (Gio) and a robust cloud-native backend to track, aggregate, and stream exchange rates in real-time.
 
-```mermaid
-graph TD
-    A[Gio Frontend] -->|① dRPC/Protobuf| B[Gin API Server]
-    B -->|② Cache Check| C[(Redis Cache)]
-    C -->|③ Miss| D[(PostgreSQL/TimescaleDB)]
-    D -->|④ Strategy| B
-    B -->|⑤ Scrape| E[External Cantors]
-    E -->|⑥ Data| B
-    B -->|⑦ Store| C
-    B -->|⑧ Archive| D
-    B -->|⑨ Response| A
-    B -->|⑩ Publish| H[NATS JetStream]
-    
-    subgraph Infrastructure
-    F[DigitalOcean K8s]
-    G[DockerHub]
-    end
+---
 
-    style A fill:#b45f00,stroke:#ff8c00,stroke-width:3px,color:#fff
-    style B fill:#d97706,stroke:#fbbf24,stroke-width:3px,color:#fff
-    style C fill:#92400e,stroke:#b45f00,stroke-width:2px,color:#fff
-    style D fill:#92400e,stroke:#b45f00,stroke-width:2px,color:#fff
-    style E fill:#78350f,stroke:#92400e,stroke-width:2px,color:#fff
-    style F fill:#0080FF,stroke:#0059b3,stroke-width:2px,color:#fff
-    style G fill:#2496ED,stroke:#0059b3,stroke-width:2px,color:#fff
-    style H fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff
-```
+## Table of Contents
+- [Problem Statement](#problem-statement)
+- [Architecture & Tech Stack](#architecture--tech-stack)
+- [FinOps & Cost-Awareness (FOCUS Framework)](#finops--cost-awareness-focus-framework)
+- [Quick Start](#quick-start)
+- [Known Limitations](#known-limitations)
+- [Roadmap](#roadmap)
+- [Security & Contributing](#security--contributing)
+- [Demo](#demo)
 
-### Data Flow Pipeline
+---
 
+## Problem Statement
+The currency exchange market (specifically physical cantors in Poland) is highly fragmented. Rates change dynamically, spreads vary dramatically, and finding the best real-time deal requires scraping dozens of disjointed, poorly-optimized websites. 
 
-| Step  | Action            | Description                                             |
-|:-----:|-------------------|---------------------------------------------------------|
-| **①** | **Request**       | Frontend → API: dRPC call with Protobuf payload         |
-| **②** | **Cache Check**   | API checks Redis for cached rates (60s TTL)             |
-| **③** | **Cache Result**  | **Hit**: Return immediately / **Miss**: Query database  |
-| **④** | **Get Strategy**  | Database returns scraping strategy (selectors & logic)  |
-| **⑤** | **Scrape**        | API executes strategy-specific scraper using Goquery    |
-| **⑥** | **HTML Response** | External cantor returns exchange rate data              |
-| **⑦** | **Cache Update**  | Store fresh data in Redis (60s expiry)                  |
-| **⑧** | **Archive**       | Async save to TimescaleDB (PGX) for historical analysis |
-| **⑨** | **Response**      | API → Frontend: Protobuf encoded response via dRPC      |
-| **⑩** | **Publish Event** | Async publish to NATS Stream (24h retention)            |
+Gix solves this by providing:
+- **Centralized Intelligence**: Aggregates physical exchange office rates via smart, heuristic-based web scraping.
+- **Zero-Lag Updates**: Uses NATS JetStream and dRPC for instant rate streaming directly to a native desktop/mobile client without polling.
+- **Cost Transparency**: Scraping external providers isn't free (compute, bandwidth, LLM tokens). Gix includes a built-in **FinOps Governance Engine** to estimate micro-costs in real-time and circuit-break providers that exceed their unit economics budget.
 
-## Technology Stack
+## Architecture & Tech Stack
 
-|     Component      |     Technology     | Purpose                                         |
-|:------------------:|:------------------:|-------------------------------------------------|
-|    **Frontend**    |    Go + Gio UI     | Native cross-platform desktop application       |
-| **API Framework**  |      Gin (Go)      | High-performance HTTP/REST API server           |
-| **Communication**  |  dRPC + ProtoBuf   | Lightweight Protobuf-based RPC                  |
-|   **Messaging**    |   NATS JetStream   | Event Streaming & Replay                        |
-|     **Cache**      |       Redis        | 60-second TTL for rate limiting and performance |
-|    **Database**    |    TimescaleDB     | Time-series optimized PostgreSQL                |
-|   **DB Driver**    |        PGX         | PostgreSQL Driver and Toolkit for Go            |
-|    **Scraping**    |      Goquery       | Strategy Pattern for parsing cantor layouts     |
-| **Infrastructure** | DigitalOcean + K8s | Scalable Kubernetes-managed hosting             |
-|   **Container**    | Docker + DockerHub | Containerized deployment and registry           |
-| **Observability**  |      DataDog       | Infrastructure & Application Monitoring         |
+| Component | Technology / Version | Description |
+| :--- | :--- | :--- |
+| **Frontend** | [![Gio](https://img.shields.io/badge/Gio-v0.9.0-blue)](https://gioui.org) | Native, GPU-accelerated, cross-platform UI |
+| **Backend API** | [![Go](https://img.shields.io/badge/Go-1.26.2-00ADD8?logo=go&logoColor=white)](https://go.dev/) [![Gin](https://img.shields.io/badge/Gin-v1.11-0088CC)](https://gin-gonic.com/) | High-performance routing and orchestration |
+| **Streaming** | [![NATS](https://img.shields.io/badge/NATS_JetStream-v1.48-27A16C)](https://nats.io) | Persistent event streaming and replay |
+| **Caching** | [![Redis](https://img.shields.io/badge/Redis-v7-DC382D?logo=redis&logoColor=white)](https://redis.io) | Fast access and rate limiting |
+| **Storage** | [![TimescaleDB](https://img.shields.io/badge/TimescaleDB-pg16-FDB515)](https://www.timescale.com) | Time-series data for historical charting |
+| **RPC** | [![dRPC](https://img.shields.io/badge/dRPC-Protobuf-4285F4)](https://storj.github.io/drpc/) | Lightweight streaming protocol |
+| **Infra** | [![DOKS](https://img.shields.io/badge/DigitalOcean-K8s-0080FF?logo=digitalocean&logoColor=white)](https://digitalocean.com) | Cloud hosting |
+| **Observability**| [![DataDog](https://img.shields.io/badge/DataDog-APM-632CA6?logo=datadog&logoColor=white)](https://datadoghq.com) | Traces, Metrics, Logs |
+
+### Why this stack?
+- **Go**: Provides great performance, simple concurrency (goroutines), and static typing, perfect for both scraping engines and lightweight microservices.
+- **Gio UI**: Immediate-mode vector graphics allow 60 FPS rendering on native platforms without embedding an entire Chromium browser (like Electron).
+- **TimescaleDB**: Native PostgreSQL extension highly optimized for time-series data, perfect for analyzing historical currency trends.
+- **NATS JetStream**: Lightweight, high-performance event streaming that supports replayability and exactly-once delivery.
+
+## FinOps & Cost-Awareness (FOCUS Framework)
+Gix isn't just an application; it's designed with strict **FinOps principles**:
+- **Visibility**: Real-time cost estimation per scraper run, saved directly to TimescaleDB (`provider_unit_costs` table).
+- **Governance**: A built-in Circuit Breaker cuts off cantors if the cost-to-serve ratio exceeds `$0.05` per day.
+- **Optimization**: Kubernetes resources are strictly bounded, TimescaleDB chunks are aggressively dropped after 30 days, and Redis handles traffic spikes to shield the DB.
 
 ## Quick Start
 
 ### Prerequisites
+- **Go** 1.26.2+
+- **Docker** & **Docker Compose**
+- **Task** (`go install github.com/go-task/task/v3/cmd/task@latest`)
+- **Gemini API Key**: Required for the Heuristic LLM fallback scraper. Set it as an environment variable:
+  ```bash
+  export GEMINI_API_KEY="your_api_key_here"
+  ```
 
-Make sure you have installed:
-- [<img src="https://img.shields.io/badge/Docker_Desktop-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker Desktop"/>](https://www.docker.com/products/docker-desktop/)
-- [<img src="https://img.shields.io/badge/Go_1.25+-00ADD8?style=flat&logo=go&logoColor=white" alt="Go"/>](https://go.dev/doc/install)
-
-
-
-### Launch
-
-**1.** Clone the project:
+### Local Development
+To start the entire environment (TimescaleDB, Redis, NATS) and run the Backend + UI natively:
 ```bash
-git clone https://github.com/Niutaq/Gix.git
-cd Gix
+task dev
 ```
-**2.** Install Task (once):
-```bash
-# using Go
-go install github.com/go-task/task/v3/cmd/task@latest
-```
-**3.** Run using commands
 
-| Platform | Command | Description |
-|:---:|:---|:---|
-| <img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" height="28"/> | `task build:macos` | Creates `Gix.app` (fixes fonts & signing) |
-| <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" height="28"/> | `task build:windows` | Creates `gix.exe` with icon |
-| <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" height="28"/> | `task build:linux` | Creates `gix_linux` binary |
-| <img src="https://img.shields.io/badge/Clean-D00000?style=for-the-badge" height="28"/> | `task clean` | Removes build artifacts |
+### Remote (Cloud API)
+To run the native UI connected to the production cloud API:
+```bash
+task start:gui:remote
+```
+
+### Available Commands
+Below is a list of all commands configured in the `Taskfile.yml`:
+
+| Command | Description |
+| :--- | :--- |
+| `task proto` | Generates Go code from Protobuf files |
+| `task lint` | Runs `golangci-lint` |
+| `task test` | Runs unit tests |
+| `task vuln` | Runs `govulncheck` on Go code |
+| `task run:backend` | Runs the backend locally |
+| `task run:estimator` | Runs the cost estimator locally |
+| `task start:gui:local` | Starts GUI pointing to the local API |
+| `task start:gui:remote` | Starts GUI pointing to the remote DigitalOcean API |
+| `task deploy:do` | Builds, pushes, and deploys backend to DigitalOcean K8s |
+| `task docker:build` | Builds the docker image |
+| `task k8s:deploy` | Deploys backend to Kubernetes |
+| `task clean` | Cleans temporary and build files |
+| `task build:macos` | Builds a valid `.app` package for macOS |
+| `task helm:lint` | Lints Helm chart |
+| `task trivy:scan` | Scans the project for vulnerabilities using Trivy |
+
+## Known Limitations
+- **Scraper Brittleness**: Scraping physical cantors relies on their HTML structure. If a cantor updates their site, the static scraper might break. The *Heuristic LLM fallback* mitigates this but consumes API tokens.
+- **Geolocation API**: The fallback to OSM Nominatim for city search is rate-limited by OpenStreetMap's fair usage policy.
+
+## Roadmap
+- [x] Heuristic LLM-based Cantor Discovery (WIP)
+- [x] FinOps Cost-Estimator & Governance Circuit Breaker
+- [x] NATS JetStream Event Streaming
+- [ ] Predictive ML Anomaly Detection (DataDog ML)
+- [ ] ...more???
+
+## Security & Contributing
+Please read our [SECURITY.md](SECURITY.md) for reporting vulnerabilities. 
+If you want to contribute, check [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+MIT License
 
 ---
 
 ## Demo
-
-<video src="https://github.com/user-attachments/assets/438faa71-acc5-4c26-a929-42660a75cb4b" width="100%" controls autoplay loop muted></video>
+<div align="center">
+  <img src="demos/app_demo.gif" alt="Gix App Demo" width="600" />
+</div>

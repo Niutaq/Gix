@@ -19,7 +19,7 @@
   "err_unknown": "Une erreur inconnue s'est produite.",
   "market_title": "Marché des changes",
   "market_subtitle": "Surveillance en temps réel",
-  "search_placeholder": "Rechercher un bureau de change...",
+  "search_placeholder": "Rechercher une ville...",
   "no_cantor_found": "Aucun bureau de change trouvé...",
   "locate_button": "Localiser",
   "buy_col": "Achat",
@@ -37,9 +37,10 @@
   "notch_lang_title": "Langue",
   "notch_lang_desc": "Changer la langue de l'application",
   "notch_loc_title": "Filtre de localisation",
-  "notch_loc_desc": "Filtrer par distance",
-  "chart_7d_ago": "-7 Jours",
-  "status_live_desc": "Connecté. Les données sont mises à jour en temps réel.",
+      "notch_loc_desc": "Filtrer par distance",
+      "notch_theme_title": "Thème",
+      "notch_theme_desc": "Basculer entre le mode clair et sombre",
+      "chart_7d_ago": "-7 Jours",  "status_live_desc": "Connecté. Les données sont mises à jour en temps réel.",
   "status_offline_desc": "Déconnecté. Affichage des données mises en cache.",
   "sort_label": "Trier:",
   "sort_name": "Nom",
@@ -48,5 +49,6 @@
   "sort_dist": "Distance",
   "tf_1d": "1J",
   "tf_7d": "7J",
-  "tf_30d": "30J"
+  "tf_30d": "30J",
+  "discover_button": "Découvrir"
 }

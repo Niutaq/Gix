@@ -31,6 +31,12 @@ jobs:
             niutaq/gix-backend:${{ github.sha }}
             niutaq/gix-backend:latest
 
+      - name: Sign the published Docker image
+        env:
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+          TAGS: niutaq/gix-backend:${{ github.sha }}
+        run: cosign sign --yes "${TAGS}@${DIGEST}"
+
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
@@ -46,7 +52,16 @@ jobs:
       - name: Save DigitalOcean kubeconfig
         run: doctl kubernetes cluster kubeconfig save gix-pool-cluster
 
+      - name: Apply Infrastructure and Policies
+        run: |
+          kubectl apply -f k8s/02-db.yaml
+          kubectl apply -f k8s/03-redis.yaml
+          kubectl apply -f k8s/08-policies.yaml
+          kubectl rollout restart deployment gix-redis
+          
       - name: Update Kubernetes Deployment
         run: |
+          kubectl apply -f k8s/04-backend.yaml
           kubectl set image deployment/gix-backend gix-backend=niutaq/gix-backend:${{ github.sha }}
+          kubectl rollout restart deployment gix-backend
           kubectl rollout status deployment/gix-backend
