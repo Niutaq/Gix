@@ -1,27 +1,24 @@
-package main
+package rpc
 
 import (
-	// Standard libraries
 	"context"
 	"fmt"
 	"log"
 	"time"
 
-	// External utilities
 	pb "github.com/Niutaq/Gix/api/proto/v1"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 )
 
-// RatesDRPCServer implements the dRPC RatesService
 type RatesDRPCServer struct {
 	pb.DRPCRatesServiceServer
 	Cache redis.UniversalClient
 	DB    *pgxpool.Pool
 }
 
-// GetAllRates retrieves the latest rates for all cantors for a specific currency, including 24h change.
+// GetAllRates returns all rates for the given currency.
 func (s *RatesDRPCServer) GetAllRates(ctx context.Context, req *pb.RateRequest) (*pb.RateListResponse, error) {
 	currency := req.Currency
 	if currency == "" {
@@ -65,7 +62,6 @@ func (s *RatesDRPCServer) GetAllRates(ctx context.Context, req *pb.RateRequest) 
 
 		change := int64(0)
 		if pastBuy > 0 {
-			// Multiply by 10000 to keep 2 decimal places of percentage in an int64
 			change = int64(((buy - pastBuy) / pastBuy) * 10000)
 		}
 
@@ -82,7 +78,7 @@ func (s *RatesDRPCServer) GetAllRates(ctx context.Context, req *pb.RateRequest) 
 	return &pb.RateListResponse{Results: results}, nil
 }
 
-// StreamRates streams real-time rate updates to the dRPC client, filtering by requested currencies if specified.
+// StreamRates streams real-time rate updates for the requested currencies.
 func (s *RatesDRPCServer) StreamRates(req *pb.StreamRatesRequest, stream pb.DRPCRatesService_StreamRatesStream) error {
 	ctx := stream.Context()
 	log.Println("New dRPC stream client connected")
@@ -114,7 +110,7 @@ func (s *RatesDRPCServer) StreamRates(req *pb.StreamRatesRequest, stream pb.DRPC
 	}
 }
 
-// shouldSendRate checks if the rate update matches the client's requested currencies.
+// shouldSendRate determines if a rate update should be sent to the client based on the request currencies.
 func (s *RatesDRPCServer) shouldSendRate(req *pb.StreamRatesRequest, rate *pb.RateResponse) bool {
 	if len(req.Currencies) == 0 {
 		return true
