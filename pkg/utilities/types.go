@@ -229,6 +229,11 @@ type Notification struct {
 	Timeout time.Time
 }
 
+const (
+	UserAgentApp    = "Gix-App/1.0"
+	UserAgentHeader = "User-Agent"
+)
+
 // FinOpsStatus holds real-time infrastructure metrics for the UI terminal.
 type FinOpsStatus struct {
 	DailySpendUSD    string            `json:"real_spend_24h_usd"`

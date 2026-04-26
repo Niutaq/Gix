@@ -10,7 +10,9 @@ import (
 	"github.com/elastic/go-elasticsearch/v8"
 )
 
-// CantorRecord represents a cantor indexed in Elasticsearch.
+const searchErrorFmt = "search error: %s"
+
+// CantorRecord represents the document stored in Elasticsearch.
 type CantorRecord struct {
 	ID          int            `json:"id"`
 	DisplayName string         `json:"display_name"`
@@ -143,7 +145,7 @@ func (se *SearchEngine) SearchCantors(query string) ([]CantorRecord, error) {
 	}
 
 	if res.IsError() {
-		return nil, fmt.Errorf("search error: %s", res.Status())
+		return nil, fmt.Errorf(searchErrorFmt, res.Status())
 	}
 
 	var r map[string]interface{}
@@ -194,7 +196,7 @@ func (se *SearchEngine) SearchCantorsNearby(lat, lon float64, distanceKM float64
 	}
 
 	if res.IsError() {
-		return nil, fmt.Errorf("search error: %s", res.Status())
+		return nil, fmt.Errorf(searchErrorFmt, res.Status())
 	}
 
 	var r map[string]interface{}
@@ -241,7 +243,7 @@ func (se *SearchEngine) SearchCity(query string) ([]types.CityRecord, error) {
 	}
 
 	if res.IsError() {
-		return nil, fmt.Errorf("search error: %s", res.Status())
+		return nil, fmt.Errorf(searchErrorFmt, res.Status())
 	}
 
 	var r map[string]interface{}

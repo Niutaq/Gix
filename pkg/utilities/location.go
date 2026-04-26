@@ -106,7 +106,7 @@ func GeocodeCity(city string) (float64, float64, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	req.Header.Set("User-Agent", "Gix-App/1.0")
+	req.Header.Set("User-Agent", UserAgentApp)
 
 	client := http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
