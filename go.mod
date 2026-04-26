@@ -8,6 +8,8 @@ require (
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/elastic/go-elasticsearch/v8 v8.19.3
 	github.com/gin-gonic/gin v1.11.0
+	github.com/jackc/pgx/v5 v5.9.2
+	github.com/nats-io/nats.go v1.48.0
 	github.com/jackc/pgx/v5 v5.9.0
 	github.com/nats-io/nats.go v1.51.0
 	github.com/redis/go-redis/v9 v9.16.0
