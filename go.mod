@@ -7,7 +7,7 @@ require (
 	github.com/DataDog/dd-trace-go/contrib/redis/go-redis.v9/v2 v2.7.3
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/elastic/go-elasticsearch/v8 v8.19.4
-	github.com/gin-gonic/gin v1.11.0
+	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/nats-io/nats.go v1.51.0
 	github.com/redis/go-redis/v9 v9.18.0
@@ -48,8 +48,8 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic v1.14.2 // indirect
-	github.com/bytedance/sonic/loader v0.4.0 // indirect
+	github.com/bytedance/sonic v1.15.0 // indirect
+	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect
@@ -79,7 +79,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
 	github.com/go-text/typesetting v0.3.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
-	github.com/goccy/go-yaml v1.19.1 // indirect
+	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-version v1.8.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -107,7 +107,7 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.58.0 // indirect
+	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.10.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.2 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
@@ -119,6 +119,7 @@ require (
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zeebo/errs v1.2.2 // indirect
+	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/collector/component v1.51.1-0.20260205185216-81bc641f26c0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.51.1-0.20260205185216-81bc641f26c0 // indirect
