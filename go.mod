@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	gioui.org v0.9.0
 	github.com/DataDog/dd-trace-go/contrib/redis/go-redis.v9/v2 v2.7.3
-	github.com/PuerkitoBio/goquery v1.10.3
+	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/elastic/go-elasticsearch/v8 v8.19.4
 	github.com/gin-gonic/gin v1.11.0
 	github.com/jackc/pgx/v5 v5.9.2
