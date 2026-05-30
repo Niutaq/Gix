@@ -27,8 +27,7 @@ Gix solves this by providing:
 - **Zero-Lag Updates**: Uses NATS JetStream and dRPC for instant rate streaming directly to a native desktop/mobile client without polling.
 - **Cost Transparency**: Scraping external providers isn't free (compute, bandwidth, LLM tokens). Gix includes a built-in.
 
-<img width="1264" height="842" alt="gix_problem_and_soludtion" src="https://github.com/user-attachments/assets/1f77c536-6f72-4b61-8a66-f7d360a70ce9" />
-
+<img width="1264" height="842" alt="gix_problem_solution" src="https://github.com/user-attachments/assets/5deb6270-7502-4927-bd07-cdfd5cb2d03a" />
 
 ## Architecture & Tech Stack
 
