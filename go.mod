@@ -17,7 +17,7 @@ require (
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/DataDog/dd-trace-go.v1 v1.74.8
-	storj.io/drpc v0.0.34
+	storj.io/drpc v1.0.0
 )
 
 require (
