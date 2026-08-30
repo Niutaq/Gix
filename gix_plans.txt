@@ -1,0 +1,12 @@
+  │ "Cześć! Wracamy do projektu Gix. Ostatnio odpaliliśmy cały stack backendu lokalnie przez docker-compose up -d oraz aplikację okienkową przez
+  │ go run ./cmd/gix/main.go. Udało nam się też naprawić mapę.
+  │
+  │ Mamy jednak problem z systemem Heuristic Discovery. Kiedy w GUI wpisuję miasto (np. Kraków), aplikacja zaczyna szukać kantorów, wyzwala logi
+  │ Triggering Heuristic Discovery for: [URL] i nagle całkowicie się zawiesza. W konsoli klienta sypią się błędy: [FinOps] Error fetching
+  metrics:
+  │ Get "http://localhost:8080/api/v1/finops": context deadline exceeded oraz EOF.
+  │
+  │ Zbadaj proces odkrywania kantorów. Sprawdź pkg/utilities/discovery.go (po stronie klienta) pod kątem zamykania ciał odpowiedzi HTTP (wyciek
+  │ połączeń?) i asynchroniczności, a następnie internal/api/handlers/discovery.go i pkg/scrapers/heuristic.go na serwerze pod kątem ewentualnych
+  │ deadlocków w bazie danych lub blokowania głównego wątku."
+  ──────

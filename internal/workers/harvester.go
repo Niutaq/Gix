@@ -3,7 +3,6 @@ package workers
 import (
 	"context"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/Niutaq/Gix/internal/infrastructure"
@@ -36,18 +35,12 @@ func Harvest(app *infrastructure.AppState, currencies []string) {
 		return
 	}
 
-	var wg sync.WaitGroup
 	for _, ci := range cantors {
-		wg.Add(1)
-		go func(info infrastructure.CantorInfo) {
-			defer wg.Done()
-			for _, curr := range currencies {
-				ProcessCantorCurrency(ctx, app, info, curr)
-			}
-		}(ci)
+		for _, curr := range currencies {
+			ProcessCantorCurrency(ctx, app, ci, curr)
+		}
 	}
-	wg.Wait()
-	log.Println("Background Harvest: Parallel cycle completed.")
+	log.Println("Background Harvest: Sequential cycle completed.")
 }
 
 func FetchAllCantors(ctx context.Context, db *pgxpool.Pool) ([]infrastructure.CantorInfo, error) {

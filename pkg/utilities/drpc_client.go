@@ -78,7 +78,9 @@ func FetchAllRatesRPC(window *app.Window, state *AppState, drpcURL string) {
 	client := pb.NewDRPCRatesServiceClient(drpcConn)
 
 	log.Printf("Fetching all rates via dRPC for %s...", state.UI.Currency)
-	resp, err := client.GetAllRates(context.Background(), &pb.RateRequest{Currency: state.UI.Currency})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	resp, err := client.GetAllRates(ctx, &pb.RateRequest{Currency: state.UI.Currency})
 	if err != nil {
 		log.Printf("FetchAllRatesRPC call error: %v", err)
 		return
