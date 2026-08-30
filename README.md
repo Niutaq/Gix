@@ -74,6 +74,7 @@ To run the native UI connected to the production cloud API:
 ```bash
 task start:gui:remote
 ```
+*(Note: This command requires your backend to be successfully deployed to an external cloud provider, e.g., DigitalOcean Kubernetes, and the API URL configured in your environment).*
 
 ### Available Commands
 Below is a list of all commands configured in the `Taskfile.yml`:
@@ -101,11 +102,9 @@ Below is a list of all commands configured in the `Taskfile.yml`:
 - **Geolocation API**: The fallback to OSM Nominatim for city search is rate-limited by OpenStreetMap's fair usage policy.
 
 ## Roadmap
-- [x] Heuristic LLM-based Cantor Discovery (WIP)
-- [x] FinOps Cost-Estimator & Governance Circuit Breaker
-- [x] NATS JetStream Event Streaming
 - [ ] Predictive ML Anomaly Detection (DataDog ML)
-- [ ] ...more???
+- [ ] Automated FinOps cost reporting
+- [ ] iOS / Android mobile builds stabilization
 
 ## Security & Contributing
 Please read our [SECURITY.md](SECURITY.md) for reporting vulnerabilities. 
