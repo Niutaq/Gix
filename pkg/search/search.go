@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/Niutaq/Gix/pkg/types"
 	"github.com/elastic/go-elasticsearch/v8"
@@ -80,10 +81,13 @@ func (se *SearchEngine) IndexCantor(c CantorRecord) error {
 		return err
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	res, err := se.client.Index(
 		"cantors",
 		&buf,
-		se.client.Index.WithContext(context.Background()),
+		se.client.Index.WithContext(ctx),
 		se.client.Index.WithDocumentID(fmt.Sprintf("%d", c.ID)),
 	)
 	if err != nil {

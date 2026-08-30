@@ -75,10 +75,17 @@ func LayoutUI(gtx layout.Context, window *app.Window, theme *material.Theme, sta
 	if state.IsLoading.Load() {
 		targetAlpha = 1.0
 	}
+	
+	now := time.Now()
+	dt := float32(now.Sub(state.LastFrameTime).Seconds())
+	if dt <= 0 || dt > 0.1 {
+		dt = 0.016 // fallback if too much lag or uninitialized
+	}
+	state.LastFrameTime = now
+
 	// Smooth transition
 	if state.LoadingAlpha != targetAlpha {
-		dt := float32(0.016) // Assume 60fps for simplicity, or use real delta
-		speed := float32(4.0)
+		speed := float32(8.0) // slightly snappier
 		diff := targetAlpha - state.LoadingAlpha
 		if math.Abs(float64(diff)) < 0.01 {
 			state.LoadingAlpha = targetAlpha
@@ -833,22 +840,36 @@ func getBasePrice(state *AppState) float64 {
 
 // generateMockChartData generates mock chart data for the selected currency and chart mode.
 func generateMockChartData(state *AppState, basePrice float64) ([]float64, []int64, string) {
-	seedStr := state.UI.Currency + state.UI.SelectedCantor + state.UI.ChartMode
+	// Add Timeframe to seed so different timeframes generate different graph shapes
+	seedStr := state.UI.Currency + state.UI.SelectedCantor + state.UI.ChartMode + state.UI.Timeframe
 	var seed int64
 	for _, char := range seedStr {
-		seed += int64(char)
+		seed = seed*31 + int64(char)
 	}
 
 	data := GenerateFakeData(100, basePrice, seed)
 	timestamps := make([]int64, 100)
 	now := time.Now().Unix()
-	step := int64(3600 * 24 * 7 / 100) // Spread 7 days over 100 points
+	
+	var step int64
+	var label string
+	switch state.UI.Timeframe {
+	case "1D":
+		step = int64(3600 * 24 / 100)
+		label = GetTranslation(state.UI.Language, "chart_1d_ago")
+	case "30D":
+		step = int64(3600 * 24 * 30 / 100)
+		label = GetTranslation(state.UI.Language, "chart_30d_ago")
+	default:
+		step = int64(3600 * 24 * 7 / 100) // Default to 7D
+		label = GetTranslation(state.UI.Language, "chart_7d_ago")
+	}
 
 	for i := range 100 {
 		timestamps[i] = now - int64(100-i)*step
 	}
 
-	return data, timestamps, GetTranslation(state.UI.Language, "chart_7d_ago")
+	return data, timestamps, label
 }
 
 // getRateFromEntry extracts and parses the buy or sell rate from a CantorEntry based on the specified mode ("BUY" or "SELL").

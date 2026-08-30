@@ -48,7 +48,12 @@ func InitSchema(ctx context.Context, db *pgxpool.Pool) error {
         UNIQUE (time, cantor_id, currency)
     );
     SELECT create_hypertable('rates', 'time', if_not_exists => TRUE);
-    SELECT add_retention_policy('rates', INTERVAL '30 days');
+    DO $$
+    BEGIN
+        PERFORM add_retention_policy('rates', INTERVAL '30 days', if_not_exists => TRUE);
+    EXCEPTION WHEN OTHERS THEN
+        -- Ignore if it exists or fails
+    END $$;
 
     CREATE TABLE IF NOT EXISTS provider_unit_costs (
         time        TIMESTAMPTZ       NOT NULL,
@@ -61,7 +66,11 @@ func InitSchema(ctx context.Context, db *pgxpool.Pool) error {
         resource_name VARCHAR(100)
     );
     SELECT create_hypertable('provider_unit_costs', 'time', if_not_exists => TRUE);
-    SELECT add_retention_policy('provider_unit_costs', INTERVAL '60 days');
+    DO $$
+    BEGIN
+        PERFORM add_retention_policy('provider_unit_costs', INTERVAL '60 days', if_not_exists => TRUE);
+    EXCEPTION WHEN OTHERS THEN
+    END $$;
     `
 	_, err := db.Exec(ctx, schema)
 	return err

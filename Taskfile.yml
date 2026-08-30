@@ -7,6 +7,12 @@ tasks:
       - task: lint
       - task: proto
 
+  dev:
+    desc: "Starts the entire environment (infra + backend) and runs the UI natively"
+    cmds:
+      - docker-compose up -d
+      - go run cmd/gix/main.go -api "http://127.0.0.1:8080"
+
   proto:
     desc: "Generates Go code from Protobuf files"
     cmds:
@@ -31,11 +37,12 @@ tasks:
     desc: "Run backend locally"
     dotenv: ['.env']
     env:
-      REDIS_URL: "redis://localhost:6379/0"
-      NATS_URL: "nats://localhost:4222"
+      REDIS_URL: "redis://127.0.0.1:6379/0"
+      NATS_URL: "nats://127.0.0.1:4222"
+      ELASTICSEARCH_URL: "http://127.0.0.1:9200"
       DD_TRACE_ENABLED: "false"
     cmds:
-      - DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:5433/$POSTGRES_DB?sslmode=disable" go run ./cmd/gix-server
+      - DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5433/$POSTGRES_DB?sslmode=disable&pool_max_conns=50" go run ./cmd/gix-server
 
   run:estimator:
     desc: "Run cost estimator locally"
@@ -49,7 +56,7 @@ tasks:
   start:gui:local:
     desc: "Start GUI pointing to local API"
     cmds:
-      - go run cmd/gix/main.go -api "http://localhost:8080"
+      - go run cmd/gix/main.go -api "http://127.0.0.1:8080"
 
   start:gui:remote:
     desc: "Start GUI pointing to remote DigitalOcean API"
