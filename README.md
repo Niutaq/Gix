@@ -3,14 +3,14 @@
   <h1>Gix</h1>
 </div>
 
-Gix is a distributed currency exchange rate monitor designed specifically for the Polish cantor market. It leverages a blazing-fast vector-based UI (Gio) and a robust cloud-native backend to track, aggregate, and stream exchange rates in real-time.
+Gix is a distributed currency exchange rate monitor designed specifically for the Polish cantor market. It leverages a fast vector-based UI (Gio) and a robust cloud-native backend to track, aggregate, and stream exchange rates in real-time.
 
 ---
 
 ## Table of Contents
 - [Problem Statement](#problem-statement)
 - [Architecture & Tech Stack](#architecture--tech-stack)
-- [FinOps & Cost-Awareness (FOCUS Framework)](#finops--cost-awareness-focus-framework)
+- [FinOps & Cost-Awareness (FOCUS Framework) - WORK IN PROGRESS](#finops--cost-awareness-focus-framework---work-in-progress)
 - [Quick Start](#quick-start)
 - [Known Limitations](#known-limitations)
 - [Roadmap](#roadmap)
@@ -25,7 +25,9 @@ The currency exchange market (specifically physical cantors in Poland) is highly
 Gix solves this by providing:
 - **Centralized Intelligence**: Aggregates physical exchange office rates via smart, heuristic-based web scraping.
 - **Zero-Lag Updates**: Uses NATS JetStream and dRPC for instant rate streaming directly to a native desktop/mobile client without polling.
-- **Cost Transparency**: Scraping external providers isn't free (compute, bandwidth, LLM tokens). Gix includes a built-in **FinOps Governance Engine** to estimate micro-costs in real-time and circuit-break providers that exceed their unit economics budget.
+- **Cost Transparency**: Scraping external providers isn't free (compute, bandwidth, LLM tokens). Gix includes a built-in.
+
+<img width="1264" height="842" alt="gix_problem_solution" src="https://github.com/user-attachments/assets/5deb6270-7502-4927-bd07-cdfd5cb2d03a" />
 
 ## Architecture & Tech Stack
 
@@ -46,8 +48,8 @@ Gix solves this by providing:
 - **TimescaleDB**: Native PostgreSQL extension highly optimized for time-series data, perfect for analyzing historical currency trends.
 - **NATS JetStream**: Lightweight, high-performance event streaming that supports replayability and exactly-once delivery.
 
-## FinOps & Cost-Awareness (FOCUS Framework)
-Gix isn't just an application; it's designed with strict **FinOps principles**:
+## FinOps & Cost-Awareness (FOCUS Framework) - WORK IN PROGRESS
+It's designed with strict **FinOps principles**:
 - **Visibility**: Real-time cost estimation per scraper run, saved directly to TimescaleDB (`provider_unit_costs` table).
 - **Governance**: A built-in Circuit Breaker cuts off cantors if the cost-to-serve ratio exceeds `$0.05` per day.
 - **Optimization**: Kubernetes resources are strictly bounded, TimescaleDB chunks are aggressively dropped after 30 days, and Redis handles traffic spikes to shield the DB.
