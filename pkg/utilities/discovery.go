@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/http"
@@ -120,7 +121,12 @@ func triggerHeuristicDiscovery(url string, expectedName string, expectedLat, exp
 		log.Printf("Heuristic Discovery Error: %v", err)
 		return false
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
+		}
+	}()
 
 	if resp.StatusCode != http.StatusCreated {
 		log.Printf("Heuristic Discovery failed with status: %d", resp.StatusCode)
@@ -163,14 +169,13 @@ func triggerHeuristicDiscovery(url string, expectedName string, expectedLat, exp
 		state.Cantors[idStr].Longitude = lon
 		state.Cantors[idStr].Address = addr
 	}
-	state.CantorsMu.Unlock()
-
 	// If no coordinates were found, don't jump to (0,0), but if we have them, jump!
 	if lat != 0 && lon != 0 {
 		state.UI.MapFocus.Latitude = lat
 		state.UI.MapFocus.Longitude = lon
 		state.UI.MapFocus.CityName = name
 	}
+	state.CantorsMu.Unlock()
 
 	// Also mock some initial rate in Vault so it shows up
 	buyRate, _ := result["buyRate"].(string)
@@ -188,9 +193,8 @@ func triggerHeuristicDiscovery(url string, expectedName string, expectedLat, exp
 		sellRate = sr
 	}
 
+	state.Vault.Mu.Lock()
 	if buyRate != "" || sellRate != "" {
-		state.Vault.Mu.Lock()
-
 		// The backend explicitly scraped "EUR" in handleDiscover,
 		// so we mock the EUR rate regardless of current UI currency.
 		targetCurrency := "EUR"
@@ -209,11 +213,9 @@ func triggerHeuristicDiscovery(url string, expectedName string, expectedLat, exp
 		}
 		RefreshDisplayStrings(entry)
 		state.Vault.Rates[targetCurrency][idStr] = entry
-
-		state.Vault.Mu.Unlock()
 	}
-
 	state.UI.FilteredIDs = nil // Force list re-filter so it shows up immediately
+	state.Vault.Mu.Unlock()
 	window.Invalidate()
 
 	return true
@@ -289,7 +291,10 @@ func LLMDiscoverCityCantors(city string, state *AppState, config AppConfig, wind
 
 	// Disable GPS lock when searching for a new city so the newly discovered cantors aren't hidden by the distance filter
 	state.UI.UserLocation.Active = false
+	
+	state.Vault.Mu.Lock()
 	state.UI.FilteredIDs = nil
+	state.Vault.Mu.Unlock()
 
 	if window != nil {
 		window.Invalidate()
@@ -379,16 +384,17 @@ func LLMDiscoverCityCantors(city string, state *AppState, config AppConfig, wind
 			reqOverpass.Header.Set(UserAgentHeader, UserAgentApp)
 
 			respOverpass, err := client.Do(reqOverpass)
-			cancel()
-
 			if err != nil {
+				cancel()
 				log.Printf("Overpass API Error (endpoint: %s, radius %d): %v", endpoint, radius, err)
 				continue
 			}
 
 			if respOverpass.StatusCode != http.StatusOK {
 				log.Printf("Overpass API HTTP %d from %s (Service might be overloaded)", respOverpass.StatusCode, endpoint)
+				_, _ = io.Copy(io.Discard, respOverpass.Body)
 				_ = respOverpass.Body.Close()
+				cancel()
 				continue
 			}
 
@@ -398,10 +404,13 @@ func LLMDiscoverCityCantors(city string, state *AppState, config AppConfig, wind
 					cantors = overpassResp.Elements
 				}
 				success = true
-				_ = respOverpass.Body.Close()
+			}
+			_, _ = io.Copy(io.Discard, respOverpass.Body)
+			_ = respOverpass.Body.Close()
+			cancel()
+			if success {
 				break
 			}
-			_ = respOverpass.Body.Close()
 			}
 
 		if success && len(cantors) > 0 {
@@ -549,6 +558,7 @@ func LLMDiscoverCityCantors(city string, state *AppState, config AppConfig, wind
 					return
 				}
 
+				count := 0
 				doc.Find("a.result__url").EachWithBreak(func(i int, s *goquery.Selection) bool {
 					href, exists := s.Attr("href")
 					if !exists {
@@ -600,6 +610,12 @@ func LLMDiscoverCityCantors(city string, state *AppState, config AppConfig, wind
 					}
 
 					if !isExcluded {
+						count++
+						if count > 2 {
+							log.Printf("Discovery: DDG limit reached for %s", name)
+							return false // Stop iterating after 2 attempts
+						}
+
 						success := triggerHeuristicDiscovery(decoded, name, lt, ln, addr, state, config, window)
 						if success {
 							return false // Stop at the first plausible specific URL that worked

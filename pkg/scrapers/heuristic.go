@@ -42,8 +42,8 @@ type DiscoveredCantor struct {
 }
 
 // HeuristicDiscoverCantor attempts to find cantor name and address from its URL.
-func HeuristicDiscoverCantor(urlStr string) (*DiscoveredCantor, error) {
-	doc, err := fetchDocument(context.TODO(), urlStr)
+func HeuristicDiscoverCantor(ctx context.Context, urlStr string) (*DiscoveredCantor, error) {
+	doc, err := fetchDocument(ctx, urlStr)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func HeuristicDiscoverCantor(urlStr string) (*DiscoveredCantor, error) {
 	if rawAddress == "" {
 		// D. Final Fallback: Use Gemini LLM to extract the address
 		log.Printf("Discovery: Regex failed. Using LLM (Gemini) for address extraction...")
-		llmAddr, err := LLMExtractAddress(doc)
+		llmAddr, err := LLMExtractAddress(ctx, doc)
 		if err == nil && llmAddr != "" {
 			rawAddress = llmAddr
 			log.Printf("Discovery: LLM found address: '%s'", rawAddress)
@@ -341,7 +341,7 @@ func HeuristicScrape(ctx context.Context, url, targetCurrency string) (ScrapeRes
 
 	// Strategy 3: LLM Fallback (Slow, final attempt using AI)
 	log.Printf("Heuristics failed for %s. Calling LLM model (Gemini)...", url)
-	return LLMScrapeFallback(doc, targetCurrency)
+	return LLMScrapeFallback(ctx, doc, targetCurrency)
 }
 
 // analyzeTables analyzes tables on the page and returns a list of heuristic results
@@ -624,7 +624,7 @@ type GeminiResponse struct {
 }
 
 // LLMScrapeFallback uses artificial intelligence when heuristics fail.
-func LLMScrapeFallback(doc *goquery.Document, targetCurrency string) (ScrapeResult, error) {
+func LLMScrapeFallback(ctx context.Context, doc *goquery.Document, targetCurrency string) (ScrapeResult, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return ScrapeResult{}, fmt.Errorf("GEMINI_API_KEY not set")
@@ -657,7 +657,7 @@ Tekst: %s`, targetCurrency, cleanText)
 	}
 
 	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return ScrapeResult{}, err
 	}
@@ -708,7 +708,7 @@ Tekst: %s`, targetCurrency, cleanText)
 }
 
 // LLMExtractAddress uses Gemini to find a physical address in the HTML text.
-func LLMExtractAddress(doc *goquery.Document) (string, error) {
+func LLMExtractAddress(ctx context.Context, doc *goquery.Document) (string, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("GEMINI_API_KEY not set")
@@ -743,7 +743,7 @@ Tekst: %s`, cleanText)
 	}
 
 	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", err
 	}

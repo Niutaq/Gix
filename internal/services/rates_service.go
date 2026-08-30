@@ -39,7 +39,7 @@ func ScrapeAndProcess(ctx context.Context, app *infrastructure.AppState, ci infr
 			TraceId:     "",
 		}
 		protoBytes, _ := proto.Marshal(event)
-		_, _ = app.JS.Publish("gix.scrape.v1.completed", protoBytes)
+		_, _ = app.JS.PublishAsync("gix.scrape.v1.completed", protoBytes)
 	}
 
 	if err != nil {

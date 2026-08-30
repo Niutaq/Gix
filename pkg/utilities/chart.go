@@ -599,12 +599,13 @@ func GenerateFakeData(points int, basePrice float64, seed int64) []float64 {
 	}
 
 	phaseShift := float64(seed % 100)
+	trendMultiplier := math.Sin(float64(seed)) * 0.02 // Can be positive or negative
 
 	for i := range points {
 		x := float64(i)*0.1 + phaseShift
 		volatility := basePrice * 0.01
 		sineComponent := math.Sin(x) * volatility * 0.5
-		trendComponent := float64(i) * (volatility * 0.01)
+		trendComponent := float64(i) * (volatility * trendMultiplier)
 		microNoise := math.Cos(x*3.0+float64(seed)) * volatility * 0.2
 		val := basePrice + sineComponent + trendComponent + microNoise
 		data[i] = val

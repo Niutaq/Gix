@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	pb "github.com/Niutaq/Gix/api/proto/v1"
@@ -63,7 +62,7 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 		} else {
 			log.Printf("Discovery: Analyzing URL %s for metadata...", req.URL)
 			var err error
-			info, err = scrapers.HeuristicDiscoverCantor(req.URL)
+			info, err = scrapers.HeuristicDiscoverCantor(c.Request.Context(), req.URL)
 			if err != nil {
 				log.Printf("Discovery Metadata Error: %v", err)
 				info = &scrapers.DiscoveredCantor{
@@ -117,7 +116,7 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 				Timestamp:   time.Now().Unix(),
 			}
 			protoBytes, _ := proto.Marshal(event)
-			_, _ = app.JS.Publish("gix.scrape.v1.completed", protoBytes)
+			_, _ = app.JS.PublishAsync("gix.scrape.v1.completed", protoBytes)
 		}
 		var id int
 		nameLower := strings.ToLower(info.DisplayName)
@@ -151,19 +150,10 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 				Units:       1,
 			}
 			log.Printf("Starting post-discovery background harvest for new cantor: %s", displayName)
-			var wg sync.WaitGroup
-			sem := make(chan struct{}, 2)
 			for _, curr := range currencies {
-				wg.Add(1)
-				go func(c string) {
-					defer wg.Done()
-					sem <- struct{}{}
-					workers.ProcessCantorCurrency(context.Background(), app, ci, c)
-					time.Sleep(1 * time.Second)
-					<-sem
-				}(curr)
+				workers.ProcessCantorCurrency(context.Background(), app, ci, curr)
+				time.Sleep(1 * time.Second)
 			}
-			wg.Wait()
 			log.Printf("Finished post-discovery background harvest for: %s", displayName)
 		}(id, info.DisplayName, req.URL)
 

@@ -74,7 +74,7 @@ func main() {
 		base = base[:len(base)-1]
 	}
 
-	drpcBase := "localhost:8081"
+	drpcBase := "127.0.0.1:8081"
 	if base == "http://"+remoteAPIHost+":8080" {
 		drpcBase = remoteAPIHost + ":8081"
 	}

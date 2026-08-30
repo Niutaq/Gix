@@ -83,61 +83,66 @@ func LayoutMap(gtx layout.Context, window *app.Window, state *AppState) layout.D
 	cols := int(float64(gtx.Constraints.Max.X)/tileSize) + 4
 	rows := int(float64(gtx.Constraints.Max.Y)/tileSize) + 4
 
-	for i := -cols/2 - 1; i <= cols/2+1; i++ {
-		for j := -rows/2 - 1; j <= rows/2+1; j++ {
-			ix, iy := int(math.Floor(tx))+i, int(math.Floor(ty))+j
-			n := int(math.Pow(2, float64(zoom)))
-			if ix < 0 || ix >= n || iy < 0 || iy >= n {
-				continue
+	// We render the map and controls inside a Stack to guarantee absolute positioning
+	return layout.Stack{Alignment: layout.NW}.Layout(gtx,
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			// Draw tiles
+			for i := -cols/2 - 1; i <= cols/2+1; i++ {
+				for j := -rows/2 - 1; j <= rows/2+1; j++ {
+					ix, iy := int(math.Floor(tx))+i, int(math.Floor(ty))+j
+					n := int(math.Pow(2, float64(zoom)))
+					if ix < 0 || ix >= n || iy < 0 || iy >= n {
+						continue
+					}
+
+					posX := halfW + (float64(ix)-tx)*tileSize
+					posY := halfH + (float64(iy)-ty)*tileSize
+
+					renderTile(gtx, ix, iy, zoom, float32(posX), float32(posY), int(tileSize), state)
+				}
 			}
-
-			posX := halfW + (float64(ix)-tx)*tileSize
-			posY := halfH + (float64(iy)-ty)*tileSize
-
-			renderTile(gtx, ix, iy, zoom, float32(posX), float32(posY), int(tileSize), state)
-		}
-	}
-
-	renderMarkers(gtx, state, tx, ty, tileSize, zoom)
-
-	// Zoom Controls Overlay
-	layout.SE.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Inset{Bottom: unit.Dp(16), Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical, Spacing: layout.SpaceBetween}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					if state.UI.MapState.ZoomInBtn.Clicked(gtx) {
-						state.UI.MapState.Zoom += 1.0
-						if state.UI.MapState.Zoom > 19 {
-							state.UI.MapState.Zoom = 19
-						}
-						if window != nil {
-							window.Invalidate()
-						}
-					}
-					return state.UI.MapState.ZoomInBtn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return renderMapZoomBtn(gtx, "+", state)
-					})
-				}),
-				layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					if state.UI.MapState.ZoomOutBtn.Clicked(gtx) {
-						state.UI.MapState.Zoom -= 1.0
-						if state.UI.MapState.Zoom < 2 {
-							state.UI.MapState.Zoom = 2
-						}
-						if window != nil {
-							window.Invalidate()
-						}
-					}
-					return state.UI.MapState.ZoomOutBtn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return renderMapZoomBtn(gtx, "-", state)
-					})
-				}),
-			)
-		})
-	})
-
-	return layout.Dimensions{Size: gtx.Constraints.Max}
+			renderMarkers(gtx, state, tx, ty, tileSize, zoom)
+			return layout.Dimensions{Size: gtx.Constraints.Max}
+		}),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			// Position controls at Center-Left instead of SW
+			return layout.W.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Left: unit.Dp(40)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Vertical, Spacing: layout.SpaceBetween}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							if state.UI.MapState.ZoomInBtn.Clicked(gtx) {
+								state.UI.MapState.Zoom += 1.0
+								if state.UI.MapState.Zoom > 19 {
+									state.UI.MapState.Zoom = 19
+								}
+								if window != nil {
+									window.Invalidate()
+								}
+							}
+							return state.UI.MapState.ZoomInBtn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								return renderMapZoomBtn(gtx, "+", state)
+							})
+						}),
+						layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							if state.UI.MapState.ZoomOutBtn.Clicked(gtx) {
+								state.UI.MapState.Zoom -= 1.0
+								if state.UI.MapState.Zoom < 2 {
+									state.UI.MapState.Zoom = 2
+								}
+								if window != nil {
+									window.Invalidate()
+								}
+							}
+							return state.UI.MapState.ZoomOutBtn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								return renderMapZoomBtn(gtx, "-", state)
+							})
+						}),
+					)
+				})
+			})
+		}),
+	)
 }
 
 // renderMapZoomBtn renders buttons for the map
@@ -348,11 +353,11 @@ func fetchTileAsync(key string, state *AppState) {
 			return
 		}
 		theme, z, x, y := parts[0], parts[1], parts[2], parts[3]
-		tileSource := "rastertiles/voyager_labels_under"
+		url := fmt.Sprintf("https://tile.openstreetmap.org/%s/%s/%s.png", z, x, y)
 		if theme == "dark" {
-			tileSource = "dark_all"
+			// standard OSM doesn't have a dark theme, using the same to avoid watermarks
+			url = fmt.Sprintf("https://tile.openstreetmap.org/%s/%s/%s.png", z, x, y)
 		}
-		url := fmt.Sprintf("https://basemaps.cartocdn.com/%s/%s/%s/%s.png", tileSource, z, x, y)
 		req, _ := http.NewRequest("GET", url, nil)
 		req.Header.Set("User-Agent", UserAgentApp)
 
