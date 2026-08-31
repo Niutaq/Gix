@@ -11,7 +11,7 @@ tasks:
     desc: "Starts the entire environment (infra + backend) and runs the UI natively"
     cmds:
       - docker-compose up -d
-      - go run cmd/gix/main.go -api "http://127.0.0.1:8080"
+      - go run ./cmd/gix -api "http://127.0.0.1:8080"
 
   proto:
     desc: "Generates Go code from Protobuf files"
@@ -56,12 +56,12 @@ tasks:
   start:gui:local:
     desc: "Start GUI pointing to local API"
     cmds:
-      - go run cmd/gix/main.go -api "http://127.0.0.1:8080"
+      - go run ./cmd/gix -api "http://127.0.0.1:8080"
 
   start:gui:remote:
     desc: "Start GUI pointing to remote DigitalOcean API"
     cmds:
-      - go run cmd/gix/main.go -api "http://165.227.246.100:8080"
+      - go run ./cmd/gix -api "http://165.227.246.100:8080"
 
   deploy:do:
     desc: "Build, push and deploy backend to DigitalOcean K8s"
