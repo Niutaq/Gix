@@ -34,7 +34,7 @@ Gix solves this by providing:
 | Component | Technology / Version | Description |
 | :--- | :--- | :--- |
 | **Frontend** | [![Gio](https://img.shields.io/badge/Gio-v0.9.0-blue)](https://gioui.org) | Native, GPU-accelerated, cross-platform UI |
-| **Backend API** | [![Go](https://img.shields.io/badge/Go-1.26.2-00ADD8?logo=go&logoColor=white)](https://go.dev/) [![Gin](https://img.shields.io/badge/Gin-v1.11-0088CC)](https://gin-gonic.com/) | High-performance routing and orchestration |
+| **Backend API** | [![Go](https://img.shields.io/badge/Go-1.27.0-00ADD8?logo=go&logoColor=white)](https://go.dev/) [![Gin](https://img.shields.io/badge/Gin-v1.11-0088CC)](https://gin-gonic.com/) | High-performance routing and orchestration |
 | **Streaming** | [![NATS](https://img.shields.io/badge/NATS_JetStream-v1.48-27A16C)](https://nats.io) | Persistent event streaming and replay |
 | **Caching** | [![Redis](https://img.shields.io/badge/Redis-v7-DC382D?logo=redis&logoColor=white)](https://redis.io) | Fast access and rate limiting |
 | **Storage** | [![TimescaleDB](https://img.shields.io/badge/TimescaleDB-pg16-FDB515)](https://www.timescale.com) | Time-series data for historical charting |
@@ -57,7 +57,7 @@ It's designed with strict **FinOps principles**:
 ## Quick Start
 
 ### Prerequisites
-- **Go** 1.26.2+
+- **Go** 1.27.0+
 - **Docker** & **Docker Compose**
 - **Task** (`go install github.com/go-task/task/v3/cmd/task@latest`)
 - **Gemini API Key**: Required for the Heuristic LLM fallback scraper. Set it as an environment variable:

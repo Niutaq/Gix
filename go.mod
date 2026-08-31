@@ -1,6 +1,6 @@
 module github.com/Niutaq/Gix
 
-go 1.26.2
+go 1.27.0
 
 require (
 	gioui.org v0.9.0
