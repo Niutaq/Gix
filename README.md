@@ -18,6 +18,7 @@ Gix is a distributed currency exchange rate monitor designed specifically for th
 - [Demo](#demo)
 
 ---
+<img width="3168" height="1344" alt="gix_problem_and_solution" src="https://github.com/user-attachments/assets/0777232c-1b9e-41ea-b70e-4561fa36c679" />
 
 ## Problem Statement
 The currency exchange market (specifically physical cantors in Poland) is highly fragmented. Rates change dynamically, spreads vary dramatically, and finding the best real-time deal requires scraping dozens of disjointed, poorly-optimized websites. 
@@ -27,7 +28,6 @@ Gix solves this by providing:
 - **Zero-Lag Updates**: Uses NATS JetStream and dRPC for instant rate streaming directly to a native desktop/mobile client without polling.
 - **Cost Transparency**: Scraping external providers isn't free (compute, bandwidth, LLM tokens). Gix includes a built-in.
 
-<img width="1264" height="842" alt="gix_problem_solution" src="https://github.com/user-attachments/assets/5deb6270-7502-4927-bd07-cdfd5cb2d03a" />
 
 ## Architecture & Tech Stack
 
