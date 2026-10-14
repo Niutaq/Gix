@@ -26,7 +26,7 @@ The currency exchange market (specifically physical cantors in Poland) is highly
 Gix solves this by providing:
 - **Centralized Intelligence**: Aggregates physical exchange office rates via smart, heuristic-based web scraping.
 - **Zero-Lag Updates**: Uses NATS JetStream and dRPC for instant rate streaming directly to a native desktop/mobile client without polling.
-- **Cost Transparency**: Scraping external providers isn't free (compute, bandwidth, LLM tokens). Gix includes a built-in.
+- **Cost Transparency**: Scraping external providers isn't free (compute, bandwidth, LLM tokens).
 
 
 ## Architecture & Tech Stack
