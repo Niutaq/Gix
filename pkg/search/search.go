@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
+	"io"
 
 	"github.com/Niutaq/Gix/pkg/types"
 	"github.com/elastic/go-elasticsearch/v8"
@@ -26,7 +26,7 @@ type SearchEngine struct {
 	client *elasticsearch.Client
 }
 
-// NewSearchEngine initializes a new Elasticsearch client.
+// NewSearchEngine initializes a new Elasticsearch client and verifies connectivity.
 func NewSearchEngine(address string) (*SearchEngine, error) {
 	cfg := elasticsearch.Config{
 		Addresses: []string{address},
@@ -34,6 +34,18 @@ func NewSearchEngine(address string) (*SearchEngine, error) {
 	client, err := elasticsearch.NewClient(cfg)
 	if err != nil {
 		return nil, err
+	}
+	res, err := client.Ping()
+	if err != nil {
+		return nil, fmt.Errorf("elasticsearch ping %s: %w", address, err)
+	}
+	defer func() {
+		if res.Body != nil {
+			_ = res.Body.Close()
+		}
+	}()
+	if res.IsError() {
+		return nil, fmt.Errorf("elasticsearch ping %s: %s", address, res.Status())
 	}
 	return &SearchEngine{client: client}, nil
 }
@@ -46,10 +58,16 @@ func (se *SearchEngine) CreateIndices() error {
 		if err != nil {
 			return err
 		}
+		if res.Body != nil {
+			_ = res.Body.Close()
+		}
 		if res.StatusCode == 404 {
-			_, err := se.client.Indices.Create(idx)
+			res, err := se.client.Indices.Create(idx)
 			if err != nil {
 				return err
+			}
+			if res.Body != nil {
+				_ = res.Body.Close()
 			}
 		}
 	}
@@ -81,13 +99,10 @@ func (se *SearchEngine) IndexCantor(c CantorRecord) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	res, err := se.client.Index(
 		"cantors",
 		&buf,
-		se.client.Index.WithContext(ctx),
+		se.client.Index.WithContext(context.Background()),
 		se.client.Index.WithDocumentID(fmt.Sprintf("%d", c.ID)),
 	)
 	if err != nil {
@@ -152,21 +167,7 @@ func (se *SearchEngine) SearchCantors(query string) ([]CantorRecord, error) {
 		return nil, fmt.Errorf(searchErrorFmt, res.Status())
 	}
 
-	var r map[string]interface{}
-	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
-		return nil, err
-	}
-
-	var results []CantorRecord
-	for _, hit := range r["hits"].(map[string]interface{})["hits"].([]interface{}) {
-		source := hit.(map[string]interface{})["_source"]
-		var c CantorRecord
-		b, _ := json.Marshal(source)
-		_ = json.Unmarshal(b, &c)
-		results = append(results, c)
-	}
-
-	return results, nil
+	return decodeSearchHits[CantorRecord](res.Body)
 }
 
 // SearchCantorsNearby searches for cantors within a certain distance from a location.
@@ -203,21 +204,7 @@ func (se *SearchEngine) SearchCantorsNearby(lat, lon float64, distanceKM float64
 		return nil, fmt.Errorf(searchErrorFmt, res.Status())
 	}
 
-	var r map[string]interface{}
-	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
-		return nil, err
-	}
-
-	var results []CantorRecord
-	for _, hit := range r["hits"].(map[string]interface{})["hits"].([]interface{}) {
-		source := hit.(map[string]interface{})["_source"]
-		var c CantorRecord
-		b, _ := json.Marshal(source)
-		_ = json.Unmarshal(b, &c)
-		results = append(results, c)
-	}
-
-	return results, nil
+	return decodeSearchHits[CantorRecord](res.Body)
 }
 
 // SearchCity searches for cities by name.
@@ -250,19 +237,28 @@ func (se *SearchEngine) SearchCity(query string) ([]types.CityRecord, error) {
 		return nil, fmt.Errorf(searchErrorFmt, res.Status())
 	}
 
-	var r map[string]interface{}
-	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+	return decodeSearchHits[types.CityRecord](res.Body)
+}
+
+func decodeSearchHits[T any](body io.Reader) ([]T, error) {
+	var response struct {
+		Hits struct {
+			Hits []struct {
+				Source json.RawMessage `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+	if err := json.NewDecoder(body).Decode(&response); err != nil {
 		return nil, err
 	}
 
-	var results []types.CityRecord
-	for _, hit := range r["hits"].(map[string]interface{})["hits"].([]interface{}) {
-		source := hit.(map[string]interface{})["_source"]
-		var c types.CityRecord
-		b, _ := json.Marshal(source)
-		_ = json.Unmarshal(b, &c)
-		results = append(results, c)
+	results := make([]T, 0, len(response.Hits.Hits))
+	for _, hit := range response.Hits.Hits {
+		var item T
+		if err := json.Unmarshal(hit.Source, &item); err != nil {
+			return nil, err
+		}
+		results = append(results, item)
 	}
-
 	return results, nil
 }

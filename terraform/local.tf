@@ -1,6 +1,6 @@
 provider "aws" {
-  alias   = "localstack"
-  region  = "eu-central-1"
+  alias  = "localstack"
+  region = "eu-central-1"
 
   access_key                  = "test"
   secret_key                  = "test"
@@ -14,5 +14,13 @@ provider "aws" {
     s3         = "http://localhost:4566"
     iam        = "http://localhost:4566"
     cloudwatch = "http://localhost:4566"
+  }
+
+  default_tags {
+    tags = {
+      environment = "local"
+      project     = "Gix"
+      owner       = "Niutaq"
+    }
   }
 }

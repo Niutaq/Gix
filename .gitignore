@@ -39,6 +39,9 @@ appicon.xcf
 gix-db-data/
 .env*
 
+# Local process logs (Promtail / task obs:up)
+logs/*.log
+
 # Digital Ocean and K8s sensitives
 digital_ocean_api_token.txt
 kubectl
@@ -52,3 +55,11 @@ trace.out
 cpu.pprof
 gix_linux
 gix-server-bin
+
+# Local FinOps / IaC caches (never commit)
+.localstack/
+terraform/.terraform/
+terraform/.infracost/
+infracost_report.json
+local_development.txt
+bin/
