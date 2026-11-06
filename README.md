@@ -210,6 +210,6 @@ MIT License
 
 Native Gio client — city search, language picker, live EUR quotes, map pins:
 
-https://github.com/Niutaq/Gix/releases/download/demo/app_demo.mp4
+[![Gix demo](demos/app_demo.gif)](https://github.com/Niutaq/Gix/releases/download/demo/app_demo.mp4)
 
-Also in-repo: [`demos/app_demo.mp4`](demos/app_demo.mp4) (~2 MB).
+Full video (mp4): [download / play](https://github.com/Niutaq/Gix/releases/download/demo/app_demo.mp4) · in-repo [`demos/app_demo.mp4`](demos/app_demo.mp4)
