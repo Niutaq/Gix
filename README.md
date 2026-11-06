@@ -5,8 +5,6 @@
 
 Gix is a distributed currency exchange rate monitor for the Polish cantor market: a native Gio UI, a Go backend, heuristic scraping with an **offline LLM fallback**, and a local **CNCF FinOps** stack — no paid cloud required for day-to-day work.
 
----
-
 ## Table of Contents
 - [Problem Statement](#problem-statement)
 - [Architecture & Tech Stack](#architecture--tech-stack)
@@ -20,8 +18,6 @@ Gix is a distributed currency exchange rate monitor for the Polish cantor market
 - [Security & Contributing](#security--contributing)
 - [Demo](#demo)
 
----
-
 ## Problem Statement
 Physical cantors in Poland publish rates on fragmented, brittle websites. Gix aggregates them, streams updates live, and tracks the **unit cost** of scraping (compute / LLM) with FinOps guardrails.
 
@@ -29,16 +25,16 @@ Physical cantors in Poland publish rates on fragmented, brittle websites. Gix ag
 
 | Component | Technology | Description |
 | :--- | :--- | :--- |
-| **Frontend** | [Gio](https://gioui.org) | Native, GPU-accelerated UI |
-| **Backend API** | [Go](https://go.dev/) + [Gin](https://gin-gonic.com/) | HTTP API + harvester |
-| **Streaming** | [NATS JetStream](https://nats.io) | Event streaming / replay |
-| **Caching** | [Redis](https://redis.io) | Cache + rate update pub/sub |
-| **Storage** | [TimescaleDB](https://www.timescale.com) | Rates + FOCUS cost tables |
-| **RPC** | [dRPC](https://storj.github.io/drpc/) | Live rates to the GUI |
-| **Offline LLM** | [Ollama](https://ollama.com) | Scraper fallback — **no cloud API key** |
-| **Local K8s** | [k3d](https://k3d.io) / k3s | Free cluster for FinOps demos |
-| **FinOps** | [OpenCost](https://opencost.io) + Prometheus + Grafana | Allocation & cost-flow (FOSS; replaces paid APM as the cost UI) |
-| **Legacy (kept)** | DigitalOcean · Datadog | Historical backend hosting + APM analysis — see [Hosting history](#hosting-history--current-direction) |
+| **Frontend** | [![Gio](https://img.shields.io/badge/Gio-v0.9+-blue)](https://gioui.org) | Native, GPU-accelerated UI |
+| **Backend API** | [![Go](https://img.shields.io/badge/Go-1.27.0-00ADD8?logo=go&logoColor=white)](https://go.dev/) [![Gin](https://img.shields.io/badge/Gin-v1.11-0088CC)](https://gin-gonic.com/) | HTTP API + harvester |
+| **Streaming** | [![NATS](https://img.shields.io/badge/NATS_JetStream-27A16C?logo=nats.io&logoColor=white)](https://nats.io) | Event streaming / replay |
+| **Caching** | [![Redis](https://img.shields.io/badge/Redis-v7-DC382D?logo=redis&logoColor=white)](https://redis.io) | Cache + rate update pub/sub |
+| **Storage** | [![TimescaleDB](https://img.shields.io/badge/TimescaleDB-pg16-FDB515?logo=timescale&logoColor=black)](https://www.timescale.com) | Rates + FOCUS cost tables |
+| **RPC** | [![dRPC](https://img.shields.io/badge/dRPC-Protobuf-4285F4)](https://storj.github.io/drpc/) | Live rates to the GUI |
+| **Offline LLM** | [![Ollama](https://img.shields.io/badge/Ollama-local-000000?logo=ollama&logoColor=white)](https://ollama.com) | Scraper fallback — **no cloud API key** |
+| **Local K8s** | [![k3d](https://img.shields.io/badge/k3d-k3s-FFBF00?logo=kubernetes&logoColor=black)](https://k3d.io) | Free cluster for FinOps demos |
+| **FinOps** | [![OpenCost](https://img.shields.io/badge/OpenCost-CNCF-326CE5?logo=cncf&logoColor=white)](https://opencost.io) [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)](https://prometheus.io) [![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)](https://grafana.com) | Allocation & cost-flow (FOSS) |
+| **Legacy (kept)** | [![DigitalOcean](https://img.shields.io/badge/DigitalOcean-0080FF?logo=digitalocean&logoColor=white)](https://digitalocean.com) [![Datadog](https://img.shields.io/badge/Datadog-632CA6?logo=datadog&logoColor=white)](https://datadoghq.com) | Historical hosting + APM — see [Hosting history](#hosting-history--current-direction) |
 
 ## Hosting history & current direction
 
@@ -51,15 +47,13 @@ Gix was **analyzed and operated** with commercial tooling before the FOSS pivot 
 
 **Current default path** (no paid cloud bill):
 
-1. Docker Compose — TimescaleDB, Redis, NATS, Ollama  
-2. Optional k3d + OpenCost + Grafana — cluster FinOps  
-3. Terraform / Infracost under `terraform/` — IaC cost modelling reference only  
+1. Docker Compose — TimescaleDB, Redis, NATS, Ollama
+2. Optional k3d + OpenCost + Grafana — cluster FinOps
+3. Terraform / Infracost under `terraform/` — IaC cost modelling reference only
 
 Legacy helpers stay available but are archival: `task deploy:do` (DigitalOcean), Datadog agent manifests / `DD_*` env when you explicitly want that stack. Day-to-day development and demos target **CNCF / FOSS**.
 
 More detail: **[FINOPS.md](FINOPS.md)**.
-
----
 
 ## Quick Start (fresh machine)
 
@@ -101,11 +95,11 @@ task run:backend
 task start:gui:local
 ```
 
-- API: `http://127.0.0.1:8080`  
-- dRPC: `localhost:8081`  
-- GUI: native Gio window (not a browser) — **Gio v0.9+ / v0.10.x**  
-- **Search**: type a Polish city → **Szukaj / Search** (or Enter). OSM discovery pins cantors nearby; rates fill in as scrapers resolve websites.  
-- **Locate**: shown when the search field is empty — GPS/IP for distance sorting (no radius slider).  
+- API: `http://127.0.0.1:8080`
+- dRPC: `localhost:8081`
+- GUI: native Gio window (not a browser) — **Gio v0.9+ / v0.10.x**
+- **Search**: type a Polish city → **Szukaj / Search** (or Enter). OSM discovery pins cantors nearby; rates fill in as scrapers resolve websites.
+- **Locate**: shown when the search field is empty — GPS/IP for distance sorting (no radius slider).
 - Language: macOS-style wheel picker in the sidebar / drawer.
 
 Optional cost estimator (unit costs → Timescale):
@@ -113,8 +107,6 @@ Optional cost estimator (unit costs → Timescale):
 ```bash
 task run:estimator
 ```
-
----
 
 ## FinOps (CNCF / FOSS)
 
@@ -145,8 +137,6 @@ kubectl -n finops port-forward svc/grafana 3000:80      # → http://localhost:3
 
 Do **not** point sync at `:9090` — that serves the UI, not the allocation API.
 
----
-
 ## Offline LLM
 
 Scrapers use heuristics first; on failure they call **Ollama** locally (`LLM_PROVIDER=ollama`).
@@ -164,8 +154,6 @@ task llm:pull    # ollama pull $OLLAMA_MODEL
 
 Legacy cloud: set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY=...` only if you explicitly want that path.
 
----
-
 ## Useful commands
 
 | Command | Description |
@@ -179,8 +167,6 @@ Legacy cloud: set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY=...` only if you exp
 | `task test` / `task lint` / `task vuln` | Quality |
 | `task trivy:scan` | Vulnerability scan |
 | `task deploy:do` | *(legacy)* DigitalOcean |
-
----
 
 ## Known Limitations
 - First `task llm:pull` is large and needs disk + time.
@@ -203,8 +189,6 @@ See [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 MIT License
-
----
 
 ## Demo
 
