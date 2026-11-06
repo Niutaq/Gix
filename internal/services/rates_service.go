@@ -13,6 +13,7 @@ import (
 	"github.com/Niutaq/Gix/pkg/scrapers"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
 func ScrapeAndProcess(ctx context.Context, app *infrastructure.AppState, ci infrastructure.CantorInfo, id int, currency string) (*pb.RateResponse, infrastructure.ProcessedRates, error) {
@@ -27,24 +28,30 @@ func ScrapeAndProcess(ctx context.Context, app *infrastructure.AppState, ci infr
 	duration := time.Since(start)
 
 	if app.JS != nil {
-		st := "static"
-		if ci.Strategy == "HEURISTIC" {
-			st = "heuristic"
-		}
+		st := classifyScraperType(ci.Strategy, scrapeResult.UsedScraperType)
 		event := &pb.ScrapeCompletedEvent{
 			ProviderId:  providerIDStr,
 			ScraperType: st,
 			DurationMs:  duration.Milliseconds(),
 			Timestamp:   time.Now().Unix(),
-			TraceId:     "",
+			TraceId:     traceIDFromContext(ctx),
 		}
-		protoBytes, _ := proto.Marshal(event)
-		_, _ = app.JS.PublishAsync("gix.scrape.v1.completed", protoBytes)
+		if protoBytes, marshalErr := proto.Marshal(event); marshalErr != nil {
+			log.Printf("FinOps Event Marshal Error: %v", marshalErr)
+		} else if _, publishErr := app.JS.Publish("gix.scrape.v1.completed", protoBytes); publishErr != nil {
+			log.Printf("FinOps Event Publish Error: %v", publishErr)
+		}
 	}
 
 	if err != nil {
 		return nil, infrastructure.ProcessedRates{}, err
 	}
+
+	ok, buyS, sellS := scrapers.SanitizePairForCurrency(currency, scrapeResult.BuyRate, scrapeResult.SellRate)
+	if !ok {
+		return nil, infrastructure.ProcessedRates{}, fmt.Errorf("rate rejected for %s (out of band or inverted)", currency)
+	}
+	scrapeResult.BuyRate, scrapeResult.SellRate = buyS, sellS
 
 	rates, err := processRates(scrapeResult, ci.Units)
 	if err != nil {
@@ -65,6 +72,24 @@ func ScrapeAndProcess(ctx context.Context, app *infrastructure.AppState, ci infr
 	}
 
 	return response, rates, nil
+}
+
+func classifyScraperType(strategy, used string) string {
+	if used != "" {
+		return used
+	}
+	if strategy == "HEURISTIC" {
+		return "heuristic"
+	}
+	return "static"
+}
+
+func traceIDFromContext(ctx context.Context) string {
+	span, ok := tracer.SpanFromContext(ctx)
+	if !ok || span == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d", span.Context().TraceID())
 }
 
 func runScrapeStrategy(ctx context.Context, ci infrastructure.CantorInfo, currency string) (scrapers.ScrapeResult, error) {
@@ -123,6 +148,10 @@ func SaveToArchive(db *pgxpool.Pool, cantorID int, currency string, buyRate, sel
 
 	buyF := float64(buyRate) / infrastructure.MoneyMultiplier
 	sellF := float64(sellRate) / infrastructure.MoneyMultiplier
+	if ok, _, _ := scrapers.SanitizePairForCurrency(currency, fmt.Sprintf("%.6f", buyF), fmt.Sprintf("%.6f", sellF)); !ok {
+		log.Printf("Archive Skip: rejected out-of-band %s for cantor %d (%.4f/%.4f)", currency, cantorID, buyF, sellF)
+		return
+	}
 
 	_, err := db.Exec(ctx,
 		"INSERT INTO rates (time, cantor_id, currency, buy_rate, sell_rate) VALUES (NOW(), $1, $2, $3, $4)",

@@ -37,7 +37,7 @@ func (g *GovernanceEngine) IsAllowed(providerID string) bool {
 func (g *GovernanceEngine) GetBlockedList() []string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	
+
 	var list []string
 	for id := range g.blocked {
 		list = append(list, id)
@@ -62,20 +62,25 @@ func (g *GovernanceEngine) StartMonitor(ctx context.Context, interval time.Durat
 }
 
 func (g *GovernanceEngine) evaluateGuardrails() {
+	if g.estimator == nil || g.estimator.db == nil {
+		return
+	}
 	// In a real scenario, you might query a list of active providers first.
 	// We query TimescaleDB for providers that exceeded the limit in the last 1 day.
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Ignore OpenCost cluster mirror rows — they are showback, not scrapers to throttle.
 	query := `
 		SELECT provider_id, SUM(estimated_cost_usd) as total_spend
 		FROM provider_unit_costs
 		WHERE time > NOW() - INTERVAL '1 day'
+		  AND provider_id NOT LIKE 'opencost:%'
 		GROUP BY provider_id
 		HAVING SUM(estimated_cost_usd) > $1
 	`
-	
+
 	rows, err := g.estimator.db.Query(ctx, query, g.limitUSD)
 	if err != nil {
 		log.Printf("[FinOps Governance] Failed to evaluate guardrails: %v", err)

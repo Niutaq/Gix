@@ -99,3 +99,51 @@ func HandleDeleteCantor(app *infrastructure.AppState) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 	}
 }
+
+// HandleDeleteAllCantors godoc
+// @Summary      Delete all heuristic cantors
+// @Description  Deletes every cantor with a HEURISTIC (or H*) scrape strategy, plus their rates.
+// @Tags         cantors
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]string
+// @Router       /cantors [delete]
+func HandleDeleteAllCantors(app *infrastructure.AppState) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		rows, err := app.DB.Query(ctx, `
+			SELECT id FROM cantors
+			WHERE strategy = 'HEURISTIC' OR strategy LIKE 'H%'
+		`)
+		if err != nil {
+			log.Printf("DB Delete-All list error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list cantors"})
+			return
+		}
+		defer rows.Close()
+
+		var ids []int
+		for rows.Next() {
+			var id int
+			if err := rows.Scan(&id); err != nil {
+				log.Printf("DB Delete-All scan error: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list cantors"})
+				return
+			}
+			ids = append(ids, id)
+		}
+
+		deleted := 0
+		for _, id := range ids {
+			_, _ = app.DB.Exec(ctx, "DELETE FROM rates WHERE cantor_id = $1", id)
+			res, err := app.DB.Exec(ctx, "DELETE FROM cantors WHERE id = $1", id)
+			if err != nil {
+				log.Printf("DB Delete-All cantor %d error: %v", id, err)
+				continue
+			}
+			deleted += int(res.RowsAffected())
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status": "deleted", "count": deleted})
+	}
+}

@@ -1,0 +1,44 @@
+# OpenCost (CNCF) — allocation & unit cost visibility for local k3s/k3d.
+# Absolute USD uses custom "local FOSS" rates (synthetic); relative allocation is real.
+
+opencost:
+  exporter:
+    defaultClusterId: gix-local
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # Custom pricing: approximate local/dev unit rates (not a cloud invoice).
+  # Purpose: make allocation & cost-flow diagrams meaningful without AWS/DO bills.
+  customPricing:
+    enabled: true
+    createConfigmap: true
+    provider: custom
+    costModel:
+      description: "Gix local FOSS rates (k3d) — relative FinOps, not cloud invoice"
+      CPU: "0.020000"          # $/CPU-hour
+      RAM: "0.003000"          # $/GB-hour
+      storage: "0.000100"      # $/GB-hour
+      GPU: "0.000000"
+      spotCPU: "0.010000"
+      spotRAM: "0.001500"
+      zoneNetworkEgress: "0.000000"
+      regionNetworkEgress: "0.000000"
+      internetNetworkEgress: "0.000000"
+
+  prometheus:
+    internal:
+      enabled: false
+    external:
+      enabled: true
+      url: http://prometheus-server.finops.svc.cluster.local
+
+  ui:
+    enabled: true
+
+service:
+  type: ClusterIP

@@ -6,10 +6,12 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	pb "github.com/Niutaq/Gix/api/proto/v1"
 	"github.com/Niutaq/Gix/internal/infrastructure"
 	"github.com/Niutaq/Gix/internal/services"
+	"github.com/Niutaq/Gix/pkg/types"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
@@ -54,7 +56,7 @@ func HandleGetRates(app *infrastructure.AppState) gin.HandlerFunc {
 		response, rates, err := services.ScrapeAndProcess(ctx, app, cantorInfo, cantorID, currency)
 		if err != nil {
 			log.Printf("Processing Error (%s): %v", cantorInfo.Strategy, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "processing failed"})
 			return
 		}
 
@@ -70,10 +72,13 @@ func HandleGetRates(app *infrastructure.AppState) gin.HandlerFunc {
 
 func parseRateParams(c *gin.Context) (int, string, error) {
 	cantorIDStr := c.Query("cantor_id")
-	currency := c.Query("currency")
+	currency := strings.ToUpper(strings.TrimSpace(c.Query("currency")))
 
 	if cantorIDStr == "" || currency == "" {
 		return 0, "", fmt.Errorf("missing cantor_id or currency")
+	}
+	if !isSupportedCurrency(currency) {
+		return 0, "", fmt.Errorf("unsupported currency")
 	}
 
 	cantorID, err := strconv.Atoi(cantorIDStr)
@@ -82,6 +87,15 @@ func parseRateParams(c *gin.Context) (int, string, error) {
 	}
 
 	return cantorID, currency, nil
+}
+
+func isSupportedCurrency(currency string) bool {
+	for _, supported := range types.GlobalCurrencies {
+		if currency == supported {
+			return true
+		}
+	}
+	return false
 }
 
 func respondFromCache(c *gin.Context, cache redis.UniversalClient, key string) bool {

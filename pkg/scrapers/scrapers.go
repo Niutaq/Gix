@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ const (
 	errorClosingResponseBody = "Error closing response body: %v\n"
 	errorNotFoundRates       = "not found rates for: %s"
 	awsMetadataIP            = "169.254.169.254"
+	maxDocCacheEntries       = 256
 )
 
 // ScrapeResult - struct for storing the scraped data
@@ -113,16 +115,18 @@ func FetchGenericTable(ctx context.Context, url, currency string) (ScrapeResult,
 	return ScrapeResult{BuyRate: buyRate, SellRate: sellRate}, nil
 }
 
-// httpClient - global http client with security timeouts
+// httpClient is a global client with SSRF-aware redirects and dialing.
 var httpClient = &http.Client{
-	Timeout: 15 * time.Second,
+	Timeout:       15 * time.Second,
+	Transport:     secureTransport(),
+	CheckRedirect: validateRedirect,
 }
 
 // AllowLocalhostForTesting is a flag used to bypass SSRF protections during unit tests.
 var AllowLocalhostForTesting bool
 
-// validateURL checks if the URL is safe to fetch (SSRF protection)
-func validateURL(rawURL string) error {
+// ValidateURL checks if the URL is safe to fetch (SSRF protection).
+func ValidateURL(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %v", err)
@@ -132,7 +136,65 @@ func validateURL(rawURL string) error {
 		return fmt.Errorf("unsupported protocol: %s", u.Scheme)
 	}
 
-	host := u.Hostname()
+	if u.Hostname() == "" {
+		return fmt.Errorf("missing host")
+	}
+
+	return validateHost(u.Hostname())
+}
+
+// validateURL is kept for package-internal callers that predate the exported helper.
+func validateURL(rawURL string) error {
+	return ValidateURL(rawURL)
+}
+
+func validateRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 5 {
+		return fmt.Errorf("too many redirects")
+	}
+	return ValidateURL(req.URL.String())
+}
+
+func secureTransport() *http.Transport {
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(address)
+			if err != nil {
+				return nil, err
+			}
+
+			ips, err := resolveAllowedIPs(host)
+			if err != nil {
+				return nil, err
+			}
+			sort.SliceStable(ips, func(i, j int) bool {
+				return bytes.Compare(ips[i], ips[j]) < 0
+			})
+
+			var lastErr error
+			for _, ip := range ips {
+				conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+				if err == nil {
+					return conn, nil
+				}
+				lastErr = err
+			}
+			if lastErr != nil {
+				return nil, lastErr
+			}
+			return nil, fmt.Errorf("no allowed IPs for host %s", host)
+		},
+	}
+}
+
+func validateHost(host string) error {
+	_, err := resolveAllowedIPs(host)
+	return err
+}
+
+func resolveAllowedIPs(host string) ([]net.IP, error) {
 	ips, err := net.LookupIP(host)
 	if err != nil {
 		// If we can't resolve, we might still allow if it's a direct IP, but we'll be strict
@@ -140,25 +202,39 @@ func validateURL(rawURL string) error {
 		if ip != nil {
 			ips = []net.IP{ip}
 		} else {
-			return fmt.Errorf("could not resolve host: %s", host)
+			return nil, fmt.Errorf("could not resolve host: %s", host)
 		}
+	}
+
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("host resolved to no addresses: %s", host)
 	}
 
 	for _, ip := range ips {
-		if AllowLocalhostForTesting && ip.IsLoopback() {
+		if isAllowedIP(ip) {
 			continue
 		}
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-			ip.IsLinkLocalMulticast() || ip.To4() == nil && !ip.IsGlobalUnicast() {
-			return fmt.Errorf("access to internal/private IP blocked: %s", ip.String())
-		}
-		// Metadata service blocking (AWS/GCP/Azure)
-		if ip.String() == awsMetadataIP {
-			return fmt.Errorf("access to metadata service blocked")
-		}
+		return nil, fmt.Errorf("access to internal/private IP blocked: %s", ip.String())
 	}
 
-	return nil
+	return ips, nil
+}
+
+func isAllowedIP(ip net.IP) bool {
+	if AllowLocalhostForTesting && ip.IsLoopback() {
+		return true
+	}
+	if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() {
+		return false
+	}
+	if ip.String() == awsMetadataIP {
+		return false
+	}
+	if ip.To4() == nil && !ip.IsGlobalUnicast() {
+		return false
+	}
+	return true
 }
 
 type cachedDoc struct {
@@ -216,6 +292,7 @@ func fetchDocument(ctx context.Context, url string) (*goquery.Document, error) {
 
 	// Store in cache for 30 seconds
 	docCacheMu.Lock()
+	pruneDocCacheLocked(time.Now())
 	docCache[url] = cachedDoc{
 		data:      bodyBytes,
 		expiresAt: time.Now().Add(30 * time.Second),
@@ -228,6 +305,23 @@ func fetchDocument(ctx context.Context, url string) (*goquery.Document, error) {
 	}
 
 	return doc, nil
+}
+
+func pruneDocCacheLocked(now time.Time) {
+	for key, doc := range docCache {
+		if now.After(doc.expiresAt) {
+			delete(docCache, key)
+		}
+	}
+	if len(docCache) <= maxDocCacheEntries {
+		return
+	}
+	for key := range docCache {
+		delete(docCache, key)
+		if len(docCache) <= maxDocCacheEntries {
+			return
+		}
+	}
 }
 
 // FetchC1 - scrapes C1

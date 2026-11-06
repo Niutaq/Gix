@@ -48,12 +48,7 @@ func InitSchema(ctx context.Context, db *pgxpool.Pool) error {
         UNIQUE (time, cantor_id, currency)
     );
     SELECT create_hypertable('rates', 'time', if_not_exists => TRUE);
-    DO $$
-    BEGIN
-        PERFORM add_retention_policy('rates', INTERVAL '30 days', if_not_exists => TRUE);
-    EXCEPTION WHEN OTHERS THEN
-        -- Ignore if it exists or fails
-    END $$;
+    SELECT add_retention_policy('rates', INTERVAL '30 days', if_not_exists => TRUE);
 
     CREATE TABLE IF NOT EXISTS provider_unit_costs (
         time        TIMESTAMPTZ       NOT NULL,
@@ -66,11 +61,23 @@ func InitSchema(ctx context.Context, db *pgxpool.Pool) error {
         resource_name VARCHAR(100)
     );
     SELECT create_hypertable('provider_unit_costs', 'time', if_not_exists => TRUE);
-    DO $$
-    BEGIN
-        PERFORM add_retention_policy('provider_unit_costs', INTERVAL '60 days', if_not_exists => TRUE);
-    EXCEPTION WHEN OTHERS THEN
-    END $$;
+    SELECT add_retention_policy('provider_unit_costs', INTERVAL '60 days', if_not_exists => TRUE);
+
+    CREATE TABLE IF NOT EXISTS focus_cost_records (
+        time TIMESTAMPTZ NOT NULL,
+        provider_name VARCHAR(50) NOT NULL DEFAULT 'OpenCost',
+        source VARCHAR(50) NOT NULL,
+        billed_cost NUMERIC(15, 10),
+        effective_cost NUMERIC(15, 10) NOT NULL,
+        service_category VARCHAR(50),
+        resource_name VARCHAR(100),
+        x_application VARCHAR(50) DEFAULT 'gix',
+        x_team VARCHAR(50) DEFAULT 'platform',
+        x_environment VARCHAR(50) DEFAULT 'local',
+        charge_description TEXT
+    );
+    SELECT create_hypertable('focus_cost_records', 'time', if_not_exists => TRUE);
+    SELECT add_retention_policy('focus_cost_records', INTERVAL '90 days', if_not_exists => TRUE);
     `
 	_, err := db.Exec(ctx, schema)
 	return err
@@ -103,19 +110,34 @@ func SetupNATS(nc *nats.Conn) nats.JetStreamContext {
 	}
 
 	log.Println("JetStream initialized.")
-	_, err = js.AddStream(&nats.StreamConfig{
+	ensureStream(js, &nats.StreamConfig{
 		Name:     "RATES",
 		Subjects: []string{"rates.*"},
 		MaxAge:   24 * time.Hour,
 		Storage:  nats.FileStorage,
 	})
-	if err != nil {
-		log.Printf("Warning: Could not create stream: %v", err)
-	}
+	ensureStream(js, &nats.StreamConfig{
+		Name:     "FINOPS_EVENTS",
+		Subjects: []string{"gix.scrape.v1.completed"},
+		MaxAge:   60 * 24 * time.Hour,
+		Storage:  nats.FileStorage,
+	})
 	return js
 }
 
+func ensureStream(js nats.JetStreamContext, cfg *nats.StreamConfig) {
+	if _, err := js.StreamInfo(cfg.Name); err == nil {
+		return
+	}
+	if _, err := js.AddStream(cfg); err != nil {
+		log.Printf("Warning: Could not create stream %s: %v", cfg.Name, err)
+	}
+}
+
 func SyncCantorsToES(app *AppState) {
+	if app == nil || app.Search == nil {
+		return
+	}
 	ctx := context.Background()
 	rows, err := app.DB.Query(ctx, "SELECT id, display_name, name, latitude, longitude FROM cantors")
 	if err != nil {
@@ -124,14 +146,21 @@ func SyncCantorsToES(app *AppState) {
 	}
 	defer rows.Close()
 
+	var failCount int
+	var lastErr error
 	for rows.Next() {
 		var cr search.CantorRecord
 		if err := rows.Scan(&cr.ID, &cr.DisplayName, &cr.Name, &cr.Location.Lat, &cr.Location.Lon); err != nil {
 			continue
 		}
 		if err := app.Search.IndexCantor(cr); err != nil {
-			log.Printf("Sync ES Error for %s: %v", cr.DisplayName, err)
+			failCount++
+			lastErr = err
 		}
+	}
+	if failCount > 0 {
+		log.Printf("Sync ES: %d cantor(s) failed (last error: %v)", failCount, lastErr)
+		return
 	}
 	log.Println("Sync completed: All cantors pushed to Elasticsearch.")
 }

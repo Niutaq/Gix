@@ -13,7 +13,7 @@ const (
 	ScraperStatic    ScraperType = "static"
 	ScraperHeuristic ScraperType = "heuristic"
 	ScraperDiscovery ScraperType = "discovery" // e.g., Geocoding/URL Analysis
-	ScraperLLM       ScraperType = "llm"       // AI-powered operations (Gemini)
+	ScraperLLM       ScraperType = "llm"       // AI-powered operations (offline Ollama by default)
 )
 
 // GlobalStats tracks real-time performance metrics
@@ -74,26 +74,28 @@ type ResourceRates struct {
 	HeuristicPremium float64
 	ExternalAPICost  float64
 	AITokenCost      float64 // Cost per AI request (estimated)
-	// Legacy fields for compatibility
+	// Legacy fields kept for API compatibility (historical DO profile)
 	DropletStandardBasic float64
 	LoadBalancerStandard float64
 }
 
-// DefaultRates for DigitalOcean / K8s managed nodes
+// DefaultRates mirrors local FOSS / OpenCost custom pricing (k8s/finops/values-opencost.yaml).
+// Absolute USD is for relative ranking & guardrails — not a cloud invoice.
 var DefaultRates = ResourceRates{
-	CPUCoreHour:          0.032,
-	RAMGBHour:            0.005,
+	CPUCoreHour:          0.020,
+	RAMGBHour:            0.003,
 	HeuristicPremium:     1.5,
 	ExternalAPICost:      0.0001,
-	AITokenCost:          0.0005, // Gemini 1.5 Flash approx cost per request
-	DropletStandardBasic: 0.00893,
-	LoadBalancerStandard: 0.02232,
+	AITokenCost:          0.00005, // local Ollama unit estimate (electricity/amortization, not cloud tokens)
+	DropletStandardBasic: 0.00893, // legacy DO reference
+	LoadBalancerStandard: 0.02232, // legacy DO reference
 }
 
-// Summary calculates the estimated monthly cost (Legacy compatibility)
+// Summary describes the active FinOps profile (local CNCF stack by default).
 func (r ResourceRates) Summary(droplets, lbs int) string {
-	hourly := (float64(droplets) * r.DropletStandardBasic) + (float64(lbs) * r.LoadBalancerStandard)
-	return fmt.Sprintf("FinOps Profile: Estimated spend $%.2f/mo", hourly*672) // montly hours (estimated for every month)
+	_ = droplets
+	_ = lbs
+	return "FinOps Profile: local CNCF/FOSS (k3d + OpenCost) — $0 cloud bill; synthetic unit rates for allocation"
 }
 
 // CalculateTaskCost computes the real-time cost of an operation based on resource consumption
@@ -124,12 +126,23 @@ type OptimizationTip struct {
 
 // GenerateTips analyzes the current state and suggests savings
 func GenerateTips(dropletCount, lbCount int) []OptimizationTip {
-	var tips []OptimizationTip
-	if lbCount > 0 {
+	tips := []OptimizationTip{
+		{
+			Title:       "Prefer local OpenCost over paid APM for FinOps",
+			Description: "Use task finops:bootstrap (Prometheus + OpenCost + Grafana) for allocation without a cloud or Datadog bill.",
+			Potential:   0,
+		},
+		{
+			Title:       "Keep LLM scrapers behind the governance circuit breaker",
+			Description: "Heuristic/LLM paths dominate unit spend. Block providers that exceed the daily budget before adding capacity.",
+			Potential:   0,
+		},
+	}
+	if lbCount > 1 || dropletCount > 1 {
 		tips = append(tips, OptimizationTip{
-			Title:       "Consolidate Load Balancer",
-			Description: "Digital Ocean LBs cost $15/mo. Consider using a NodePort or HostPort Ingress if traffic is low.",
-			Potential:   15.0,
+			Title:       "Legacy cloud profile detected",
+			Description: "DO/AWS paths are archival. Prefer k3d + Compose unless free credits return.",
+			Potential:   0,
 		})
 	}
 	return tips

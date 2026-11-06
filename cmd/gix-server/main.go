@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -53,11 +54,29 @@ func main() {
 		log.Fatal("Can't start server. Missing DATABASE_URL or REDIS_URL environment variables.")
 	}
 
-	apiKey := os.Getenv("GEMINI_API_KEY")
-	if apiKey == "" {
-		log.Printf("[Gemini] Warning: GEMINI_API_KEY not set. LLM Fallback will be disabled.")
-	} else {
-		log.Printf("[Gemini] API Key configured. LLM Fallback is active.")
+	provider := strings.ToLower(strings.TrimSpace(os.Getenv("LLM_PROVIDER")))
+	if provider == "" {
+		provider = "ollama"
+	}
+	switch provider {
+	case "ollama", "auto":
+		model := os.Getenv("OLLAMA_MODEL")
+		if model == "" {
+			model = "llama3.2"
+		}
+		base := os.Getenv("OLLAMA_URL")
+		if base == "" {
+			base = "http://127.0.0.1:11434"
+		}
+		log.Printf("[LLM] Offline provider=%s model=%s url=%s (no API key)", provider, model, base)
+	case "gemini":
+		if os.Getenv("GEMINI_API_KEY") == "" {
+			log.Printf("[LLM] Warning: LLM_PROVIDER=gemini but GEMINI_API_KEY is empty")
+		} else {
+			log.Printf("[LLM] Legacy cloud Gemini configured")
+		}
+	default:
+		log.Printf("[LLM] Unknown LLM_PROVIDER=%q — defaulting to ollama", provider)
 	}
 
 	dbpool, err := infrastructure.ConnectToDB(ctx, databaseURL)
@@ -102,7 +121,8 @@ func main() {
 	}
 	se, err := search.NewSearchEngine(esURL)
 	if err != nil {
-		log.Printf("Warning: Failed to connect to Elasticsearch: %v", err)
+		log.Printf("[Search] Elasticsearch not running (optional) — skipping geo search sync")
+		se = nil
 	} else {
 		go func() {
 			for i := 0; i < 5; i++ {
@@ -115,8 +135,8 @@ func main() {
 	}
 
 	log.Println("--- FinOps Analysis ---")
-	log.Println(finops.DefaultRates.Summary(1, 1))
-	for _, tip := range finops.GenerateTips(1, 1) {
+	log.Println(finops.DefaultRates.Summary(0, 0))
+	for _, tip := range finops.GenerateTips(0, 0) {
 		log.Printf("[TIP] %s: %s (Potential: $%.2f/mo)", tip.Title, tip.Description, tip.Potential)
 	}
 	log.Println("-----------------------")
