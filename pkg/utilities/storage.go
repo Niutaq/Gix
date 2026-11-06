@@ -11,9 +11,9 @@ import (
 
 // CachedData represents the cached application state.
 type CachedData struct {
-	Cantors map[string]*CantorInfo            `json:"cantors"`
+	Cantors map[string]*CantorInfo             `json:"cantors"`
 	Rates   map[string]map[string]*CantorEntry `json:"rates"`
-	SavedAt time.Time                         `json:"savedAt"`
+	SavedAt time.Time                          `json:"savedAt"`
 }
 
 // GetCachePath returns the path to the cache file.
@@ -30,11 +30,28 @@ func GetCachePath() string {
 // SaveCache saves the current application state (cantors and rates) to a local JSON file.
 func SaveCache(state *AppState) {
 	state.CantorsMu.RLock()
-	cantors := state.Cantors
+	cantors := make(map[string]*CantorInfo, len(state.Cantors))
+	for k, v := range state.Cantors {
+		if v == nil {
+			continue
+		}
+		copied := *v
+		cantors[k] = &copied
+	}
 	state.CantorsMu.RUnlock()
 
 	state.Vault.Mu.Lock()
-	rates := state.Vault.Rates
+	rates := make(map[string]map[string]*CantorEntry, len(state.Vault.Rates))
+	for curr, currMap := range state.Vault.Rates {
+		rates[curr] = make(map[string]*CantorEntry, len(currMap))
+		for cantorID, entry := range currMap {
+			if entry == nil {
+				continue
+			}
+			copied := *entry
+			rates[curr][cantorID] = &copied
+		}
+	}
 	state.Vault.Mu.Unlock()
 
 	data := CachedData{

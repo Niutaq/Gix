@@ -30,21 +30,26 @@ type LineChart struct {
 	Data        []float64
 	ExtraSeries [][]float64 // Additional lines for comparison (pinned cantors)
 	Timestamps  []int64     // Unix timestamps corresponding to Data points
+	WindowStart int64       // requested timeframe start (unix) — X axis span
+	WindowEnd   int64       // requested timeframe end (unix)
 	StartLabel  string
 	Tag         any // Tag for pointer events
 }
 
 // chartLayoutContext holds pre-calculated layout values to avoid passing too many arguments.
 type chartLayoutContext struct {
-	width      float32
-	height     float32
-	paddingX   float32
-	chartWidth float32
-	minVal     float64
-	maxVal     float64
-	minPlotVal float64
-	maxPlotVal float64
-	plotRange  float64
+	width       float32
+	height      float32
+	paddingX    float32
+	chartWidth  float32
+	minVal      float64
+	maxVal      float64
+	minPlotVal  float64
+	maxPlotVal  float64
+	plotRange   float64
+	windowStart int64
+	windowEnd   int64
+	timestamps  []int64
 }
 
 // Layout renders the line chart within the given constraints.
@@ -71,11 +76,11 @@ func (lc *LineChart) Layout(gtx layout.Context, window *app.Window, theme *mater
 		if extraAlpha < 20 {
 			extraAlpha = 20
 		}
-		drawSingleChartLine(gtx, window, ctx, series, extraAlpha, false)
+		drawSingleChartLine(gtx, window, ctx, series, nil, extraAlpha, false)
 	}
 
 	// 2. Draw Main Series (bold line)
-	drawSingleChartLine(gtx, window, ctx, lc.Data, alpha, true)
+	drawSingleChartLine(gtx, window, ctx, lc.Data, lc.Timestamps, alpha, true)
 
 	drawChartLabels(gtx, theme, ctx, lc, alpha, state.Language)
 
@@ -87,12 +92,12 @@ func (lc *LineChart) Layout(gtx layout.Context, window *app.Window, theme *mater
 }
 
 // drawSingleChartLine renders a single line (and optional gradient fill).
-func drawSingleChartLine(gtx layout.Context, window *app.Window, ctx chartLayoutContext, data []float64, alpha uint8, isMain bool) {
+func drawSingleChartLine(gtx layout.Context, window *app.Window, ctx chartLayoutContext, data []float64, timestamps []int64, alpha uint8, isMain bool) {
 	var path clip.Path
 
 	total := len(data)
-	startPt := getPoint(ctx, 0, total, data[0])
-	lastPt := getPoint(ctx, total-1, total, data[total-1])
+	startPt := getPointAt(ctx, 0, total, data[0], timestamps)
+	lastPt := getPointAt(ctx, total-1, total, data[total-1], timestamps)
 
 	if isMain {
 		// Gradient Fill for main series only
@@ -106,7 +111,7 @@ func drawSingleChartLine(gtx layout.Context, window *app.Window, ctx chartLayout
 		path.Begin(gtx.Ops)
 		path.MoveTo(startPt)
 		for i := 1; i < total; i++ {
-			path.LineTo(getPoint(ctx, i, total, data[i]))
+			path.LineTo(getPointAt(ctx, i, total, data[i], timestamps))
 		}
 
 		path.LineTo(f32.Point{X: lastPt.X, Y: ctx.height})
@@ -128,7 +133,7 @@ func drawSingleChartLine(gtx layout.Context, window *app.Window, ctx chartLayout
 	linePath.Begin(gtx.Ops)
 	linePath.MoveTo(startPt)
 	for i := 1; i < total; i++ {
-		linePath.LineTo(getPoint(ctx, i, total, data[i]))
+		linePath.LineTo(getPointAt(ctx, i, total, data[i], timestamps))
 	}
 	pathSpec := linePath.End()
 
@@ -227,16 +232,26 @@ func calculateChartLayout(gtx layout.Context, lc *LineChart) chartLayoutContext 
 	verticalPadding := rangeVal * 0.25
 	paddingX := float32(16.0)
 
+	winStart, winEnd := lc.WindowStart, lc.WindowEnd
+	if winStart <= 0 || winEnd <= winStart {
+		if len(lc.Timestamps) >= 2 {
+			winStart, winEnd = lc.Timestamps[0], lc.Timestamps[len(lc.Timestamps)-1]
+		}
+	}
+
 	return chartLayoutContext{
-		width:      width,
-		height:     height,
-		paddingX:   paddingX,
-		chartWidth: width - (paddingX * 2),
-		minVal:     minVal,
-		maxVal:     maxVal,
-		minPlotVal: minVal - verticalPadding,
-		maxPlotVal: maxVal + verticalPadding,
-		plotRange:  (maxVal + verticalPadding) - (minVal - verticalPadding),
+		width:       width,
+		height:      height,
+		paddingX:    paddingX,
+		chartWidth:  width - (paddingX * 2),
+		minVal:      minVal,
+		maxVal:      maxVal,
+		minPlotVal:  minVal - verticalPadding,
+		maxPlotVal:  maxVal + verticalPadding,
+		plotRange:   (maxVal + verticalPadding) - (minVal - verticalPadding),
+		windowStart: winStart,
+		windowEnd:   winEnd,
+		timestamps:  lc.Timestamps,
 	}
 }
 
@@ -261,8 +276,8 @@ func DrawChartLines(gtx layout.Context, window *app.Window, ctx chartLayoutConte
 	var path clip.Path
 
 	total := len(lc.Data)
-	startPt := getPoint(ctx, 0, total, lc.Data[0])
-	lastPt := getPoint(ctx, total-1, total, lc.Data[total-1])
+	startPt := getPointAt(ctx, 0, total, lc.Data[0], lc.Timestamps)
+	lastPt := getPointAt(ctx, total-1, total, lc.Data[total-1], lc.Timestamps)
 
 	// Gradient Fill
 	gradAlpha := alpha / 4
@@ -275,7 +290,7 @@ func DrawChartLines(gtx layout.Context, window *app.Window, ctx chartLayoutConte
 	path.Begin(gtx.Ops)
 	path.MoveTo(startPt)
 	for i := 1; i < total; i++ {
-		path.LineTo(getPoint(ctx, i, total, lc.Data[i]))
+		path.LineTo(getPointAt(ctx, i, total, lc.Data[i], lc.Timestamps))
 	}
 
 	path.LineTo(f32.Point{X: lastPt.X, Y: ctx.height})
@@ -296,7 +311,7 @@ func DrawChartLines(gtx layout.Context, window *app.Window, ctx chartLayoutConte
 	linePath.Begin(gtx.Ops)
 	linePath.MoveTo(startPt)
 	for i := 1; i < total; i++ {
-		linePath.LineTo(getPoint(ctx, i, total, lc.Data[i]))
+		linePath.LineTo(getPointAt(ctx, i, total, lc.Data[i], lc.Timestamps))
 	}
 	pathSpec := linePath.End()
 
@@ -370,7 +385,7 @@ func drawChartLabels(gtx layout.Context, theme *material.Theme, ctx chartLayoutC
 	// 1. Last Value Label
 	total := len(lc.Data)
 	lastVal := lc.Data[total-1]
-	lastPt := getPoint(ctx, total-1, total, lastVal)
+	lastPt := getPointAt(ctx, total-1, total, lastVal, lc.Timestamps)
 
 	valTxt := fmt.Sprintf("%.3f", lastVal)
 	lblVal := material.Caption(theme, valTxt)
@@ -423,7 +438,10 @@ func drawChartLabels(gtx layout.Context, theme *material.Theme, ctx chartLayoutC
 	startTxt := lc.StartLabel
 	endTxt := ""
 
-	if len(lc.Timestamps) >= 2 {
+	if lc.WindowStart > 0 && lc.WindowEnd > lc.WindowStart {
+		startTxt = GetFormattedDate(lang, time.Unix(lc.WindowStart, 0))
+		endTxt = GetFormattedDate(lang, time.Unix(lc.WindowEnd, 0))
+	} else if len(lc.Timestamps) >= 2 {
 		startTxt = GetFormattedDate(lang, time.Unix(lc.Timestamps[0], 0))
 		endTxt = GetFormattedDate(lang, time.Unix(lc.Timestamps[len(lc.Timestamps)-1], 0))
 	}
@@ -469,13 +487,13 @@ func drawTooltip(gtx layout.Context, theme *material.Theme, ctx chartLayoutConte
 		relativeX = ctx.chartWidth
 	}
 
-	hoverIdx := int(math.Round(float64(relativeX / ctx.chartWidth * float32(len(lc.Data)-1))))
+	hoverIdx := nearestIndexForChartX(ctx, lc, relativeX)
 	if hoverIdx < 0 || hoverIdx >= len(lc.Data) {
 		return
 	}
 
 	hoverVal := lc.Data[hoverIdx]
-	hoverPt := getPoint(ctx, hoverIdx, len(lc.Data), hoverVal)
+	hoverPt := getPointAt(ctx, hoverIdx, len(lc.Data), hoverVal, lc.Timestamps)
 
 	// Vertical line
 	lineRect := image.Rect(int(hoverPt.X), 0, int(hoverPt.X)+1, int(ctx.height))
@@ -576,9 +594,58 @@ func drawTooltip(gtx layout.Context, theme *material.Theme, ctx chartLayoutConte
 	resetOffset(tipOffset)
 }
 
-// getPoint calculates the x and y coordinates for a given data point on the chart.
+func nearestIndexForChartX(ctx chartLayoutContext, lc *LineChart, relativeX float32) int {
+	n := len(lc.Data)
+	if n == 0 {
+		return -1
+	}
+	if n == 1 {
+		return 0
+	}
+	if len(lc.Timestamps) == n && ctx.windowEnd > ctx.windowStart {
+		best, bestDist := 0, float32(1e9)
+		for i := 0; i < n; i++ {
+			pt := getPointAt(ctx, i, n, lc.Data[i], lc.Timestamps)
+			d := float32(math.Abs(float64(pt.X - (ctx.paddingX + relativeX))))
+			if d < bestDist {
+				bestDist, best = d, i
+			}
+		}
+		return best
+	}
+	idx := int(math.Round(float64(relativeX / ctx.chartWidth * float32(n-1))))
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= n {
+		idx = n - 1
+	}
+	return idx
+}
+
+// getPoint calculates the x and y coordinates for a given data point on the chart (even index spacing).
 func getPoint(ctx chartLayoutContext, i int, totalPoints int, val float64) f32.Point {
-	x := ctx.paddingX + (float32(i)/float32(totalPoints-1))*ctx.chartWidth
+	return getPointAt(ctx, i, totalPoints, val, nil)
+}
+
+// getPointAt places X by real timestamp inside WindowStart..WindowEnd when possible,
+// so 1D / 7D / 30D with sparse points still span different horizontal windows.
+func getPointAt(ctx chartLayoutContext, i int, totalPoints int, val float64, timestamps []int64) f32.Point {
+	var x float32
+	if timestamps != nil && i >= 0 && i < len(timestamps) && ctx.windowEnd > ctx.windowStart {
+		frac := float64(timestamps[i]-ctx.windowStart) / float64(ctx.windowEnd-ctx.windowStart)
+		if frac < 0 {
+			frac = 0
+		}
+		if frac > 1 {
+			frac = 1
+		}
+		x = ctx.paddingX + float32(frac)*ctx.chartWidth
+	} else if totalPoints > 1 {
+		x = ctx.paddingX + (float32(i)/float32(totalPoints-1))*ctx.chartWidth
+	} else {
+		x = ctx.paddingX
+	}
 	normalizedY := (val - ctx.minPlotVal) / ctx.plotRange
 	y := ctx.height - (float32(normalizedY) * ctx.height)
 	return f32.Point{X: x, Y: y}
@@ -599,13 +666,12 @@ func GenerateFakeData(points int, basePrice float64, seed int64) []float64 {
 	}
 
 	phaseShift := float64(seed % 100)
-	trendMultiplier := math.Sin(float64(seed)) * 0.02 // Can be positive or negative
 
 	for i := range points {
 		x := float64(i)*0.1 + phaseShift
 		volatility := basePrice * 0.01
 		sineComponent := math.Sin(x) * volatility * 0.5
-		trendComponent := float64(i) * (volatility * trendMultiplier)
+		trendComponent := float64(i) * (volatility * 0.01)
 		microNoise := math.Cos(x*3.0+float64(seed)) * volatility * 0.2
 		val := basePrice + sineComponent + trendComponent + microNoise
 		data[i] = val

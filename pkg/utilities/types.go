@@ -109,7 +109,8 @@ const (
 // UIState holds UI-specific state and widgets.
 type UIState struct {
 	IsFinOpsDashboardOpen bool
-	FinOpsBtn             widget.Clickable
+	FinOpsBtn             widget.Clickable // header / panel close
+	ControlPanelMenuBtn   widget.Clickable // mobile drawer entry
 	ModalOpen             string
 	ModalAnimStart        time.Time
 	LangModalButton       widget.Clickable
@@ -117,6 +118,13 @@ type UIState struct {
 	ModalClick            widget.Clickable
 	ModalList             widget.List
 	ModalClose            widget.Clickable
+	// Language wheel picker (macOS-style tumbler)
+	LangWheelTag      int
+	LangWheelScroll   float32 // fractional row index of the centered item
+	LangWheelTarget   float32
+	LangWheelSettling bool
+	LangWheelSynced   bool
+	LangWheelClicks   []widget.Clickable
 
 	MobileMenuOpen       bool
 	MobileMenuBtn        widget.Clickable
@@ -164,6 +172,15 @@ type UIState struct {
 		ZoomOutBtn widget.Clickable
 	}
 
+	ControlPanelTab  int // 0=FinOps, 1=Scraper, 2=Providers, 3=Geo, 4=Debug
+	ControlPanelTabs []widget.Clickable
+	ControlPanelList widget.List
+	ScraperIntervalEditor widget.Editor
+	ScraperTimeoutEditor  widget.Editor
+	GeoRadiusEditor       widget.Editor
+	MapTilerKeyEditor     widget.Editor
+	DebugLogLines         []string
+
 	PinnedIDs       []string
 	GeocodingActive bool
 	ScannedChunks   map[string]bool
@@ -171,6 +188,7 @@ type UIState struct {
 	MaxDistance     float64
 	DistanceSlider  widget.Float
 	LocateButton    widget.Clickable
+	DiscoverButton  widget.Clickable
 	// Long Press for Locate
 	LocatePressStart         time.Time
 	LocateIsPressing         bool
@@ -213,11 +231,15 @@ type UIState struct {
 	LightMode   bool
 	ThemeButton widget.Clickable
 
+	MapTilerAPIKey string
+
 	SortMode         string // "NAME", "BUY", "SELL", "DIST"
 	LastSortMode     string // To detect changes
 	SortButtons      []widget.Clickable
+	DeleteAllButton  widget.Clickable
 	Timeframe        string // "1D", "7D", "30D"
 	TimeframeButtons []widget.Clickable
+	HistoryDays      int // last requested history window (1/7/30)
 
 	CantorsList widget.List
 }
@@ -251,7 +273,9 @@ type AppState struct {
 	CantorsMu      sync.RWMutex
 	Cantors        map[string]*CantorInfo
 	Search         *search.SearchEngine
+	HistoryMu      sync.RWMutex
 	History        *pb.HistoryResponse
+	FinOpsMu       sync.RWMutex
 	FinOps         FinOpsStatus
 	ChartAnimStart time.Time // Tracks when the chart data was last updated for animation
 	LastFrameTime  time.Time
@@ -263,6 +287,51 @@ type AppState struct {
 	UI             UIState
 }
 
+func (s *AppState) SetHistory(history *pb.HistoryResponse) {
+	s.HistoryMu.Lock()
+	defer s.HistoryMu.Unlock()
+	s.History = history
+}
+
+func (s *AppState) HistorySnapshot() *pb.HistoryResponse {
+	s.HistoryMu.RLock()
+	defer s.HistoryMu.RUnlock()
+	if s.History == nil {
+		return nil
+	}
+	copied := *s.History
+	if s.History.Points != nil {
+		copied.Points = append([]*pb.HistoryPoint(nil), s.History.Points...)
+	}
+	return &copied
+}
+
+func (s *AppState) SetFinOpsStatus(status FinOpsStatus) {
+	s.FinOpsMu.Lock()
+	defer s.FinOpsMu.Unlock()
+	s.FinOps = cloneFinOpsStatus(status)
+}
+
+func (s *AppState) FinOpsSnapshot() FinOpsStatus {
+	s.FinOpsMu.RLock()
+	defer s.FinOpsMu.RUnlock()
+	return cloneFinOpsStatus(s.FinOps)
+}
+
+func cloneFinOpsStatus(status FinOpsStatus) FinOpsStatus {
+	if status.BlockedProviders != nil {
+		status.BlockedProviders = append([]string(nil), status.BlockedProviders...)
+	}
+	if status.ServiceBreakdown != nil {
+		breakdown := make(map[string]string, len(status.ServiceBreakdown))
+		for k, v := range status.ServiceBreakdown {
+			breakdown[k] = v
+		}
+		status.ServiceBreakdown = breakdown
+	}
+	return status
+}
+
 // AppConfig stores app configuration
 type AppConfig struct {
 	APICantorsURL  string
@@ -271,6 +340,7 @@ type AppConfig struct {
 	APIFinOpsURL   string
 	APIDiscoverURL string
 	DRPCServerURL  string
+	MapTilerAPIKey string
 }
 
 // ApiCantorResponse for parsing JSON

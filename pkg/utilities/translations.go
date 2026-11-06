@@ -31,11 +31,11 @@ var monthNames = map[string][]string{
 	"HR": {"Sij", "Vel", "Ožu", "Tra", "Svi", "Lip", "Srp", "Kol", "Ruj", "Lis", "Stu", "Pro"},
 	"DA": {"Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"},
 	"NO": {"Jan", "Feb", "Mar", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Des"},
-	"SW": {"Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"},
+	"SV": {"Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"},
 	"TR": {"Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"},
 	"AL": {"Jan", "Shk", "Mar", "Pri", "Maj", "Qer", "Kor", "Gus", "Sht", "Tet", "Nën", "Dhj"},
-	"IC": {"Jan", "Feb", "Mar", "Apr", "Maí", "Jún", "Júl", "Ágú", "Sep", "Okt", "Nóv", "Des"},
-	"BU": {"Яну", "Фев", "Мар", "Апр", "Май", "Юни", "Юли", "Авг", "Сеп", "Окт", "Ное", "Дек"},
+	"IS": {"Jan", "Feb", "Mar", "Apr", "Maí", "Jún", "Júl", "Ágú", "Sep", "Okt", "Nóv", "Des"},
+	"BG": {"Яну", "Фев", "Мар", "Апр", "Май", "Юни", "Юли", "Авг", "Сеп", "Окт", "Ное", "Дек"},
 }
 
 // GetFormattedDate returns a date string localized for the given language (e.g. "24 Jan").
@@ -64,8 +64,8 @@ func InitTranslations() {
 		translationsMap = make(map[string]map[string]string)
 
 		langs := []string{
-			"en", "pl", "de", "da", "no", "fr", "sw", "cz",
-			"hr", "hu", "ua", "bu", "ro", "al", "tr", "ic",
+			"en", "pl", "de", "da", "no", "fr", "sv", "cz",
+			"hr", "hu", "ua", "bg", "ro", "al", "tr", "is",
 		}
 
 		for _, lang := range langs {
@@ -90,13 +90,27 @@ func InitTranslations() {
 	})
 }
 
+// NormalizeLanguageCode maps legacy codes (SW/BU/IC) to ISO 639-1 (SV/BG/IS).
+func NormalizeLanguageCode(lang string) string {
+	switch strings.ToUpper(strings.TrimSpace(lang)) {
+	case "SW":
+		return "SV"
+	case "BU":
+		return "BG"
+	case "IC":
+		return "IS"
+	default:
+		return strings.ToUpper(strings.TrimSpace(lang))
+	}
+}
+
 // GetTranslation retrieves the translation for a given language and key. Defaults to English or returns the key if unavailable.
 func GetTranslation(lang, key string) string {
 	if translationsMap == nil {
 		InitTranslations()
 	}
 
-	lang = strings.ToUpper(lang)
+	lang = NormalizeLanguageCode(lang)
 
 	if langMap, ok := translationsMap[lang]; ok {
 		if val, ok := langMap[key]; ok {

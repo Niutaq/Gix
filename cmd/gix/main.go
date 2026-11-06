@@ -18,11 +18,9 @@
 package main
 
 import (
-	// Standard libraries
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
@@ -31,7 +29,6 @@ import (
 	"runtime/trace"
 	"time"
 
-	// Gio utilities
 	"gioui.org/app"
 	"gioui.org/io/key"
 	"gioui.org/op"
@@ -40,7 +37,6 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
-	// External utilities
 	"github.com/Niutaq/Gix/pkg/types"
 	"github.com/Niutaq/Gix/pkg/utilities"
 )
@@ -74,7 +70,7 @@ func main() {
 		base = base[:len(base)-1]
 	}
 
-	drpcBase := "127.0.0.1:8081"
+	drpcBase := "localhost:8081"
 	if base == "http://"+remoteAPIHost+":8080" {
 		drpcBase = remoteAPIHost + ":8081"
 	}
@@ -86,6 +82,7 @@ func main() {
 		APIFinOpsURL:   base + "/api/v1/finops",
 		APIDiscoverURL: base + "/api/v1/discover",
 		DRPCServerURL:  drpcBase,
+		MapTilerAPIKey: os.Getenv("MAPTILER_API_KEY"),
 	}
 
 	// Start pprof server for performance analysis
@@ -123,16 +120,27 @@ func run(window *app.Window, config utilities.AppConfig) error {
 	// Start background services
 	go utilities.StartDRPCStream(window, state, config.DRPCServerURL)
 	go utilities.StartFinOpsMonitoring(window, state, config)
+	utilities.InitLocationOnStartup(window, state)
 
 	var ops op.Ops
+	iconApplied := false
 	for {
 		switch e := window.Event().(type) {
 		case app.DestroyEvent:
 			return e.Err
 		case app.FrameEvent:
+			// Dock icon after NSApp exists (go run / Ghostty).
+			if !iconApplied {
+				utilities.ApplyAppIcon()
+				iconApplied = true
+			}
 			handleFrame(window, &ops, e, state, config, cantorChan, theme)
 		case key.Event:
 			if e.State == key.Press {
+				// Language tumbler steals ↑↓ / Enter / Esc while open.
+				if utilities.HandleLanguageWheelKey(state, window, e) {
+					continue
+				}
 				switch e.Name {
 				case "F", "f":
 					state.UI.IsFinOpsDashboardOpen = !state.UI.IsFinOpsDashboardOpen
@@ -150,7 +158,7 @@ func run(window *app.Window, config utilities.AppConfig) error {
 func setupApplication(window *app.Window, config utilities.AppConfig) (*utilities.AppState, *material.Theme, chan []utilities.ApiCantorResponse) {
 	utilities.InitTranslations()
 
-	state := initializeAppState()
+	state := initializeAppState(config)
 	utilities.LoadCache(state)
 	cantorChan := make(chan []utilities.ApiCantorResponse, 1)
 	loadCantorsAsync(window, cantorChan, config)
@@ -171,7 +179,7 @@ func setupApplication(window *app.Window, config utilities.AppConfig) (*utilitie
 }
 
 // initializeAppState initializes the application state with default values.
-func initializeAppState() *utilities.AppState {
+func initializeAppState(config utilities.AppConfig) *utilities.AppState {
 	state := &utilities.AppState{
 		Vault: &utilities.CantorVault{
 			Rates: make(map[string]map[string]*utilities.CantorEntry),
@@ -187,11 +195,14 @@ func initializeAppState() *utilities.AppState {
 			SortMode:              "NAME",
 			SortButtons:           make([]widget.Clickable, 4),
 			Timeframe:             "7D",
+			HistoryDays:           7,
 			TimeframeButtons:      make([]widget.Clickable, 3),
 			IntroAnim: utilities.IntroAnim{
 				Active:    runtime.GOOS != "linux",
 				StartTime: time.Now(),
 			},
+			ControlPanelTabs: make([]widget.Clickable, 5),
+			MapTilerAPIKey:   config.MapTilerAPIKey,
 		},
 	}
 	setupUILists(state)
@@ -284,25 +295,26 @@ func updateCantors(window *app.Window, state *utilities.AppState, config utiliti
 func loadCantorsAsync(window *app.Window, out chan<- []utilities.ApiCantorResponse, config utilities.AppConfig) {
 	go func() {
 		client := http.Client{Timeout: 5 * time.Second}
-		resp, err := client.Get(config.APICantorsURL)
-		if err != nil {
-			log.Println("Error fetching cantors:", err)
-			return
-		}
-		defer func(Body io.ReadCloser) {
-			err := Body.Close()
-			if err != nil {
-				log.Println("Error closing response body:", err)
-			}
-		}(resp.Body)
-
 		var list []utilities.ApiCantorResponse
-		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
-			log.Println("Error parsing cantors:", err)
+		var lastErr error
+		for attempt := 1; attempt <= 8; attempt++ {
+			resp, err := client.Get(config.APICantorsURL)
+			if err != nil {
+				lastErr = err
+				time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+				continue
+			}
+			decodeErr := json.NewDecoder(resp.Body).Decode(&list)
+			_ = resp.Body.Close()
+			if decodeErr != nil {
+				lastErr = decodeErr
+				time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+				continue
+			}
+			out <- list
+			window.Invalidate()
 			return
 		}
-
-		out <- list
-		window.Invalidate()
+		log.Printf("Could not fetch cantors after retries (is backend up?): %v", lastErr)
 	}()
 }

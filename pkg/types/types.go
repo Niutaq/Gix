@@ -7,8 +7,8 @@ var (
 		"CZK", "HUF", "UAH", "BGN", "RON", "TRY", "ISK", "LEK",
 	}
 	GlobalLanguages = []string{
-		"EN", "PL", "DE", "DA", "NO", "FR", "SW", "CZ",
-		"HR", "HU", "UA", "BU", "RO", "AL", "TR", "IC",
+		"EN", "PL", "DE", "DA", "NO", "FR", "SV", "CZ",
+		"HR", "HU", "UA", "BG", "RO", "AL", "TR", "IS",
 	}
 )
 
