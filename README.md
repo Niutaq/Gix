@@ -18,6 +18,8 @@ Gix is a distributed currency exchange rate monitor for the Polish cantor market
 - [Security & Contributing](#security--contributing)
 - [Demo](#demo)
 
+<img width="3904" height="1088" alt="gix_problem_and_solution" src="https://github.com/user-attachments/assets/c68b5057-dcaa-40ee-b628-e4d36c91a1a7" />
+
 ## Problem Statement
 Physical cantors in Poland publish rates on fragmented, brittle websites. Gix aggregates them, streams updates live, and tracks the **unit cost** of scraping (compute / LLM) with FinOps guardrails.
 
