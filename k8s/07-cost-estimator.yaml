@@ -13,6 +13,7 @@ spec:
       labels:
         app: gix-cost-estimator
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -39,6 +40,18 @@ spec:
             requests:
               cpu: 10m
               memory: 32Mi
+              ephemeral-storage: 64Mi
             limits:
               cpu: 50m
               memory: 128Mi
+              ephemeral-storage: 256Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "test -d /proc/1"]
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "test -d /proc/1"]
+            initialDelaySeconds: 15
+            periodSeconds: 30

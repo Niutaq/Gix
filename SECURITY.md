@@ -15,13 +15,33 @@ In your report, please include:
 *   The potential impact of the vulnerability.
 *   Any proof-of-concept code or exploits.
 
-## Our Security Practices
+## NetSecOps + FinOps controls (practical map)
 
-We strive to follow the best practices for security in our development process, including:
+Aligned with **NIS2** access / integrity themes and **ISO 27001**-style operational controls — what Gix actually enforces today:
 
-*   Regularly updating dependencies to their latest secure versions.
-*   Using static analysis tools to identify potential security flaws.
-*   Following secure coding guidelines.
+| Risk | Control in code | Where |
+|------|-----------------|--------|
+| Unauth mutating API | `GIX_API_KEY` + `X-Gix-API-Key` on discover/delete | `internal/api/middleware/security.go` |
+| Discover abuse / cost bomb | Rate limit 20/min/IP; post-discover harvest majors only | middleware + `handlers/discovery.go` |
+| SSRF via scrape URL | `ValidateURL` + private-IP dialer | `pkg/scrapers` |
+| Bad / hostile FX data | `SanitizePairForCurrency` (scrape → Redis/Timescale → UI vault) | scrapers + services + dRPC client |
+| Prompt injection (LLM) | Fence neutralization + numeric/address output gates | `pkg/scrapers/llm.go`, `sanitizeLLMAddress` |
+| SQL injection | Parameterized `$n` queries only | handlers / services |
+| FinOps burn | Governance circuit breaker by **cantor id** (`provider_id`) | `pkg/finops/governance.go` |
+| Error leakage | Generic client errors; detail in server logs | rates / finops handlers |
+| Secret in URL | Gemini key via `x-goog-api-key` header | `llm.go` |
+
+### Local vs production
+
+* **Local:** `GIX_API_KEY` empty → mutate routes stay open (one warning log). Redis/ES without auth on loopback only.
+* **Production / NIS2:** set `GIX_API_KEY`, `GIX_CORS_ORIGINS`, do not publish dRPC `:8081` on a public LoadBalancer, enable Redis AUTH / ES security if services leave localhost.
+
+### SQL / prompt injection — mental model
+
+* **SQL:** never concatenate user strings into queries; pass values as bind args. History/rates/discovery already do this.
+* **Prompt:** page HTML is **untrusted state**, not instructions. We strip fence tokens from the page, ask for JSON/address only, then **reject** anything that fails rate bands or address shape — the model cannot “talk” past the gate into Timescale.
+
+Island / map hover UX is intentionally separate from this control plane.
 
 ## Disclosure Policy
 

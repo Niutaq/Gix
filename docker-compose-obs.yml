@@ -1,0 +1,28 @@
+# Local FOSS log stack — Loki + Promtail.
+# Grafana lives in k3d FinOps (task finops:bootstrap) and reads Loki via host.k3d.internal:3100.
+services:
+  loki:
+    image: grafana/loki:3.6.3
+    container_name: gix-loki
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - gix-loki-data:/loki
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.6.3
+    container_name: gix-promtail
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./observability/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - ./logs:/var/log/gix:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+volumes:
+  gix-loki-data:

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	pb "github.com/Niutaq/Gix/api/proto/v1"
+	"github.com/Niutaq/Gix/internal/infrastructure"
 	"github.com/Niutaq/Gix/pkg/finops"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
@@ -34,6 +35,12 @@ func main() {
 		log.Fatalf("Unable to connect to database: %v", err)
 	}
 	defer dbPool.Close()
+	if err := dbPool.Ping(context.Background()); err != nil {
+		log.Fatalf("Unable to ping database: %v", err)
+	}
+	if err := infrastructure.InitSchema(context.Background(), dbPool); err != nil {
+		log.Fatalf("Unable to initialize schema: %v", err)
+	}
 
 	// 3. Initialize FinOps Estimator
 	estimator := finops.NewTimescaleEstimator(dbPool, finops.DefaultRates)
@@ -132,6 +139,6 @@ func processEvent(msg *nats.Msg, estimator *finops.TimescaleEstimator) {
 	if err := msg.Ack(); err != nil {
 		log.Printf("Error acking message: %v", err)
 	}
-	fmt.Printf("[FinOps] Calculated unit cost for %s (%s): %vms\n", 
+	fmt.Printf("[FinOps] Calculated unit cost for %s (%s): %vms\n",
 		event.ProviderId, event.ScraperType, event.DurationMs)
 }

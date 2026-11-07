@@ -4,13 +4,24 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	pb "github.com/Niutaq/Gix/api/proto/v1"
+	"github.com/Niutaq/Gix/pkg/types"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 )
+
+func isDRPCCurrencySupported(currency string) bool {
+	for _, c := range types.GlobalCurrencies {
+		if c == currency {
+			return true
+		}
+	}
+	return false
+}
 
 type RatesDRPCServer struct {
 	pb.DRPCRatesServiceServer
@@ -20,9 +31,12 @@ type RatesDRPCServer struct {
 
 // GetAllRates returns all rates for the given currency.
 func (s *RatesDRPCServer) GetAllRates(ctx context.Context, req *pb.RateRequest) (*pb.RateListResponse, error) {
-	currency := req.Currency
+	currency := strings.ToUpper(strings.TrimSpace(req.Currency))
 	if currency == "" {
 		return nil, fmt.Errorf("currency is required")
+	}
+	if !isDRPCCurrencySupported(currency) {
+		return nil, fmt.Errorf("unsupported currency")
 	}
 
 	query := `

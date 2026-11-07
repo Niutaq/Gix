@@ -35,13 +35,30 @@ CREATE TABLE IF NOT EXISTS provider_unit_costs (
     resource_name VARCHAR(100)
 );
 
+-- FinOps: FOCUS-shaped showback / allocation rows (OpenCost sync + app mirror)
+CREATE TABLE IF NOT EXISTS focus_cost_records (
+    time TIMESTAMPTZ NOT NULL,
+    provider_name VARCHAR(50) NOT NULL DEFAULT 'OpenCost',
+    source VARCHAR(50) NOT NULL,
+    billed_cost NUMERIC(15, 10),
+    effective_cost NUMERIC(15, 10) NOT NULL,
+    service_category VARCHAR(50),
+    resource_name VARCHAR(100),
+    x_application VARCHAR(50) DEFAULT 'gix',
+    x_team VARCHAR(50) DEFAULT 'platform',
+    x_environment VARCHAR(50) DEFAULT 'local',
+    charge_description TEXT
+);
+
 -- Convert to hypertables
 SELECT create_hypertable('rates', 'time', if_not_exists => TRUE);
 SELECT create_hypertable('provider_unit_costs', 'time', if_not_exists => TRUE);
+SELECT create_hypertable('focus_cost_records', 'time', if_not_exists => TRUE);
 
 -- FinOps: Data Retention Policies to control storage costs
-SELECT add_retention_policy('rates', INTERVAL '30 days');
-SELECT add_retention_policy('provider_unit_costs', INTERVAL '60 days');
+SELECT add_retention_policy('rates', INTERVAL '30 days', if_not_exists => TRUE);
+SELECT add_retention_policy('provider_unit_costs', INTERVAL '60 days', if_not_exists => TRUE);
+SELECT add_retention_policy('focus_cost_records', INTERVAL '90 days', if_not_exists => TRUE);
 
 -- Clean up data (optional, for development)
 TRUNCATE TABLE rates, cantors RESTART IDENTITY CASCADE;

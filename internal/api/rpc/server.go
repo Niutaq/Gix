@@ -12,6 +12,7 @@ import (
 	"storj.io/drpc/drpcserver"
 )
 
+// StartDRPCServer starts the dRPC server with the given database and cache clients.
 func StartDRPCServer(db *pgxpool.Pool, cache redis.UniversalClient) {
 	lis, err := net.Listen("tcp", ":8081")
 	if err != nil {

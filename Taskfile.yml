@@ -1,17 +1,15 @@
 version: "3"
 
+# Xcode license / broken git → `go build` fails with "error obtaining VCS status: exit status 69".
+env:
+  GOFLAGS: "-buildvcs=false"
+
 tasks:
   default:
     desc: "Default task (lint and proto)"
     cmds:
       - task: lint
       - task: proto
-
-  dev:
-    desc: "Starts the entire environment (infra + backend) and runs the UI natively"
-    cmds:
-      - docker-compose up -d
-      - go run ./cmd/gix -api "http://127.0.0.1:8080"
 
   proto:
     desc: "Generates Go code from Protobuf files"
@@ -37,12 +35,12 @@ tasks:
     desc: "Run backend locally"
     dotenv: ['.env']
     env:
-      REDIS_URL: "redis://127.0.0.1:6379/0"
-      NATS_URL: "nats://127.0.0.1:4222"
-      ELASTICSEARCH_URL: "http://127.0.0.1:9200"
+      REDIS_URL: "redis://localhost:6379/0"
+      NATS_URL: "nats://localhost:4222"
       DD_TRACE_ENABLED: "false"
     cmds:
-      - DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5433/$POSTGRES_DB?sslmode=disable&pool_max_conns=50" go run ./cmd/gix-server
+      - mkdir -p logs
+      - DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:5433/$POSTGRES_DB?sslmode=disable" go run ./cmd/gix-server 2>&1 | tee -a logs/backend.log
 
   run:estimator:
     desc: "Run cost estimator locally"
@@ -51,23 +49,91 @@ tasks:
       NATS_URL: "nats://localhost:4222"
       DD_TRACE_ENABLED: "false"
     cmds:
-      - DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}?sslmode=disable" go run ./cmd/cost-estimator
+      - mkdir -p logs
+      - DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}?sslmode=disable" go run ./cmd/cost-estimator 2>&1 | tee -a logs/finops.log
 
   start:gui:local:
     desc: "Start GUI pointing to local API"
+    dotenv: ['.env']
     cmds:
-      - go run ./cmd/gix -api "http://127.0.0.1:8080"
+      - mkdir -p logs bin
+      # Build as Gix (not "main") so Dock / Activity Monitor show the right name.
+      - go build -buildvcs=false -o bin/Gix ./cmd/gix
+      - ./bin/Gix -api "http://localhost:8080" 2>&1 | tee -a logs/frontend.log
 
   start:gui:remote:
-    desc: "Start GUI pointing to remote DigitalOcean API"
+    desc: "(legacy) Start GUI pointing to the old DigitalOcean API endpoint"
     cmds:
-      - go run ./cmd/gix -api "http://165.227.246.100:8080"
+      - mkdir -p bin
+      - go build -buildvcs=false -o bin/Gix ./cmd/gix
+      - ./bin/Gix -api "http://165.227.246.100:8080"
 
   deploy:do:
-    desc: "Build, push and deploy backend to DigitalOcean K8s"
+    desc: "(legacy) Build, push and deploy backend to DigitalOcean K8s — credits unavailable; prefer local FinOps"
     cmds:
+      - 'echo "WARNING: DigitalOcean deploy is legacy. Prefer task finops:bootstrap + docker compose."'
       - docker buildx build --platform linux/amd64 -t niutaq/gix-backend:latest --push .
       - helm upgrade --install gix-backend charts/gix -f charts/gix/values.yaml
+
+  llm:up:
+    desc: "Start offline Ollama (no cloud API key)"
+    cmds:
+      - docker compose up -d ollama
+
+  llm:pull:
+    desc: "Pull the configured Ollama model (default llama3.2)"
+    dotenv: ['.env']
+    cmds:
+      - |
+        MODEL="${OLLAMA_MODEL:-llama3.2}"
+        echo "Pulling Ollama model: ${MODEL}"
+        docker exec gix-ollama ollama pull "${MODEL}"
+
+  finops:bootstrap:
+    desc: "Bootstrap local CNCF FinOps stack (k3d + Prometheus + OpenCost + Grafana)"
+    cmds:
+      - bash scripts/bootstrap-local-finops.sh
+
+  finops:sync:
+    desc: "Sync OpenCost allocation (+ app unit costs) into FOCUS tables"
+    dotenv: ['.env']
+    cmds:
+      - bash scripts/sync-opencost-focus.sh
+
+  finops:flow:
+    desc: "Print local FinOps cost-flow JSON from the API"
+    cmds:
+      - curl -sf "http://127.0.0.1:8080/api/v1/finops/flow" | (command -v jq >/dev/null && jq . || cat)
+
+  obs:up:
+    desc: "Start Loki + Promtail (FOSS log stack); Grafana Explore → Loki"
+    cmds:
+      - mkdir -p logs
+      - touch logs/backend.log logs/frontend.log logs/finops.log
+      - docker compose -f docker-compose-obs.yml up -d
+      - |
+        echo "Loki:     http://127.0.0.1:3100"
+        echo "Grafana:  task obs:ui  (or http://127.0.0.1:30300)"
+        echo "Explore → Loki → {job=~\"gix-.*\"} or {container=~\"gix-.*\"}"
+
+  obs:down:
+    desc: "Stop Loki + Promtail"
+    cmds:
+      - docker compose -f docker-compose-obs.yml down
+
+  obs:ui:
+    desc: "Port-forward FinOps Grafana (logs + cost) to localhost:3000"
+    cmds:
+      - |
+        echo "Grafana → http://127.0.0.1:3000  (admin / gix-finops-local)"
+        echo "NodePort also: http://127.0.0.1:30300"
+        kubectl -n finops port-forward svc/grafana 3000:80
+
+  obs:grafana-sync:
+    desc: "Re-apply Grafana + FinOps dashboard; Timescale password from .env"
+    dotenv: ['.env']
+    cmds:
+      - bash scripts/apply-grafana-finops.sh
 
   docker:build:
     desc: "Build docker image"
@@ -88,19 +154,13 @@ tasks:
   build:macos:
     desc: "Builds a valid .app package for macOS"
     cmds:
-      - rm -rf Gix.app gix-bin
-      - go build -o gix-bin ./cmd/gix
-      - mkdir -p Gix.app/Contents/MacOS
-      - mkdir -p Gix.app/Contents/Resources
-      - mv gix-bin Gix.app/Contents/MacOS/
-      - cp appicon.png Gix.app/Contents/Resources/icon.png
+      - rm -rf Gix.app
+      - mkdir -p Gix.app/Contents/MacOS Gix.app/Contents/Resources
+      - go build -buildvcs=false -o Gix.app/Contents/MacOS/Gix ./cmd/gix
       - |
-        cat <<EOF > Gix.app/Contents/MacOS/Gix
-        #!/bin/bash
-        DIR=\$(cd "\$(dirname "\$0")"; pwd)
-        cd "\$DIR"
-        exec "./gix-bin" "\$@"
-        EOF
+        ICON_SRC="pkg/utilities/res/appicon.png"
+        if [ -f appicon.png ]; then ICON_SRC="appicon.png"; fi
+        cp "$ICON_SRC" Gix.app/Contents/Resources/icon.png
       - |
         cat <<EOF > Gix.app/Contents/Info.plist
         <?xml version="1.0" encoding="UTF-8"?>
@@ -115,6 +175,8 @@ tasks:
             <string>com.niutaq.gix</string>
             <key>CFBundleName</key>
             <string>Gix</string>
+            <key>CFBundleDisplayName</key>
+            <string>Gix</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>NSLocationWhenInUseUsageDescription</key>
@@ -123,7 +185,6 @@ tasks:
         </plist>
         EOF
       - chmod +x Gix.app/Contents/MacOS/Gix
-      - chmod +x Gix.app/Contents/MacOS/gix-bin
       - xattr -cr Gix.app
       - codesign --force --deep --sign - Gix.app
 

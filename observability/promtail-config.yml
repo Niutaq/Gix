@@ -1,0 +1,46 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Docker containers (gix-db, gix-redis, gix-nats, gix-ollama, …)
+  - job_name: gix-docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(gix-.+)'
+        action: keep
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: container
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: stream
+      - replacement: docker
+        target_label: source
+
+  # Host processes teed by Taskfile (backend / GUI / finops sync)
+  - job_name: gix-host
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: gix-backend
+          source: host
+          __path__: /var/log/gix/backend.log
+      - targets: [localhost]
+        labels:
+          job: gix-frontend
+          source: host
+          __path__: /var/log/gix/frontend.log
+      - targets: [localhost]
+        labels:
+          job: gix-finops
+          source: host
+          __path__: /var/log/gix/finops.log

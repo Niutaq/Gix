@@ -15,16 +15,32 @@ spec:
         {{- include "gix.selectorLabels" . | nindent 8 }}
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: http
               containerPort: {{ .Values.service.ports.http }}
             - name: drpc
               containerPort: {{ .Values.service.ports.drpc }}
           livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.service.ports.http }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
             httpGet:
               path: /healthz
               port: {{ .Values.service.ports.http }}
@@ -47,6 +63,12 @@ spec:
               value: {{ .Values.env.natsUrl | quote }}
             - name: SWAGGER_HOST
               value: {{ .Values.env.swaggerHost | quote }}
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.secretName }}
+                  key: GEMINI_API_KEY
+                  optional: true
             {{- if .Values.datadog.enabled }}
             - name: DD_AGENT_HOST
               valueFrom:

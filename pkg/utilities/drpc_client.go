@@ -14,8 +14,18 @@ import (
 
 	// External utilities
 	pb "github.com/Niutaq/Gix/api/proto/v1"
+	"github.com/Niutaq/Gix/pkg/scrapers"
 	"storj.io/drpc/drpcconn"
 )
+
+// sanitizeIngestPair rejects inverted / out-of-band rates before they hit the vault UI.
+func sanitizeIngestPair(currency, buy, sell string) (string, string, string) {
+	ok, b, s := scrapers.SanitizePairForCurrency(currency, buy, sell)
+	if !ok {
+		return "", "", "bad_rate"
+	}
+	return b, s, ""
+}
 
 // StartDRPCStream establishes a connection to the dRPC server and processes streaming rate updates in real-time.
 func StartDRPCStream(window *app.Window, state *AppState, drpcURL string) {
@@ -55,7 +65,7 @@ func StartDRPCStream(window *app.Window, state *AppState, drpcURL string) {
 }
 
 // FetchAllRatesRPC performs a single dRPC call to fetch all rates for the given currency.
-func FetchAllRatesRPC(window *app.Window, state *AppState, drpcURL string) {
+func FetchAllRatesRPC(window *app.Window, state *AppState, drpcURL string, currency string) {
 	defer func() {
 		state.IsLoading.Store(false)
 		window.Invalidate()
@@ -77,16 +87,14 @@ func FetchAllRatesRPC(window *app.Window, state *AppState, drpcURL string) {
 
 	client := pb.NewDRPCRatesServiceClient(drpcConn)
 
-	log.Printf("Fetching all rates via dRPC for %s...", state.UI.Currency)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	resp, err := client.GetAllRates(ctx, &pb.RateRequest{Currency: state.UI.Currency})
+	log.Printf("Fetching all rates via dRPC for %s...", currency)
+	resp, err := client.GetAllRates(context.Background(), &pb.RateRequest{Currency: currency})
 	if err != nil {
 		log.Printf("FetchAllRatesRPC call error: %v", err)
 		return
 	}
 
-	updateStateWithRates(state, resp.Results, state.UI.Currency)
+	updateStateWithRates(state, resp.Results, currency)
 
 	SaveCache(state)
 	log.Printf("Fetched %d rates via dRPC.", len(resp.Results))
@@ -115,8 +123,16 @@ func updateStateWithRates(state *AppState, results []*pb.RateResponse, currency 
 			state.Vault.Rates[currency][idStr] = entry
 		}
 
-		entry.Rate.BuyRate = rate.BuyRate
-		entry.Rate.SellRate = rate.SellRate
+		buy, sell, errMsg := sanitizeIngestPair(currency, rate.BuyRate, rate.SellRate)
+		if errMsg != "" {
+			entry.Error = errMsg
+			entry.Rate.BuyRate, entry.Rate.SellRate = "", ""
+			RefreshDisplayStrings(entry)
+			continue
+		}
+
+		entry.Rate.BuyRate = buy
+		entry.Rate.SellRate = sell
 		entry.Rate.Change24h = float64(rate.Change24H) / 100.0
 		entry.LoadedAt = time.Now()
 		entry.Error = ""
@@ -133,10 +149,6 @@ func processStreamUpdates(window *app.Window, state *AppState, stream pb.DRPCRat
 			return
 		}
 
-		if rate.Currency != state.UI.Currency {
-			continue
-		}
-
 		UpdateStateWithRate(window, state, rate)
 	}
 }
@@ -148,7 +160,7 @@ func UpdateStateWithRate(window *app.Window, state *AppState, rate *pb.RateRespo
 
 	currency := rate.Currency
 	if currency == "" {
-		currency = state.UI.Currency
+		return
 	}
 
 	if state.Vault.Rates == nil {
@@ -168,13 +180,22 @@ func UpdateStateWithRate(window *app.Window, state *AppState, rate *pb.RateRespo
 		state.Vault.Rates[currency][idStr] = entry
 	}
 
-	if entry.Rate.BuyRate != rate.BuyRate || entry.Rate.SellRate != rate.SellRate {
+	buy, sell, errMsg := sanitizeIngestPair(currency, rate.BuyRate, rate.SellRate)
+	if errMsg != "" {
+		entry.Error = errMsg
+		entry.Rate.BuyRate, entry.Rate.SellRate = "", ""
+		RefreshDisplayStrings(entry)
+		window.Invalidate()
+		return
+	}
+
+	if entry.Rate.BuyRate != buy || entry.Rate.SellRate != sell {
 		entry.UpdatePulse = 1.0
 		entry.LastUpdate = time.Now()
 	}
 
-	entry.Rate.BuyRate = rate.BuyRate
-	entry.Rate.SellRate = rate.SellRate
+	entry.Rate.BuyRate = buy
+	entry.Rate.SellRate = sell
 	entry.Rate.Change24h = float64(rate.Change24H) / 100.0
 	entry.LoadedAt = time.Now()
 	entry.Error = ""

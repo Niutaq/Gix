@@ -10,12 +10,39 @@ import (
 	// Gio utilities
 	"gioui.org/app"
 	"gioui.org/f32"
+	"gioui.org/font"
 	"gioui.org/layout"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
 )
+
+// layoutMobileControlPanelEntry — drawer row that opens Control Panel overlay.
+func layoutMobileControlPanelEntry(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+	if state.UI.ControlPanelMenuBtn.Clicked(gtx) {
+		state.UI.IsFinOpsDashboardOpen = true
+		state.UI.MobileMenuOpen = false
+		window.Invalidate()
+	}
+	return state.UI.ControlPanelMenuBtn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{Top: unit.Dp(10), Bottom: unit.Dp(10), Left: unit.Dp(12), Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			bg := color.NRGBA{R: 255, G: 255, B: 255, A: 12}
+			if state.UI.LightMode {
+				bg = color.NRGBA{R: 0, G: 0, B: 0, A: 18}
+			}
+			if state.UI.ControlPanelMenuBtn.Hovered() {
+				bg.A = 28
+			}
+			rect := image.Rectangle{Max: gtx.Constraints.Min}
+			paint.FillShape(gtx.Ops, bg, clip.UniformRRect(rect, gtx.Dp(10)).Op(gtx.Ops))
+			lbl := material.Body1(theme, GetTranslation(state.UI.Language, "control_panel"))
+			lbl.Color = AppColors.Accent1
+			lbl.Font.Weight = font.Bold
+			return lbl.Layout(gtx)
+		})
+	})
+}
 
 // layoutMobileMenuOverlay renders the side drawer for mobile view.
 func layoutMobileMenuOverlay(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, config AppConfig) layout.Dimensions {
@@ -69,6 +96,10 @@ func layoutMobileMenuOverlay(gtx layout.Context, window *app.Window, theme *mate
 							}),
 						)
 					}),
+					layout.Rigid(layout.Spacer{Height: unit.Dp(16)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return layoutMobileControlPanelEntry(gtx, window, theme, state)
+					}),
 					layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						lbl := material.Caption(theme, GetTranslation(state.UI.Language, "sidebar_currency_label"))
@@ -112,6 +143,42 @@ func layoutMobileMenuOverlay(gtx layout.Context, window *app.Window, theme *mate
 			})
 		}),
 	)
+}
+
+// DrawIconLock — compact Control Panel affordance for mobile (replaces "CP" text).
+func DrawIconLock(gtx layout.Context, col color.NRGBA) layout.Dimensions {
+	size := gtx.Dp(unit.Dp(22))
+	gtx.Constraints.Min = image.Point{X: size, Y: size}
+	s := float32(size)
+
+	// Shackle
+	var shackle clip.Path
+	shackle.Begin(gtx.Ops)
+	cx, cy := s*0.5, s*0.38
+	r := s * 0.22
+	shackle.MoveTo(f32.Point{X: cx - r, Y: cy})
+	shackle.Arc(f32.Point{X: r, Y: 0}, f32.Point{X: r, Y: 0}, -math.Pi)
+	paint.FillShape(gtx.Ops, col, clip.Stroke{Path: shackle.End(), Width: float32(gtx.Dp(unit.Dp(2)))}.Op())
+
+	// Body
+	body := image.Rect(int(s*0.22), int(s*0.42), int(s*0.78), int(s*0.88))
+	paint.FillShape(gtx.Ops, col, clip.UniformRRect(body, gtx.Dp(unit.Dp(3))).Op(gtx.Ops))
+
+	// Keyhole
+	kh := color.NRGBA{R: 18, G: 18, B: 22, A: 255}
+	var hole clip.Path
+	hole.Begin(gtx.Ops)
+	hr := s * 0.07
+	hx, hy := s*0.5, s*0.58
+	hole.MoveTo(f32.Point{X: hx + hr, Y: hy})
+	hole.Arc(f32.Point{X: -hr, Y: 0}, f32.Point{X: -hr, Y: 0}, 2*math.Pi)
+	paint.FillShape(gtx.Ops, kh, clip.Outline{Path: hole.End()}.Op())
+	paint.FillShape(gtx.Ops, kh, clip.Rect{
+		Min: image.Point{X: int(hx - s*0.035), Y: int(hy)},
+		Max: image.Point{X: int(hx + s*0.035), Y: int(s * 0.78)},
+	}.Op())
+
+	return layout.Dimensions{Size: image.Point{X: size, Y: size}}
 }
 
 // DrawIconMenu draws a Material-style hamburger menu icon.

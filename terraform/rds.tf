@@ -28,20 +28,24 @@ resource "aws_security_group" "db_sg" {
 }
 
 resource "aws_db_instance" "timescale" {
-  identifier           = "gix-db-${var.environment}"
-  allocated_storage    = 20
-  storage_type         = "gp3"
-  engine               = "postgres"
-  engine_version       = "16.1"
-  instance_class       = "db.t4g.micro" # FinOps: Graviton is cheaper
-  db_name              = "gix"
-  username             = "gix_admin"
-  password             = "ChangeMe123!"
-  db_subnet_group_name = aws_db_subnet_group.db_subnets.name
+  identifier             = "gix-db-${var.environment}"
+  allocated_storage      = 20
+  storage_type           = "gp3"
+  engine                 = "postgres"
+  engine_version         = "16.1"
+  instance_class         = "db.t4g.micro" # FinOps: Graviton is cheaper
+  db_name                = "gix"
+  username               = "gix_admin"
+  password               = var.db_password
+  db_subnet_group_name   = aws_db_subnet_group.db_subnets.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
 
-  skip_final_snapshot  = true
-  publicly_accessible  = false
+  storage_encrypted         = true
+  backup_retention_period   = var.environment == "dev" ? 1 : 7
+  deletion_protection       = var.environment != "dev"
+  skip_final_snapshot       = var.environment == "dev"
+  final_snapshot_identifier = "gix-db-${var.environment}-final"
+  publicly_accessible       = false
 
   tags = {
     "focus:service_category" = "database"

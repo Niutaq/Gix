@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	pb "github.com/Niutaq/Gix/api/proto/v1"
@@ -15,6 +17,7 @@ import (
 	"github.com/Niutaq/Gix/pkg/types"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
 // HandleDiscover godoc
@@ -47,6 +50,25 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "URL is required"})
 			return
 		}
+		if err := scrapers.ValidateURL(req.URL); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unsafe or invalid URL"})
+			return
+		}
+		req.ExpectedName = sanitizeDisplayName(req.ExpectedName)
+		req.ExpectedAddress = sanitizeAddressField(req.ExpectedAddress)
+		if err := validateDiscoverMeta(req.ExpectedName, req.ExpectedAddress, req.ExpectedLat, req.ExpectedLon); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid metadata"})
+			return
+		}
+		// FinOps gate by stable cantor id when URL already known (never by raw URL).
+		if app.Governance != nil {
+			if existingID, ok := lookupCantorIDByURL(c.Request.Context(), app, req.URL); ok {
+				if !app.Governance.IsAllowed(fmt.Sprintf("%d", existingID)) {
+					c.JSON(http.StatusTooManyRequests, gin.H{"error": "provider is currently blocked due to exceeding FinOps budget"})
+					return
+				}
+			}
+		}
 
 		var info *scrapers.DiscoveredCantor
 		discoveryStart := time.Now()
@@ -62,7 +84,7 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 		} else {
 			log.Printf("Discovery: Analyzing URL %s for metadata...", req.URL)
 			var err error
-			info, err = scrapers.HeuristicDiscoverCantor(c.Request.Context(), req.URL)
+			info, err = scrapers.HeuristicDiscoverCantorWithContext(c.Request.Context(), req.URL)
 			if err != nil {
 				log.Printf("Discovery Metadata Error: %v", err)
 				info = &scrapers.DiscoveredCantor{
@@ -78,19 +100,10 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 				info.Address = req.ExpectedAddress
 			}
 		}
+		info.DisplayName = sanitizeDisplayName(info.DisplayName)
+		info.Address = sanitizeAddressField(info.Address)
 
 		discoveryDuration := time.Since(discoveryStart)
-
-		if app.JS != nil {
-			event := &pb.ScrapeCompletedEvent{
-				ProviderId:  req.URL,
-				ScraperType: "discovery",
-				DurationMs:  discoveryDuration.Milliseconds(),
-				Timestamp:   time.Now().Unix(),
-			}
-			protoBytes, _ := proto.Marshal(event)
-			_, _ = app.JS.Publish("gix.scrape.v1.completed", protoBytes)
-		}
 
 		log.Printf("Discovery: Attempting heuristic scrape for %s...", req.URL)
 		result, err := scrapers.HeuristicScrape(c.Request.Context(), req.URL, "EUR")
@@ -101,33 +114,44 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 		}
 
 		if err != nil || result.BuyRate == "" || result.SellRate == "" {
-			log.Printf("Discovery: Heuristic scrape failed for %s (will use placeholder rates): %v", req.URL, err)
-			result.BuyRate = "0.0000"
-			result.SellRate = "0.0000"
+			log.Printf("Discovery: Heuristic scrape failed for %s: %v", req.URL, err)
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "could not scrape exchange rates from URL"})
+			return
+		}
+		if ok, buy, sell := scrapers.SanitizePairForCurrency("EUR", result.BuyRate, result.SellRate); !ok {
+			log.Printf("Discovery: rejected out-of-band EUR pair for %s: %s/%s", req.URL, result.BuyRate, result.SellRate)
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "could not scrape exchange rates from URL"})
+			return
 		} else {
+			result.BuyRate, result.SellRate = buy, sell
 			log.Printf("Discovery: Found rates using %s: Buy=%s, Sell=%s", scraperTypeUsed, result.BuyRate, result.SellRate)
 		}
 
-		if app.JS != nil {
-			event := &pb.ScrapeCompletedEvent{
-				ProviderId:  req.URL,
-				ScraperType: scraperTypeUsed,
-				DurationMs:  time.Since(discoveryStart).Milliseconds() - discoveryDuration.Milliseconds(),
-				Timestamp:   time.Now().Unix(),
-			}
-			protoBytes, _ := proto.Marshal(event)
-			_, _ = app.JS.PublishAsync("gix.scrape.v1.completed", protoBytes)
-		}
 		var id int
-		nameLower := strings.ToLower(info.DisplayName)
+		// Unique slug from URL host (+ coords) — generic OSM names like "Kantor" must not collide.
+		uniqueName := cantorSlug(req.URL, info.DisplayName, info.Latitude, info.Longitude)
+		displayName := strings.TrimSpace(info.DisplayName)
+		if displayName == "" || strings.EqualFold(displayName, "kantor") || strings.EqualFold(displayName, "new discovered cantor") {
+			displayName = humanizeHost(req.URL)
+		}
 		err = app.DB.QueryRow(c.Request.Context(),
-			"INSERT INTO cantors (name, display_name, base_url, strategy, latitude, longitude, address) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (name) DO UPDATE SET display_name = EXCLUDED.display_name, base_url = EXCLUDED.base_url, address = EXCLUDED.address RETURNING id",
-			nameLower, info.DisplayName, req.URL, "HEURISTIC", info.Latitude, info.Longitude, info.Address).Scan(&id)
+			"INSERT INTO cantors (name, display_name, base_url, strategy, latitude, longitude, address) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (name) DO UPDATE SET display_name = EXCLUDED.display_name, base_url = EXCLUDED.base_url, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, address = EXCLUDED.address RETURNING id",
+			uniqueName, displayName, req.URL, "HEURISTIC", info.Latitude, info.Longitude, info.Address).Scan(&id)
 
 		if err != nil {
 			log.Printf("Discovery DB Error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save to database"})
 			return
+		}
+
+		providerID := fmt.Sprintf("%d", id)
+		if app.Governance != nil && !app.Governance.IsAllowed(providerID) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "provider is currently blocked due to exceeding FinOps budget"})
+			return
+		}
+		if app.JS != nil {
+			publishScrapeEvent(c.Request.Context(), app, providerID, "discovery", discoveryDuration)
+			publishScrapeEvent(c.Request.Context(), app, providerID, scraperTypeUsed, time.Since(discoveryStart)-discoveryDuration)
 		}
 
 		if app.Search != nil {
@@ -141,7 +165,8 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 		}
 
 		go func(newID int, displayName, baseURL string) {
-			currencies := types.GlobalCurrencies
+			// FinOps: harvest majors first — full GlobalCurrencies burns budget + LLM slots.
+			currencies := []string{"EUR", "USD", "GBP", "CHF"}
 			ci := infrastructure.CantorInfo{
 				ID:          newID,
 				DisplayName: displayName,
@@ -150,17 +175,26 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 				Units:       1,
 			}
 			log.Printf("Starting post-discovery background harvest for new cantor: %s", displayName)
+			var wg sync.WaitGroup
+			sem := make(chan struct{}, 2)
 			for _, curr := range currencies {
-				workers.ProcessCantorCurrency(context.Background(), app, ci, curr)
-				time.Sleep(1 * time.Second)
+				wg.Add(1)
+				go func(c string) {
+					defer wg.Done()
+					sem <- struct{}{}
+					workers.ProcessCantorCurrency(context.Background(), app, ci, c)
+					time.Sleep(1 * time.Second)
+					<-sem
+				}(curr)
 			}
+			wg.Wait()
 			log.Printf("Finished post-discovery background harvest for: %s", displayName)
-		}(id, info.DisplayName, req.URL)
+		}(id, displayName, req.URL)
 
 		c.JSON(http.StatusCreated, gin.H{
 			"status":   "discovered",
 			"id":       id,
-			"name":     info.DisplayName,
+			"name":     displayName,
 			"address":  info.Address,
 			"lat":      info.Latitude,
 			"lon":      info.Longitude,
@@ -168,4 +202,72 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 			"sellRate": result.SellRate,
 		})
 	}
+}
+
+func cantorSlug(rawURL, display string, lat, lon float64) string {
+	host := humanizeHost(rawURL)
+	host = strings.ToLower(strings.TrimSpace(host))
+	host = strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			return r
+		case r == '.' || r == '-':
+			return r
+		default:
+			return '-'
+		}
+	}, host)
+	if host == "" {
+		host = "cantor"
+	}
+	return fmt.Sprintf("%s_%.4f_%.4f", host, lat, lon)
+}
+
+func humanizeHost(rawURL string) string {
+	u := strings.TrimSpace(rawURL)
+	u = strings.TrimPrefix(u, "https://")
+	u = strings.TrimPrefix(u, "http://")
+	u = strings.TrimPrefix(u, "www.")
+	if i := strings.IndexAny(u, "/?#"); i >= 0 {
+		u = u[:i]
+	}
+	if u == "" {
+		return "Kantor"
+	}
+	return u
+}
+
+func lookupCantorIDByURL(ctx context.Context, app *infrastructure.AppState, rawURL string) (int, bool) {
+	var id int
+	err := app.DB.QueryRow(ctx, "SELECT id FROM cantors WHERE base_url = $1 LIMIT 1", rawURL).Scan(&id)
+	if err != nil {
+		return 0, false
+	}
+	return id, true
+}
+
+func publishScrapeEvent(ctx context.Context, app *infrastructure.AppState, providerID, scraperType string, duration time.Duration) {
+	event := &pb.ScrapeCompletedEvent{
+		ProviderId:  providerID,
+		ScraperType: scraperType,
+		DurationMs:  duration.Milliseconds(),
+		Timestamp:   time.Now().Unix(),
+		TraceId:     handlerTraceID(ctx),
+	}
+	protoBytes, err := proto.Marshal(event)
+	if err != nil {
+		log.Printf("FinOps Event Marshal Error: %v", err)
+		return
+	}
+	if _, err := app.JS.Publish("gix.scrape.v1.completed", protoBytes); err != nil {
+		log.Printf("FinOps Event Publish Error: %v", err)
+	}
+}
+
+func handlerTraceID(ctx context.Context) string {
+	span, ok := tracer.SpanFromContext(ctx)
+	if !ok || span == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d", span.Context().TraceID())
 }
