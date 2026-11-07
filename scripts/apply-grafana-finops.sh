@@ -17,6 +17,8 @@ fi
 PG_USER="${POSTGRES_USER:-gixuser}"
 PG_DB="${POSTGRES_DB:-gix_rates}"
 PG_PASS="${POSTGRES_PASSWORD:-change-me-local-only}"
+# Local demo default; override with GRAFANA_ADMIN_PASSWORD (never commit real secrets).
+GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-gix-finops-local}"
 
 TMP="$(mktemp)"
 trap 'rm -f "${TMP}"' EXIT
@@ -49,11 +51,12 @@ kubectl -n "${NS}" create configmap gix-finops-dashboards \
 helm upgrade --install grafana grafana/grafana \
   -n "${NS}" \
   -f "${TMP}" \
+  --set "adminPassword=${GRAFANA_ADMIN_PASSWORD}" \
   --wait --timeout 5m
 
 kubectl -n "${NS}" rollout restart deploy/grafana
 kubectl -n "${NS}" rollout status deploy/grafana --timeout=120s
 
-echo "Grafana FinOps ready → http://127.0.0.1:3000  (admin / gix-finops-local)"
+echo "Grafana FinOps ready → http://127.0.0.1:3000  (admin / ${GRAFANA_ADMIN_PASSWORD})"
 echo "Dashboard: Dashboards → FinOps → Gix FinOps — Cost Flow"
 echo "If :3000 is down: task obs:ui"

@@ -1,7 +1,8 @@
 # Grafana for FinOps cost-flow dashboards (FOSS alternative to DataDog).
 # Timescale credentials must match docker-compose /.env (gix_rates).
+# Admin password is injected at apply time (see scripts/apply-grafana-finops.sh).
 adminUser: admin
-adminPassword: gix-finops-local
+adminPassword: ""
 
 persistence:
   enabled: false
