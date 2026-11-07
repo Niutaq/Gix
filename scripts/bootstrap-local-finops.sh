@@ -8,8 +8,9 @@ CTX="k3d-${CLUSTER_NAME}"
 NS=finops
 
 need() {
-  command -v "$1" >/dev/null 2>&1 || {
-    echo "Missing dependency: $1" >&2
+  local bin="$1"
+  command -v "${bin}" >/dev/null 2>&1 || {
+    echo "Missing dependency: ${bin}" >&2
     exit 1
   }
 }

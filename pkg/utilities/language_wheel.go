@@ -301,43 +301,47 @@ func LanguageModal(gtx layout.Context, window *app.Window, theme *material.Theme
 	)
 }
 
-func layoutLanguageWheel(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
-	opts := state.UI.LanguageOptions
-	n := len(opts)
-	if n == 0 {
-		return layout.Dimensions{}
-	}
+// langWheelMetrics holds the per-frame geometry shared by all wheel rows.
+type langWheelMetrics struct {
+	rowH       int
+	width      int
+	viewportH  int
+	centerY    float32
+	scroll     float32
+	activeIdx  int
+	lightTheme bool
+}
 
-	// Fixed row pitch — band and labels share the same grid (no scale-on-box drift).
-	rowH := gtx.Dp(unit.Dp(40))
+// langWheelVisibleRows picks an odd number of visible rows that fits the available height.
+func langWheelVisibleRows(maxY, rowH int) int {
 	visibleRows := 5
-	if maxY := gtx.Constraints.Max.Y; maxY > 0 {
-		// Use available modal body height (leave room for header/hint already outside).
-		fit := maxY / rowH
-		if fit >= 7 {
-			visibleRows = 7
-		} else if fit >= 5 {
-			visibleRows = 5
-		} else if fit >= 3 {
+	if maxY <= 0 {
+		return visibleRows
+	}
+	// Use available modal body height (leave room for header/hint already outside).
+	fit := maxY / rowH
+	switch {
+	case fit >= 7:
+		visibleRows = 7
+	case fit >= 5:
+		visibleRows = 5
+	case fit >= 3:
+		visibleRows = 3
+	}
+	if visibleRows*rowH > maxY && maxY >= rowH*3 {
+		visibleRows = maxY / rowH
+		if visibleRows%2 == 0 {
+			visibleRows-- // keep odd so a row sits on center
+		}
+		if visibleRows < 3 {
 			visibleRows = 3
 		}
-		if visibleRows*rowH > maxY && maxY >= rowH*3 {
-			visibleRows = maxY / rowH
-			if visibleRows%2 == 0 {
-				visibleRows-- // keep odd so a row sits on center
-			}
-			if visibleRows < 3 {
-				visibleRows = 3
-			}
-		}
 	}
-	viewportH := rowH * visibleRows
-	width := gtx.Constraints.Max.X
-	if width < gtx.Dp(unit.Dp(200)) {
-		width = gtx.Constraints.Min.X
-	}
+	return visibleRows
+}
 
-	// Also accept keys via frame queue (when focus works).
+// handleLangWheelKeyEvents also accepts keys via frame queue (when focus works).
+func handleLangWheelKeyEvents(gtx layout.Context, window *app.Window, state *AppState) {
 	for {
 		ev, ok := gtx.Event(
 			key.Filter{Focus: &state.UI.LangWheelTag, Name: key.NameUpArrow},
@@ -358,7 +362,10 @@ func layoutLanguageWheel(gtx layout.Context, window *app.Window, theme *material
 		}
 		HandleLanguageWheelKey(state, window, ke)
 	}
+}
 
+// handleLangWheelScrollEvents applies pointer scroll to the wheel and starts settling.
+func handleLangWheelScrollEvents(gtx layout.Context, window *app.Window, state *AppState, rowH, n int) {
 	for {
 		ev, ok := gtx.Event(pointer.Filter{
 			Target: &state.UI.LangWheelTag,
@@ -376,93 +383,82 @@ func layoutLanguageWheel(gtx layout.Context, window *app.Window, theme *material
 		if state.UI.LangWheelScroll < 0 {
 			state.UI.LangWheelScroll = 0
 		}
-		max := float32(n - 1)
-		if state.UI.LangWheelScroll > max {
-			state.UI.LangWheelScroll = max
+		maxScroll := float32(n - 1)
+		if state.UI.LangWheelScroll > maxScroll {
+			state.UI.LangWheelScroll = maxScroll
 		}
 		state.UI.LangWheelTarget = float32(math.Round(float64(state.UI.LangWheelScroll)))
 		state.UI.LangWheelSettling = true
 		window.Invalidate()
 	}
+}
 
-	defer clip.Rect{Max: image.Point{X: width, Y: viewportH}}.Push(gtx.Ops).Pop()
-	event.Op(gtx.Ops, &state.UI.LangWheelTag)
+// langWheelRowStyle returns text color, weight and size of a wheel row.
+func langWheelRowStyle(isActive, light bool, opacity float64) (color.NRGBA, font.Weight, unit.Sp) {
+	switch {
+	case isActive && light:
+		return AppColors.Accent1Dark, font.Bold, unit.Sp(16) // dark gold on light wash
+	case isActive:
+		return color.NRGBA{R: 255, G: 236, B: 170, A: 255}, font.Bold, unit.Sp(16)
+	case light:
+		// Dark grey — readable on white; fade with distance.
+		return color.NRGBA{R: 70, G: 70, B: 80, A: uint8(220 * opacity)}, font.Normal, unit.Sp(14)
+	default:
+		return color.NRGBA{R: 190, G: 190, B: 200, A: uint8(210 * opacity)}, font.Normal, unit.Sp(14)
+	}
+}
 
-	centerY := float32(viewportH) / 2
-	scroll := state.UI.LangWheelScroll
-	light := state.UI.LightMode
-
-	drawLangWheelSoftBand(gtx.Ops, width, int(centerY), rowH, light)
-
-	activeIdx := langWheelCenteredIndex(state)
-
-	for i := 0; i < n; i++ {
-		// Row top in viewport: index i centered when scroll == i.
-		top := centerY + (float32(i)-scroll)*float32(rowH) - float32(rowH)/2
-		if top+float32(rowH) < 0 || top > float32(viewportH) {
-			continue
-		}
-
-		distRows := math.Abs(float64(float32(i) - scroll))
-		opacity := 1.0 - distRows*0.32
-		if opacity < 0.18 {
-			continue
-		}
-		if opacity > 1 {
-			opacity = 1
-		}
-
-		code := NormalizeLanguageCode(opts[i])
-		label := code + "   " + languageNativeName(code)
-		isActive := i == activeIdx && distRows < 0.5
-
-		var txtCol color.NRGBA
-		weight := font.Normal
-		size := unit.Sp(14)
-		if isActive {
-			weight = font.Bold
-			size = unit.Sp(16)
-			if light {
-				txtCol = AppColors.Accent1Dark // dark gold on light wash
-			} else {
-				txtCol = color.NRGBA{R: 255, G: 236, B: 170, A: 255}
-			}
-		} else if light {
-			// Dark grey — readable on white; fade with distance.
-			txtCol = color.NRGBA{R: 70, G: 70, B: 80, A: uint8(220 * opacity)}
-		} else {
-			txtCol = color.NRGBA{R: 190, G: 190, B: 200, A: uint8(210 * opacity)}
-		}
-
-		idx := i
-		btn := &state.UI.LangWheelClicks[idx]
-		if btn.Clicked(gtx) {
-			if isActive {
-				langWheelConfirm(state, window)
-			} else {
-				langWheelSnapTo(state, idx, window)
-			}
-		}
-
-		stack := op.Offset(image.Point{X: 0, Y: int(math.Round(float64(top)))}).Push(gtx.Ops)
-		rowGtx := gtx
-		rowGtx.Constraints.Min = image.Point{X: width, Y: rowH}
-		rowGtx.Constraints.Max = rowGtx.Constraints.Min
-		btn.Layout(rowGtx, func(gtx layout.Context) layout.Dimensions {
-			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				lbl := material.Body1(theme, label)
-				lbl.Color = txtCol
-				lbl.Font.Weight = weight
-				lbl.TextSize = size
-				lbl.MaxLines = 1
-				lbl.Alignment = text.Middle
-				return lbl.Layout(gtx)
-			})
-		})
-		stack.Pop()
+// layoutLangWheelRow draws (and handles clicks of) the wheel row at index i.
+func layoutLangWheelRow(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState, m langWheelMetrics, i int) {
+	// Row top in viewport: index i centered when scroll == i.
+	top := m.centerY + (float32(i)-m.scroll)*float32(m.rowH) - float32(m.rowH)/2
+	if top+float32(m.rowH) < 0 || top > float32(m.viewportH) {
+		return
 	}
 
-	// Edge fade (mask-image analogue).
+	distRows := math.Abs(float64(float32(i) - m.scroll))
+	opacity := 1.0 - distRows*0.32
+	if opacity < 0.18 {
+		return
+	}
+	if opacity > 1 {
+		opacity = 1
+	}
+
+	code := NormalizeLanguageCode(state.UI.LanguageOptions[i])
+	label := code + "   " + languageNativeName(code)
+	isActive := i == m.activeIdx && distRows < 0.5
+	txtCol, weight, size := langWheelRowStyle(isActive, m.lightTheme, opacity)
+
+	btn := &state.UI.LangWheelClicks[i]
+	if btn.Clicked(gtx) {
+		if isActive {
+			langWheelConfirm(state, window)
+		} else {
+			langWheelSnapTo(state, i, window)
+		}
+	}
+
+	stack := op.Offset(image.Point{X: 0, Y: int(math.Round(float64(top)))}).Push(gtx.Ops)
+	rowGtx := gtx
+	rowGtx.Constraints.Min = image.Point{X: m.width, Y: m.rowH}
+	rowGtx.Constraints.Max = rowGtx.Constraints.Min
+	btn.Layout(rowGtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			lbl := material.Body1(theme, label)
+			lbl.Color = txtCol
+			lbl.Font.Weight = weight
+			lbl.TextSize = size
+			lbl.MaxLines = 1
+			lbl.Alignment = text.Middle
+			return lbl.Layout(gtx)
+		})
+	})
+	stack.Pop()
+}
+
+// paintLangWheelEdgeFades draws the top/bottom edge fade (mask-image analogue).
+func paintLangWheelEdgeFades(gtx layout.Context, width, viewportH, rowH int) {
 	fadeH := rowH
 	cEdge := AppColors.Dark
 	cEdge.A = 255
@@ -487,6 +483,46 @@ func layoutLanguageWheel(gtx layout.Context, window *app.Window, theme *material
 		}.Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 	}()
+}
+
+func layoutLanguageWheel(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+	n := len(state.UI.LanguageOptions)
+	if n == 0 {
+		return layout.Dimensions{}
+	}
+
+	// Fixed row pitch — band and labels share the same grid (no scale-on-box drift).
+	rowH := gtx.Dp(unit.Dp(40))
+	visibleRows := langWheelVisibleRows(gtx.Constraints.Max.Y, rowH)
+	viewportH := rowH * visibleRows
+	width := gtx.Constraints.Max.X
+	if width < gtx.Dp(unit.Dp(200)) {
+		width = gtx.Constraints.Min.X
+	}
+
+	handleLangWheelKeyEvents(gtx, window, state)
+	handleLangWheelScrollEvents(gtx, window, state, rowH, n)
+
+	defer clip.Rect{Max: image.Point{X: width, Y: viewportH}}.Push(gtx.Ops).Pop()
+	event.Op(gtx.Ops, &state.UI.LangWheelTag)
+
+	m := langWheelMetrics{
+		rowH:       rowH,
+		width:      width,
+		viewportH:  viewportH,
+		centerY:    float32(viewportH) / 2,
+		scroll:     state.UI.LangWheelScroll,
+		activeIdx:  langWheelCenteredIndex(state),
+		lightTheme: state.UI.LightMode,
+	}
+
+	drawLangWheelSoftBand(gtx.Ops, width, int(m.centerY), rowH, m.lightTheme)
+
+	for i := 0; i < n; i++ {
+		layoutLangWheelRow(gtx, window, theme, state, m, i)
+	}
+
+	paintLangWheelEdgeFades(gtx, width, viewportH, rowH)
 
 	return layout.Dimensions{Size: image.Point{X: width, Y: viewportH}}
 }
@@ -544,11 +580,11 @@ func layoutLanguageButton(gtx layout.Context, window *app.Window, theme *materia
 							if len(runes) > 8 {
 								short = string(runes[:7]) + "…"
 							}
-							cap := material.Caption(theme, short)
-							cap.Color = applyAlpha(AppColors.Text, 170)
-							cap.TextSize = unit.Sp(9)
-							cap.Alignment = text.Middle
-							return layout.Inset{Top: unit.Dp(2)}.Layout(gtx, cap.Layout)
+							nativeLbl := material.Caption(theme, short)
+							nativeLbl.Color = applyAlpha(AppColors.Text, 170)
+							nativeLbl.TextSize = unit.Sp(9)
+							nativeLbl.Alignment = text.Middle
+							return layout.Inset{Top: unit.Dp(2)}.Layout(gtx, nativeLbl.Layout)
 						}),
 					)
 				})

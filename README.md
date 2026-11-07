@@ -28,7 +28,7 @@ Physical cantors in Poland publish rates on fragmented, brittle websites. Gix ag
 | Component | Technology | Description |
 | :--- | :--- | :--- |
 | **Frontend** | [![Gio](https://img.shields.io/badge/Gio-v0.9+-blue)](https://gioui.org) | Native, GPU-accelerated UI |
-| **Backend API** | [![Go](https://img.shields.io/badge/Go-1.27.0-00ADD8?logo=go&logoColor=white)](https://go.dev/) [![Gin](https://img.shields.io/badge/Gin-v1.11-0088CC)](https://gin-gonic.com/) | HTTP API + harvester |
+| **Backend API** | [![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?logo=go&logoColor=white)](https://go.dev/) [![Gin](https://img.shields.io/badge/Gin-v1.11-0088CC)](https://gin-gonic.com/) | HTTP API + harvester |
 | **Streaming** | [![NATS](https://img.shields.io/badge/NATS_JetStream-27A16C?logo=nats.io&logoColor=white)](https://nats.io) | Event streaming / replay |
 | **Caching** | [![Redis](https://img.shields.io/badge/Redis-v7-DC382D?logo=redis&logoColor=white)](https://redis.io) | Cache + rate update pub/sub |
 | **Storage** | [![TimescaleDB](https://img.shields.io/badge/TimescaleDB-pg16-FDB515?logo=timescale&logoColor=black)](https://www.timescale.com) | Rates + FOCUS cost tables |

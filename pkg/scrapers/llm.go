@@ -17,6 +17,9 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+// mimeJSON is the JSON content type / MIME type used for LLM requests.
+const mimeJSON = "application/json"
+
 // Single-flight Ollama: parallel harvest otherwise queues for minutes and times out.
 var ollamaSlot = make(chan struct{}, 1)
 
@@ -148,7 +151,7 @@ func callOllama(ctx context.Context, prompt string, jsonMode bool) (string, erro
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", mimeJSON)
 
 	client := &http.Client{Timeout: 45 * time.Second}
 	resp, err := client.Do(req)
@@ -188,7 +191,7 @@ func callGemini(ctx context.Context, prompt string, jsonMode bool) (string, erro
 		Contents: []geminiContent{{Parts: []geminiPart{{Text: prompt}}}},
 	}
 	if jsonMode {
-		reqBody.GenerationConfig = &geminiGenerationConfig{ResponseMIMEType: "application/json"}
+		reqBody.GenerationConfig = &geminiGenerationConfig{ResponseMIMEType: mimeJSON}
 	}
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
@@ -200,7 +203,7 @@ func callGemini(ctx context.Context, prompt string, jsonMode bool) (string, erro
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", mimeJSON)
 	req.Header.Set("x-goog-api-key", apiKey) // never put secrets in query string (logs/proxies)
 
 	client := &http.Client{Timeout: 30 * time.Second}

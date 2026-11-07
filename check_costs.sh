@@ -22,7 +22,7 @@ infracost breakdown --path "${ROOT}/terraform/"
 
 if command -v jq &> /dev/null; then
     TOTAL_COST=$(jq -r '.totalMonthlyCost // 0' "${REPORT}")
-    if [ "${TOTAL_COST}" == "null" ] || [ -z "${TOTAL_COST}" ]; then
+    if [[ "${TOTAL_COST}" == "null" || -z "${TOTAL_COST}" ]]; then
         TOTAL_COST=$(jq -r '.projects[0].breakdown.totalMonthlyCost // 0' "${REPORT}")
     fi
     echo "----------------------------------------------"

@@ -45,6 +45,125 @@ func HeuristicDiscoverCantor(urlStr string) (*DiscoveredCantor, error) {
 	return HeuristicDiscoverCantorWithContext(context.Background(), urlStr)
 }
 
+// addressFromLDItem extracts a postal address from a single JSON-LD node.
+func addressFromLDItem(item interface{}) string {
+	m, ok := item.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	// Look for address or postalAddress
+	addr, ok := m["address"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	street, _ := addr["streetAddress"].(string)
+	city, _ := addr["addressLocality"].(string)
+	zip, _ := addr["postalCode"].(string)
+	if street != "" && city != "" {
+		return fmt.Sprintf("%s, %s %s", street, zip, city)
+	}
+	return ""
+}
+
+// addressFromJSONLD extracts a postal address from a JSON-LD script body.
+func addressFromJSONLD(raw string) string {
+	var ldMap map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &ldMap); err != nil {
+		return ""
+	}
+	// Handle both single object and list of objects
+	ldList := []interface{}{ldMap}
+	if graph, ok := ldMap["@graph"].([]interface{}); ok {
+		ldList = graph
+	}
+	for _, item := range ldList {
+		if addr := addressFromLDItem(item); addr != "" {
+			return addr
+		}
+	}
+	return ""
+}
+
+// findAddressJSONLD looks for an address in JSON-LD (Schema.org) blocks.
+func findAddressJSONLD(doc *goquery.Document) string {
+	rawAddress := ""
+	doc.Find("script[type='application/ld+json']").EachWithBreak(func(i int, s *goquery.Selection) bool {
+		rawAddress = addressFromJSONLD(s.Text())
+		return rawAddress == ""
+	})
+	return rawAddress
+}
+
+// findAddressMeta looks for an address in meta tags.
+func findAddressMeta(doc *goquery.Document) string {
+	rawAddress := ""
+	doc.Find("meta[name='og:street-address'], meta[property='business:contact_data:street_address']").Each(func(i int, s *goquery.Selection) {
+		if content, exists := s.Attr("content"); exists {
+			rawAddress = content
+		}
+	})
+	return rawAddress
+}
+
+// findAddressRegex falls back to regex searching in common containers.
+func findAddressRegex(doc *goquery.Document) string {
+	postcodeRegex := regexp.MustCompile(`[0-9]{2}-[0-9]{3}`)
+	// Refined street regex to avoid "ulubione" etc.
+	streetRegex := regexp.MustCompile(`(?i)(ul\.|al\.|pl\.|ulica|aleja|plac)\s+[A-ZĄĆĘŁŃÓŚŹŻ]`)
+
+	rawAddress := ""
+	doc.Find("address, .contact-info, .address, .contact, footer p, footer div").EachWithBreak(func(i int, s *goquery.Selection) bool {
+		txt := strings.TrimSpace(s.Text())
+		// Ignore very short or very long blocks
+		if len(txt) < 10 || len(txt) > 200 {
+			return true
+		}
+
+		if streetRegex.MatchString(txt) && postcodeRegex.MatchString(txt) {
+			rawAddress = txt
+			return false
+		}
+		return true
+	})
+	return rawAddress
+}
+
+// findAddressLLM is the final fallback: offline LLM address extraction.
+func findAddressLLM(ctx context.Context, doc *goquery.Document) string {
+	log.Printf("Discovery: Regex failed. Using offline LLM for address extraction...")
+	llmAddr, err := LLMExtractAddressWithContext(ctx, doc)
+	if err != nil {
+		log.Printf("Discovery: LLM address extraction skipped/failed: %v", err)
+		return ""
+	}
+	if llmAddr != "" {
+		log.Printf("Discovery: LLM found address: '%s'", llmAddr)
+	}
+	return llmAddr
+}
+
+// geocodeDiscoveredAddress stores the address on info and geocodes it with Nominatim (OSM).
+func geocodeDiscoveredAddress(info *DiscoveredCantor, rawAddress string) {
+	info.Address = rawAddress
+	// Clean the address (remove multiple spaces, newlines)
+	rawAddress = strings.ReplaceAll(rawAddress, "\n", " ")
+	re := regexp.MustCompile(`\s+`)
+	rawAddress = re.ReplaceAllString(rawAddress, " ")
+
+	log.Printf("Discovery: Found address for geocoding: '%s'", rawAddress)
+
+	// 3. Geocode with Nominatim (OSM)
+	lat, lon, err := GeocodeAddress(rawAddress)
+	if err != nil {
+		log.Printf("Discovery: Geocoding failed for '%s': %v", rawAddress, err)
+		return
+	}
+	log.Printf("Discovery: Geocoding successful: %f, %f", lat, lon)
+	info.Latitude = lat
+	info.Longitude = lon
+}
+
 // HeuristicDiscoverCantorWithContext attempts to find cantor name and address from its URL.
 func HeuristicDiscoverCantorWithContext(ctx context.Context, urlStr string) (*DiscoveredCantor, error) {
 	doc, err := fetchDocument(ctx, urlStr)
@@ -62,102 +181,23 @@ func HeuristicDiscoverCantorWithContext(ctx context.Context, urlStr string) (*Di
 	info.DisplayName = cleanHeuristicName(strings.TrimSpace(title), urlStr)
 
 	// 2. Try to find an Address
-	var rawAddress string
-
 	// A. Try JSON-LD (Schema.org)
-	doc.Find("script[type='application/ld+json']").EachWithBreak(func(i int, s *goquery.Selection) bool {
-		var ldMap map[string]interface{}
-		if err := json.Unmarshal([]byte(s.Text()), &ldMap); err == nil {
-			// Handle both single object and list of objects
-			ldList := []interface{}{ldMap}
-			if graph, ok := ldMap["@graph"].([]interface{}); ok {
-				ldList = graph
-			}
-
-			for _, item := range ldList {
-				m, ok := item.(map[string]interface{})
-				if !ok {
-					continue
-				}
-
-				// Look for address or postalAddress
-				if addr, ok := m["address"].(map[string]interface{}); ok {
-					street, _ := addr["streetAddress"].(string)
-					city, _ := addr["addressLocality"].(string)
-					zip, _ := addr["postalCode"].(string)
-					if street != "" && city != "" {
-						rawAddress = fmt.Sprintf("%s, %s %s", street, zip, city)
-						return false
-					}
-				}
-			}
-		}
-		return true
-	})
-
+	rawAddress := findAddressJSONLD(doc)
 	if rawAddress == "" {
 		// B. Try Meta tags
-		doc.Find("meta[name='og:street-address'], meta[property='business:contact_data:street_address']").Each(func(i int, s *goquery.Selection) {
-			if content, exists := s.Attr("content"); exists {
-				rawAddress = content
-			}
-		})
+		rawAddress = findAddressMeta(doc)
 	}
-
 	if rawAddress == "" {
 		// C. Fallback to Regex searching in common containers
-		postcodeRegex := regexp.MustCompile(`[0-9]{2}-[0-9]{3}`)
-		// Refined street regex to avoid "ulubione" etc.
-		streetRegex := regexp.MustCompile(`(?i)(ul\.|al\.|pl\.|ulica|aleja|plac)\s+[A-ZĄĆĘŁŃÓŚŹŻ]`)
-
-		doc.Find("address, .contact-info, .address, .contact, footer p, footer div").EachWithBreak(func(i int, s *goquery.Selection) bool {
-			txt := strings.TrimSpace(s.Text())
-			// Ignore very short or very long blocks
-			if len(txt) < 10 || len(txt) > 200 {
-				return true
-			}
-
-			hasStreet := streetRegex.MatchString(txt)
-			hasPostcode := postcodeRegex.MatchString(txt)
-
-			if hasStreet && hasPostcode {
-				rawAddress = txt
-				return false
-			}
-			return true
-		})
+		rawAddress = findAddressRegex(doc)
 	}
-
 	if rawAddress == "" {
 		// D. Final Fallback: offline LLM address extraction
-		log.Printf("Discovery: Regex failed. Using offline LLM for address extraction...")
-		llmAddr, err := LLMExtractAddressWithContext(ctx, doc)
-		if err == nil && llmAddr != "" {
-			rawAddress = llmAddr
-			log.Printf("Discovery: LLM found address: '%s'", rawAddress)
-		} else if err != nil {
-			log.Printf("Discovery: LLM address extraction skipped/failed: %v", err)
-		}
+		rawAddress = findAddressLLM(ctx, doc)
 	}
 
 	if rawAddress != "" {
-		info.Address = rawAddress
-		// Clean the address (remove multiple spaces, newlines)
-		rawAddress = strings.ReplaceAll(rawAddress, "\n", " ")
-		re := regexp.MustCompile(`\s+`)
-		rawAddress = re.ReplaceAllString(rawAddress, " ")
-
-		log.Printf("Discovery: Found address for geocoding: '%s'", rawAddress)
-
-		// 3. Geocode with Nominatim (OSM)
-		lat, lon, err := GeocodeAddress(rawAddress)
-		if err == nil {
-			log.Printf("Discovery: Geocoding successful: %f, %f", lat, lon)
-			info.Latitude = lat
-			info.Longitude = lon
-		} else {
-			log.Printf("Discovery: Geocoding failed for '%s': %v", rawAddress, err)
-		}
+		geocodeDiscoveredAddress(info, rawAddress)
 	}
 
 	return info, nil
@@ -648,38 +688,47 @@ func isValidPair(b, s float64) bool {
 	return ratio <= 1.08 // ~8% max spread
 }
 
-func pickBestPair(code string, nums []string) (buy, sell string) {
-	type cand struct {
-		b, s, score float64
+// pairCandidate is a scored buy/sell pair.
+type pairCandidate struct {
+	b, s, score float64
+}
+
+// evalPairCandidate parses, normalizes and validates two adjacent numbers as a buy/sell pair.
+func evalPairCandidate(code, bStr, sStr string, mid float64) (pairCandidate, bool) {
+	b, err1 := strconv.ParseFloat(bStr, 64)
+	s, err2 := strconv.ParseFloat(sStr, 64)
+	if err1 != nil || err2 != nil {
+		return pairCandidate{}, false
 	}
-	var best *cand
+	b = normalizeUnitRate(code, b)
+	s = normalizeUnitRate(code, s)
+	b, s = orderBuySell(b, s)
+	if !isValidPair(b, s) {
+		return pairCandidate{}, false
+	}
+	if lo, hi, ok := expectedPLNRange(code); ok && (b < lo || s > hi) {
+		return pairCandidate{}, false
+	}
+	score := 0.0
+	if mid > 0 {
+		score = -mathAbs((b+s)/2 - mid)
+	}
+	return pairCandidate{b: b, s: s, score: score}, true
+}
+
+func pickBestPair(code string, nums []string) (buy, sell string) {
+	var best *pairCandidate
 	mid := 0.0
 	if lo, hi, ok := expectedPLNRange(code); ok {
 		mid = (lo + hi) / 2
 	}
 	for i := 0; i < len(nums)-1; i++ {
-		b, err1 := strconv.ParseFloat(nums[i], 64)
-		s, err2 := strconv.ParseFloat(nums[i+1], 64)
-		if err1 != nil || err2 != nil {
+		c, ok := evalPairCandidate(code, nums[i], nums[i+1], mid)
+		if !ok {
 			continue
 		}
-		b = normalizeUnitRate(code, b)
-		s = normalizeUnitRate(code, s)
-		b, s = orderBuySell(b, s)
-		if !isValidPair(b, s) {
-			continue
-		}
-		if lo, hi, ok := expectedPLNRange(code); ok {
-			if b < lo || s > hi {
-				continue
-			}
-		}
-		score := 0.0
-		if mid > 0 {
-			score = -mathAbs((b+s)/2 - mid)
-		}
-		if best == nil || score > best.score {
-			best = &cand{b: b, s: s, score: score}
+		if best == nil || c.score > best.score {
+			best = &c
 		}
 	}
 	if best == nil {

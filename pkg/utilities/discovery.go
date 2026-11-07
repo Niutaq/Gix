@@ -415,6 +415,13 @@ func safeCoordKey(coord string) string {
 	return coord[:5]
 }
 
+const (
+	osmTagStreet      = "addr:street"
+	osmTagHouseNumber = "addr:housenumber"
+	kantorPrefix      = "Kantor "
+	kantorDotPrefix   = "Kantor · "
+)
+
 type osmCantorPOI struct {
 	Lat    float64           `json:"lat"`
 	Lon    float64           `json:"lon"`
@@ -425,12 +432,12 @@ type osmCantorPOI struct {
 	Tags map[string]string `json:"tags"`
 }
 
-// fetchCantorsOverpass races a couple of mirrors with a short budget (fallback only).
-func fetchCantorsOverpass(client *http.Client, lat, lon float64) []osmCantorPOI {
-	endpoints := []string{
-		"https://overpass-api.de/api/interpreter",
-		"https://lz4.overpass-api.de/api/interpreter",
-	}
+type overpassResp struct {
+	Elements []osmCantorPOI `json:"elements"`
+}
+
+// buildOverpassBody builds the form-encoded Overpass query for exchange POIs around a point.
+func buildOverpassBody(lat, lon float64) string {
 	// Amenity-only — name~[Kk]antor pulled lombards and random shops.
 	query := fmt.Sprintf(`[out:json][timeout:5];
 (
@@ -440,63 +447,72 @@ func fetchCantorsOverpass(client *http.Client, lat, lon float64) []osmCantorPOI 
 out center tags;`, lat, lon, lat, lon)
 	formData := url.Values{}
 	formData.Set("data", query)
-	body := formData.Encode()
+	return formData.Encode()
+}
 
-	type overpassResp struct {
-		Elements []osmCantorPOI `json:"elements"`
+// filterOverpassElements normalizes coordinates and keeps only POIs located in Poland.
+func filterOverpassElements(elements []osmCantorPOI) []osmCantorPOI {
+	out := make([]osmCantorPOI, 0, len(elements))
+	for _, el := range elements {
+		elat, elon := el.Lat, el.Lon
+		if elat == 0 && elon == 0 {
+			elat, elon = el.Center.Lat, el.Center.Lon
+		}
+		elat, elon = NormalizeLatLon(elat, elon)
+		if InPoland(elat, elon) {
+			el.Lat, el.Lon = elat, elon
+			out = append(out, el)
+		}
 	}
+	return out
+}
 
-	type result struct{ elements []osmCantorPOI }
-	ch := make(chan result, len(endpoints))
+// queryOverpassEndpoint runs the query against a single Overpass mirror.
+func queryOverpassEndpoint(ctx context.Context, client *http.Client, endpoint, body string) []osmCantorPOI {
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(body))
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set(UserAgentHeader, UserAgentApp+" (discovery; github.com/Niutaq/Gix)")
+	resp, err := client.Do(req)
+	if err != nil || resp == nil || resp.StatusCode != http.StatusOK {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		return nil
+	}
+	var parsed overpassResp
+	err = json.NewDecoder(resp.Body).Decode(&parsed)
+	_ = resp.Body.Close()
+	if err != nil || len(parsed.Elements) == 0 {
+		return nil
+	}
+	return filterOverpassElements(parsed.Elements)
+}
+
+// fetchCantorsOverpass races a couple of mirrors with a short budget (fallback only).
+func fetchCantorsOverpass(client *http.Client, lat, lon float64) []osmCantorPOI {
+	endpoints := []string{
+		"https://overpass-api.de/api/interpreter",
+		"https://lz4.overpass-api.de/api/interpreter",
+	}
+	body := buildOverpassBody(lat, lon)
+
+	ch := make(chan []osmCantorPOI, len(endpoints))
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
 
 	for _, endpoint := range endpoints {
-		ep := endpoint
-		go func() {
-			req, err := http.NewRequestWithContext(ctx, "POST", ep, strings.NewReader(body))
-			if err != nil {
-				ch <- result{}
-				return
-			}
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			req.Header.Set(UserAgentHeader, UserAgentApp+" (discovery; github.com/Niutaq/Gix)")
-			resp, err := client.Do(req)
-			if err != nil || resp == nil || resp.StatusCode != http.StatusOK {
-				if resp != nil {
-					_ = resp.Body.Close()
-				}
-				ch <- result{}
-				return
-			}
-			var parsed overpassResp
-			err = json.NewDecoder(resp.Body).Decode(&parsed)
-			_ = resp.Body.Close()
-			if err != nil || len(parsed.Elements) == 0 {
-				ch <- result{}
-				return
-			}
-			out := make([]osmCantorPOI, 0, len(parsed.Elements))
-			for _, el := range parsed.Elements {
-				elat, elon := el.Lat, el.Lon
-				if elat == 0 && elon == 0 {
-					elat, elon = el.Center.Lat, el.Center.Lon
-				}
-				elat, elon = NormalizeLatLon(elat, elon)
-				if InPoland(elat, elon) {
-					el.Lat, el.Lon = elat, elon
-					out = append(out, el)
-				}
-			}
-			ch <- result{elements: out}
-		}()
+		go func(ep string) {
+			ch <- queryOverpassEndpoint(ctx, client, ep, body)
+		}(endpoint)
 	}
 
-	for i := 0; i < len(endpoints); i++ {
-		r := <-ch
-		if len(r.elements) > 0 {
+	for range endpoints {
+		if elements := <-ch; len(elements) > 0 {
 			cancel() // stop siblings
-			return r.elements
+			return elements
 		}
 	}
 	return nil
@@ -507,20 +523,20 @@ func osmDisplayName(c osmCantorPOI, city string) string {
 	street := ""
 	if c.Tags != nil {
 		name = strings.TrimSpace(c.Tags["name"])
-		street = strings.TrimSpace(c.Tags["addr:street"])
-		if hn := strings.TrimSpace(c.Tags["addr:housenumber"]); hn != "" && street != "" {
+		street = strings.TrimSpace(c.Tags[osmTagStreet])
+		if hn := strings.TrimSpace(c.Tags[osmTagHouseNumber]); hn != "" && street != "" {
 			street = street + " " + hn
 		}
 	}
 	// Unnamed / street-as-name POIs → "Kantor · …" (localized later).
 	if name == "" || strings.EqualFold(name, "kantor") || looksLikeStreetLabel(name) {
 		if street != "" {
-			return "Kantor · " + street
+			return kantorDotPrefix + street
 		}
 		if name != "" && looksLikeStreetLabel(name) {
-			return "Kantor · " + name
+			return kantorDotPrefix + name
 		}
-		return "Kantor · " + city
+		return kantorDotPrefix + city
 	}
 	return name
 }
@@ -612,48 +628,79 @@ func isStrongKantorPOI(c osmCantorPOI) bool {
 
 const cityDiscoverRadiusKm = 12.0
 
-func mergeOSMCantors(cityLat, cityLon float64, parts ...[]osmCantorPOI) []osmCantorPOI {
-	seen := make(map[string]bool)
-	type scored struct {
-		c     osmCantorPOI
-		dist  float64
-		strong bool
+type scoredPOI struct {
+	c      osmCantorPOI
+	dist   float64
+	strong bool
+}
+
+// withinCityRadius reports whether dist is inside the discovery radius (unset city centre disables the check).
+func withinCityRadius(cityLat, cityLon, dist float64) bool {
+	if cityLat == 0 && cityLon == 0 {
+		return true
 	}
-	var ranked []scored
+	return dist <= cityDiscoverRadiusKm
+}
+
+// normalizePOICoords returns the POI position (falling back to its center) with lat/lon normalized.
+func normalizePOICoords(c osmCantorPOI) (float64, float64) {
+	lat, lon := c.Lat, c.Lon
+	if lat == 0 && lon == 0 {
+		lat, lon = c.Center.Lat, c.Center.Lon
+	}
+	return NormalizeLatLon(lat, lon)
+}
+
+// scoreOSMCandidate validates a POI (in Poland, acceptable, inside the radius) and scores it.
+func scoreOSMCandidate(cityLat, cityLon float64, c osmCantorPOI) (scoredPOI, bool) {
+	lat, lon := normalizePOICoords(c)
+	if !InPoland(lat, lon) {
+		return scoredPOI{}, false
+	}
+	c.Lat, c.Lon = lat, lon
+	if !isAcceptableKantorPOI(c) {
+		return scoredPOI{}, false
+	}
+	dist := CalculateDistance(cityLat, cityLon, lat, lon)
+	if !withinCityRadius(cityLat, cityLon, dist) {
+		return scoredPOI{}, false
+	}
+	return scoredPOI{c: c, dist: dist, strong: isStrongKantorPOI(c)}, true
+}
+
+// rankOSMCantors dedupes and scores candidate POIs from all sources.
+func rankOSMCantors(cityLat, cityLon float64, parts [][]osmCantorPOI) []scoredPOI {
+	seen := make(map[string]bool)
+	var ranked []scoredPOI
 	for _, list := range parts {
 		for _, c := range list {
-			lat, lon := c.Lat, c.Lon
-			if lat == 0 && lon == 0 {
-				lat, lon = c.Center.Lat, c.Center.Lon
-			}
-			lat, lon = NormalizeLatLon(lat, lon)
-			if !InPoland(lat, lon) {
+			cand, ok := scoreOSMCandidate(cityLat, cityLon, c)
+			if !ok {
 				continue
 			}
-			c.Lat, c.Lon = lat, lon
-			if !isAcceptableKantorPOI(c) {
-				continue
-			}
-			dist := CalculateDistance(cityLat, cityLon, lat, lon)
-			if cityLat != 0 || cityLon != 0 {
-				if dist > cityDiscoverRadiusKm {
-					continue
-				}
-			}
-			key := fmt.Sprintf("%.4f,%.4f", lat, lon)
+			key := fmt.Sprintf("%.4f,%.4f", cand.c.Lat, cand.c.Lon)
 			if seen[key] {
 				continue
 			}
 			seen[key] = true
-			ranked = append(ranked, scored{c: c, dist: dist, strong: isStrongKantorPOI(c)})
+			ranked = append(ranked, cand)
 		}
 	}
+	return ranked
+}
+
+// sortScoredPOIs puts strong (named) POIs first, then orders by distance.
+func sortScoredPOIs(ranked []scoredPOI) {
 	sort.Slice(ranked, func(i, j int) bool {
 		if ranked[i].strong != ranked[j].strong {
 			return ranked[i].strong // strong first
 		}
 		return ranked[i].dist < ranked[j].dist
 	})
+}
+
+// pickTopRanked keeps at most maxKeep POIs, dropping street-only fillers when enough named ones exist.
+func pickTopRanked(ranked []scoredPOI) []osmCantorPOI {
 	strongN := 0
 	for _, s := range ranked {
 		if s.strong {
@@ -675,146 +722,190 @@ func mergeOSMCantors(cityLat, cityLon float64, parts ...[]osmCantorPOI) []osmCan
 	return out
 }
 
-func fetchCantorsNominatim(client *http.Client, city string, lat, lon float64) []osmCantorPOI {
-	seen := make(map[string]bool)
-	var out []osmCantorPOI
+func mergeOSMCantors(cityLat, cityLon float64, parts ...[]osmCantorPOI) []osmCantorPOI {
+	ranked := rankOSMCantors(cityLat, cityLon, parts)
+	sortScoredPOIs(ranked)
+	return pickTopRanked(ranked)
+}
 
-	appendResults := func(results []struct {
-		DisplayName string `json:"display_name"`
-		Lat         string `json:"lat"`
-		Lon         string `json:"lon"`
-		Class       string `json:"class"`
-		Type        string `json:"type"`
-		Name        string `json:"name"`
-		Address     struct {
-			Road        string `json:"road"`
-			Pedestrian  string `json:"pedestrian"`
-			HouseNumber string `json:"house_number"`
-			City        string `json:"city"`
-			Town        string `json:"town"`
-		} `json:"address"`
-	}, requireKantorWord bool) {
-		for _, r := range results {
-			dn := strings.ToLower(r.DisplayName + " " + r.Name)
-			if isJunkKantorText(dn) {
-				continue
-			}
-			if requireKantorWord {
-				if r.Type != "bureau_de_change" &&
-					!strings.Contains(dn, "kantor") &&
-					!strings.Contains(dn, "exchange") &&
-					!strings.Contains(dn, "wymian") {
-					continue
-				}
-			} else if r.Type != "bureau_de_change" && r.Type != "currency_exchange" {
-				// Structured amenity search should only keep real exchange POIs.
-				continue
-			}
-			cLat, _ := strconv.ParseFloat(r.Lat, 64)
-			cLon, _ := strconv.ParseFloat(r.Lon, 64)
-			cLat, cLon = NormalizeLatLon(cLat, cLon)
-			if !InPoland(cLat, cLon) {
-				continue
-			}
-			if lat != 0 || lon != 0 {
-				if CalculateDistance(lat, lon, cLat, cLon) > cityDiscoverRadiusKm {
-					continue
-				}
-			}
-			key := fmt.Sprintf("%.4f,%.4f", cLat, cLon)
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			name := strings.TrimSpace(r.Name)
-			if name == "" {
-				name = strings.TrimSpace(strings.Split(r.DisplayName, ",")[0])
-			}
-			street := strings.TrimSpace(r.Address.Road)
-			if street == "" {
-				street = strings.TrimSpace(r.Address.Pedestrian)
-			}
-			if street == "" {
-				parts := strings.Split(r.DisplayName, ",")
-				if len(parts) > 1 {
-					street = strings.TrimSpace(parts[1])
-				}
-			}
-			if hn := strings.TrimSpace(r.Address.HouseNumber); hn != "" && street != "" && !strings.Contains(street, hn) {
-				street = street + " " + hn
-			}
-			tags := map[string]string{"name": name}
-			if street != "" {
-				tags["addr:street"] = street
-			}
-			if r.Type == "bureau_de_change" || r.Type == "currency_exchange" {
-				tags["amenity"] = r.Type
-			}
-			cand := osmCantorPOI{Lat: cLat, Lon: cLon, Tags: tags}
-			if !isAcceptableKantorPOI(cand) {
-				continue
-			}
-			out = append(out, cand)
+type nominatimPlace struct {
+	DisplayName string `json:"display_name"`
+	Lat         string `json:"lat"`
+	Lon         string `json:"lon"`
+	Class       string `json:"class"`
+	Type        string `json:"type"`
+	Name        string `json:"name"`
+	Address     struct {
+		Road        string `json:"road"`
+		Pedestrian  string `json:"pedestrian"`
+		HouseNumber string `json:"house_number"`
+		City        string `json:"city"`
+		Town        string `json:"town"`
+	} `json:"address"`
+}
+
+// isExchangeAmenityType reports whether an OSM type denotes a real currency exchange POI.
+func isExchangeAmenityType(t string) bool {
+	return t == "bureau_de_change" || t == "currency_exchange"
+}
+
+// nominatimPlaceMatches filters out junk and (depending on the query kind) non-exchange places.
+func nominatimPlaceMatches(r nominatimPlace, requireKantorWord bool) bool {
+	dn := strings.ToLower(r.DisplayName + " " + r.Name)
+	if isJunkKantorText(dn) {
+		return false
+	}
+	if requireKantorWord {
+		return r.Type == "bureau_de_change" ||
+			strings.Contains(dn, "kantor") ||
+			strings.Contains(dn, "exchange") ||
+			strings.Contains(dn, "wymian")
+	}
+	// Structured amenity search should only keep real exchange POIs.
+	return isExchangeAmenityType(r.Type)
+}
+
+// nominatimStreet derives a "street number" label from a Nominatim place.
+func nominatimStreet(r nominatimPlace) string {
+	street := strings.TrimSpace(r.Address.Road)
+	if street == "" {
+		street = strings.TrimSpace(r.Address.Pedestrian)
+	}
+	if street == "" {
+		parts := strings.Split(r.DisplayName, ",")
+		if len(parts) > 1 {
+			street = strings.TrimSpace(parts[1])
 		}
 	}
-
-	doGET := func(rawURL string) {
-		req, err := http.NewRequest("GET", rawURL, nil)
-		if err != nil {
-			return
-		}
-		req.Header.Set("User-Agent", UserAgentApp+" (discovery; github.com/Niutaq/Gix)")
-		resp, err := client.Do(req)
-		if err != nil {
-			return
-		}
-		defer func() { _ = resp.Body.Close() }()
-		var results []struct {
-			DisplayName string `json:"display_name"`
-			Lat         string `json:"lat"`
-			Lon         string `json:"lon"`
-			Class       string `json:"class"`
-			Type        string `json:"type"`
-			Name        string `json:"name"`
-			Address     struct {
-				Road        string `json:"road"`
-				Pedestrian  string `json:"pedestrian"`
-				HouseNumber string `json:"house_number"`
-				City        string `json:"city"`
-				Town        string `json:"town"`
-			} `json:"address"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
-			return
-		}
-		// amenity=… endpoints are already typed; free-text needs word filter.
-		requireWord := !strings.Contains(rawURL, "amenity=bureau_de_change")
-		appendResults(results, requireWord)
+	if hn := strings.TrimSpace(r.Address.HouseNumber); hn != "" && street != "" && !strings.Contains(street, hn) {
+		street = street + " " + hn
 	}
+	return street
+}
 
-	// 1) Fast structured amenity search in a tight city viewbox (~1 request).
-	if lat != 0 || lon != 0 {
-		const dLat, dLon = 0.11, 0.16 // ~12 km
-		viewbox := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f", lon-dLon, lat-dLat, lon+dLon, lat+dLat)
-		u := "https://nominatim.openstreetmap.org/search?amenity=bureau_de_change&format=json&addressdetails=1&limit=15&countrycodes=pl&viewbox=" +
-			url.QueryEscape(viewbox) + "&bounded=1"
-		doGET(u)
+// buildNominatimCandidate converts a Nominatim place into an OSM-style POI.
+func buildNominatimCandidate(r nominatimPlace, lat, lon float64) osmCantorPOI {
+	name := strings.TrimSpace(r.Name)
+	if name == "" {
+		name = strings.TrimSpace(strings.Split(r.DisplayName, ",")[0])
 	}
+	tags := map[string]string{"name": name}
+	if street := nominatimStreet(r); street != "" {
+		tags[osmTagStreet] = street
+	}
+	if isExchangeAmenityType(r.Type) {
+		tags["amenity"] = r.Type
+	}
+	return osmCantorPOI{Lat: lat, Lon: lon, Tags: tags}
+}
 
-	// 2) At most one free-text query — only if viewbox was thin (Nominatim 1 req/s).
+// nominatimCollector accumulates deduplicated exchange POIs from Nominatim responses.
+type nominatimCollector struct {
+	client   *http.Client
+	lat, lon float64
+	seen     map[string]bool
+	out      []osmCantorPOI
+}
+
+// placeCoords parses a place position and checks it lies in Poland and inside the city radius.
+func (n *nominatimCollector) placeCoords(r nominatimPlace) (float64, float64, bool) {
+	cLat, _ := strconv.ParseFloat(r.Lat, 64)
+	cLon, _ := strconv.ParseFloat(r.Lon, 64)
+	cLat, cLon = NormalizeLatLon(cLat, cLon)
+	if !InPoland(cLat, cLon) {
+		return 0, 0, false
+	}
+	if !withinCityRadius(n.lat, n.lon, CalculateDistance(n.lat, n.lon, cLat, cLon)) {
+		return 0, 0, false
+	}
+	return cLat, cLon, true
+}
+
+func (n *nominatimCollector) appendResults(results []nominatimPlace, requireKantorWord bool) {
+	for _, r := range results {
+		if !nominatimPlaceMatches(r, requireKantorWord) {
+			continue
+		}
+		cLat, cLon, ok := n.placeCoords(r)
+		if !ok {
+			continue
+		}
+		key := fmt.Sprintf("%.4f,%.4f", cLat, cLon)
+		if n.seen[key] {
+			continue
+		}
+		n.seen[key] = true
+		cand := buildNominatimCandidate(r, cLat, cLon)
+		if !isAcceptableKantorPOI(cand) {
+			continue
+		}
+		n.out = append(n.out, cand)
+	}
+}
+
+// fetchPlaces performs a Nominatim GET and decodes the result list.
+func (n *nominatimCollector) fetchPlaces(rawURL string) ([]nominatimPlace, bool) {
+	req, err := http.NewRequest("GET", rawURL, nil)
+	if err != nil {
+		return nil, false
+	}
+	req.Header.Set("User-Agent", UserAgentApp+" (discovery; github.com/Niutaq/Gix)")
+	resp, err := n.client.Do(req)
+	if err != nil {
+		return nil, false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var results []nominatimPlace
+	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+		return nil, false
+	}
+	return results, true
+}
+
+func (n *nominatimCollector) doGET(rawURL string) {
+	results, ok := n.fetchPlaces(rawURL)
+	if !ok {
+		return
+	}
+	// amenity=… endpoints are already typed; free-text needs word filter.
+	requireWord := !strings.Contains(rawURL, "amenity=bureau_de_change")
+	n.appendResults(results, requireWord)
+}
+
+// strongCount returns how many collected POIs have a real business name.
+func (n *nominatimCollector) strongCount() int {
 	strong := 0
-	for _, c := range out {
+	for _, c := range n.out {
 		if isStrongKantorPOI(c) {
 			strong++
 		}
 	}
-	if strong < 3 && strings.TrimSpace(city) != "" {
-		time.Sleep(1100 * time.Millisecond)
-		u := "https://nominatim.openstreetmap.org/search?q=" + url.QueryEscape("kantor "+city) +
-			"&format=json&addressdetails=1&limit=10&countrycodes=pl"
-		doGET(u)
+	return strong
+}
+
+// nominatimViewboxURL builds the structured amenity search URL for a tight city viewbox (~12 km).
+func nominatimViewboxURL(lat, lon float64) string {
+	const dLat, dLon = 0.11, 0.16 // ~12 km
+	viewbox := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f", lon-dLon, lat-dLat, lon+dLon, lat+dLat)
+	return "https://nominatim.openstreetmap.org/search?amenity=bureau_de_change&format=json&addressdetails=1&limit=15&countrycodes=pl&viewbox=" +
+		url.QueryEscape(viewbox) + "&bounded=1"
+}
+
+func fetchCantorsNominatim(client *http.Client, city string, lat, lon float64) []osmCantorPOI {
+	n := &nominatimCollector{client: client, lat: lat, lon: lon, seen: make(map[string]bool)}
+
+	// 1) Fast structured amenity search in a tight city viewbox (~1 request).
+	if lat != 0 || lon != 0 {
+		n.doGET(nominatimViewboxURL(lat, lon))
 	}
-	return out
+
+	// 2) At most one free-text query — only if viewbox was thin (Nominatim 1 req/s).
+	if n.strongCount() < 3 && strings.TrimSpace(city) != "" {
+		time.Sleep(1100 * time.Millisecond)
+		n.doGET("https://nominatim.openstreetmap.org/search?q=" + url.QueryEscape("kantor "+city) +
+			"&format=json&addressdetails=1&limit=10&countrycodes=pl")
+	}
+	return n.out
 }
 
 var (
@@ -823,30 +914,155 @@ var (
 	activeCitySearch string
 )
 
-// DiscoverCityCantors finds physical cantors via Nominatim/Overpass and their URLs via DuckDuckGo.
-func DiscoverCityCantors(city string, state *AppState, config AppConfig, window *app.Window) {
-	city = strings.TrimSpace(city)
-	if city == "" {
-		return
-	}
+// citySearch carries the state of a single DiscoverCityCantors run.
+type citySearch struct {
+	city   string
+	state  *AppState
+	config AppConfig
+	window *app.Window
+	client *http.Client
+	gen    uint64
+}
 
+// discoveryTarget is a resolved OSM cantor that still needs a website / rates lookup.
+type discoveryTarget struct {
+	name    string
+	addr    string
+	website string
+	lat     float64
+	lon     float64
+}
+
+type cantorWithDistance struct {
+	Element  osmCantorPOI
+	Distance float64
+}
+
+// seenURLSet is a concurrency-safe set used to avoid scraping the same URL twice.
+type seenURLSet struct {
+	mu   sync.Mutex
+	seen map[string]bool
+}
+
+// claim marks the URL as seen and reports whether this call was the first to do so.
+func (s *seenURLSet) claim(u string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.seen[u] {
+		return false
+	}
+	s.seen[u] = true
+	return true
+}
+
+// excludedDiscoveryDomains lists aggregators, directories, maps, social media, and crypto exchanges to skip.
+var excludedDiscoveryDomains = []string{
+	"facebook.com", "instagram.com", "google.com", "linkedin.com",
+	"kantor.pl", "quantor.pl", "tavex.pl", "kantor.live", "kantroom.pl",
+	"kantorywsieci.pl", "marketportal.pl", "zlata.ws", "dobrykantor.pl", "wymieniarka.pl",
+	"mapy.com", "targeo.pl", "zumi.pl", "e-mapa.net", "osm.org", "openstreetmap.org",
+	"pkt.pl", "panoramafirm.pl", "biznesfinder.pl", "cylex-polska.pl", "gowork.pl",
+	"biznes.gov.pl", "aleo.com", "orly.pl", "baza-firm.com.pl", "katalog.wp.pl",
+	"kursarz.pl", "strefawalut.pl", "revieweuro.com", "oferteo.pl", "cinkciarz.pl",
+	"walutomat.pl", "internetowykantor.pl", "amronet.pl", "liderwalut.pl", "money.pl",
+	"bankier.pl", "najlepszekantory.pl", "kursy-walut.pl", "kantory.pl", "katalog.onet.pl",
+	"przeliczwalut.pl", "firmania.pl", "aliorbank.pl", "kryptokurier.pl", "cashify.eu",
+	"krypto", "crypto", "bitcoin", "bithub", "coin", "mennica",
+}
+
+// isExcludedDiscoveryURL reports whether the URL points at a domain we never scrape rates from.
+func isExcludedDiscoveryURL(u string) bool {
+	lower := strings.ToLower(u)
+	for _, domain := range excludedDiscoveryDomains {
+		if strings.Contains(lower, domain) {
+			return true
+		}
+	}
+	return false
+}
+
+// haversineKm returns the great-circle distance in kilometres.
+func haversineKm(lat1, lon1, lat2, lon2 float64) float64 {
+	const R = 6371.0
+	dLat := (lat2 - lat1) * math.Pi / 180.0
+	dLon := (lon2 - lon1) * math.Pi / 180.0
+	lat1Rad := lat1 * math.Pi / 180.0
+	lat2Rad := lat2 * math.Pi / 180.0
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) + math.Sin(dLon/2)*math.Sin(dLon/2)*math.Cos(lat1Rad)*math.Cos(lat2Rad)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	return R * c
+}
+
+// newCitySearch registers a new search generation (invalidating any running one).
+func newCitySearch(city string, state *AppState, config AppConfig, window *app.Window) *citySearch {
 	cityDiscoverMu.Lock()
 	cityDiscoverGen++
 	gen := cityDiscoverGen
 	activeCitySearch = city
 	cityDiscoverMu.Unlock()
 
-	isStale := func() bool {
-		cityDiscoverMu.Lock()
-		defer cityDiscoverMu.Unlock()
-		return gen != cityDiscoverGen
+	// Nominatim-first path stays under ~10s; Overpass fallback is capped at 6s.
+	return &citySearch{
+		city:   city,
+		state:  state,
+		config: config,
+		window: window,
+		client: &http.Client{Timeout: 10 * time.Second},
+		gen:    gen,
 	}
+}
 
+func (s *citySearch) isStale() bool {
+	cityDiscoverMu.Lock()
+	defer cityDiscoverMu.Unlock()
+	return s.gen != cityDiscoverGen
+}
+
+func (s *citySearch) invalidate() {
+	if s.window != nil {
+		s.window.Invalidate()
+	}
+}
+
+func (s *citySearch) setSearchFeedback(msg string) {
+	if s.isStale() {
+		return
+	}
+	s.state.UI.SearchEditor.SetText(msg)
+	s.state.UI.SearchText = msg
+	s.invalidate()
+}
+
+func (s *citySearch) clearSearchIfQuery() {
+	if s.isStale() {
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(s.state.UI.SearchEditor.Text()), s.city) {
+		s.state.UI.SearchEditor.SetText("")
+		s.state.UI.SearchText = ""
+		s.invalidate()
+	}
+}
+
+func (s *citySearch) finishLoading() {
+	s.state.IsLoading.Store(false)
+	s.invalidate()
+}
+
+// fail shows a localized error in the search box and stops the loading spinner.
+func (s *citySearch) fail(translationKey string) {
+	s.setSearchFeedback(GetTranslation(s.state.UI.Language, translationKey))
+	s.finishLoading()
+}
+
+// resetForSearch clears previous city pins and UI filters before a new city search.
+func (s *citySearch) resetForSearch() {
+	state := s.state
 	state.CantorsMu.Lock()
 	if state.UI.ScannedChunks == nil {
 		state.UI.ScannedChunks = make(map[string]bool)
 	}
-	state.UI.ScannedChunks[strings.ToLower(city)] = true
+	state.UI.ScannedChunks[strings.ToLower(s.city)] = true
 	// Drop previous city OSM pins so the list isn't stuck on an empty city filter.
 	for key, c := range state.Cantors {
 		if c != nil && (strings.HasPrefix(key, "osm_") || strings.EqualFold(c.Strategy, "OSM")) {
@@ -865,58 +1081,23 @@ func DiscoverCityCantors(city string, state *AppState, config AppConfig, window 
 	state.UI.MapFocus.CityName = ""
 	state.UI.FilteredIDs = nil
 
-	setSearchFeedback := func(msg string) {
-		if isStale() {
-			return
-		}
-		state.UI.SearchEditor.SetText(msg)
-		state.UI.SearchText = msg
-		if window != nil {
-			window.Invalidate()
-		}
-	}
-	clearSearchIfQuery := func() {
-		if isStale() {
-			return
-		}
-		if strings.EqualFold(strings.TrimSpace(state.UI.SearchEditor.Text()), city) {
-			state.UI.SearchEditor.SetText("")
-			state.UI.SearchText = ""
-			if window != nil {
-				window.Invalidate()
-			}
-		}
-	}
+	s.invalidate()
+}
 
-	if window != nil {
-		window.Invalidate()
-	}
-
-	finishLoading := func() {
-		state.IsLoading.Store(false)
-		if window != nil {
-			window.Invalidate()
-		}
-	}
-
-	log.Printf("Starting city discovery for: %s", city)
-
-	// Nominatim-first path stays under ~10s; Overpass fallback is capped at 6s.
-	client := &http.Client{Timeout: 10 * time.Second}
-
+// geocodeCity resolves the city to Poland-only coordinates; on failure it reports the error to the UI.
+func (s *citySearch) geocodeCity() (float64, float64, bool) {
 	// Step 1: Geocode city — Poland only (PLN kantor product, not global FX).
 	geocodeURL := fmt.Sprintf(
 		"https://nominatim.openstreetmap.org/search?q=%s&format=json&limit=1&countrycodes=pl",
-		url.QueryEscape(city),
+		url.QueryEscape(s.city),
 	)
 	reqCity, _ := http.NewRequest("GET", geocodeURL, nil)
 	reqCity.Header.Set("User-Agent", UserAgentApp+" (city search; github.com/Niutaq/Gix)")
-	respCity, err := client.Do(reqCity)
+	respCity, err := s.client.Do(reqCity)
 	if err != nil {
 		log.Printf("Geocode Error: %v", err)
-		setSearchFeedback(GetTranslation(state.UI.Language, "err_api_connection"))
-		finishLoading()
-		return
+		s.fail("err_api_connection")
+		return 0, 0, false
 	}
 
 	var geoResults []struct {
@@ -926,296 +1107,281 @@ func DiscoverCityCantors(city string, state *AppState, config AppConfig, window 
 	decodeErr := json.NewDecoder(respCity.Body).Decode(&geoResults)
 	_ = respCity.Body.Close()
 	if decodeErr != nil || len(geoResults) == 0 {
-		log.Printf("Could not find coordinates for city in Poland: %s", city)
-		setSearchFeedback(GetTranslation(state.UI.Language, "err_city_not_poland"))
-		finishLoading()
-		return
+		log.Printf("Could not find coordinates for city in Poland: %s", s.city)
+		s.fail("err_city_not_poland")
+		return 0, 0, false
 	}
 
 	lat, _ := strconv.ParseFloat(geoResults[0].Lat, 64)
 	lon, _ := strconv.ParseFloat(geoResults[0].Lon, 64)
 	lat, lon = NormalizeLatLon(lat, lon)
 	if !InPoland(lat, lon) {
-		log.Printf("Rejected city outside Poland: %s (%.4f, %.4f)", city, lat, lon)
-		setSearchFeedback(GetTranslation(state.UI.Language, "err_city_not_poland"))
-		finishLoading()
+		log.Printf("Rejected city outside Poland: %s (%.4f, %.4f)", s.city, lat, lon)
+		s.fail("err_city_not_poland")
+		return 0, 0, false
+	}
+	return lat, lon, true
+}
+
+// focusMap centers the map on the geocoded city.
+func (s *citySearch) focusMap(lat, lon float64) {
+	s.state.UI.MapFocus.Latitude = lat
+	s.state.UI.MapFocus.Longitude = lon
+	s.state.UI.MapState.CenterLat = lat
+	s.state.UI.MapState.CenterLon = lon
+	// CityName + radius filter only after pins exist — otherwise the list flashes empty.
+	s.state.UI.FilteredIDs = nil
+	s.invalidate()
+}
+
+// collectCantors finds exchange POIs: Nominatim first (fast), Overpass only if the city still looks empty.
+func (s *citySearch) collectCantors(lat, lon float64) []osmCantorPOI {
+	nominatim := fetchCantorsNominatim(s.client, s.city, lat, lon)
+	log.Printf("Discovery: Nominatim %d POIs near %s", len(nominatim), s.city)
+	cantors := mergeOSMCantors(lat, lon, nominatim)
+	if len(cantors) < 3 {
+		log.Printf("Discovery: thin Nominatim for %s — short Overpass fallback", s.city)
+		overpass := fetchCantorsOverpass(s.client, lat, lon)
+		log.Printf("Discovery: Overpass %d POIs near %s", len(overpass), s.city)
+		cantors = mergeOSMCantors(lat, lon, cantors, overpass)
+	}
+	return cantors
+}
+
+// pinCantor adds (or refreshes) the map/list entry for a single OSM POI.
+func (s *citySearch) pinCantor(c *osmCantorPOI) {
+	if c.Lat == 0 && c.Center.Lat != 0 {
+		c.Lat = c.Center.Lat
+		c.Lon = c.Center.Lon
+	}
+	name := osmDisplayName(*c, s.city)
+	if c.Tags == nil {
+		c.Tags = map[string]string{}
+	}
+	c.Tags["name"] = name
+	osmKey := fmt.Sprintf("osm_%.4f_%.4f", c.Lat, c.Lon)
+
+	s.state.CantorsMu.Lock()
+	defer s.state.CantorsMu.Unlock()
+	info := s.state.Cantors[osmKey]
+	if info == nil {
+		s.state.Cantors[osmKey] = &CantorInfo{
+			DisplayName: name,
+			Latitude:    c.Lat,
+			Longitude:   c.Lon,
+			Address:     s.city,
+			Strategy:    "OSM",
+		}
+		return
+	}
+	info.DisplayName = name
+	info.Address = s.city
+	info.Latitude = c.Lat
+	info.Longitude = c.Lon
+}
+
+// pinCantors shows pins on the map/list immediately (rates come later if a website is found).
+func (s *citySearch) pinCantors(cantors []osmCantorPOI) {
+	for i := range cantors {
+		s.pinCantor(&cantors[i])
+	}
+	s.state.UI.MapFocus.CityName = s.city
+	s.state.UI.SortMode = "DIST"
+	// nil → filterCantorList rebuilds each frame until non-empty; also picks up later Discover APIs.
+	s.state.UI.FilteredIDs = nil
+	s.clearSearchIfQuery()
+	log.Printf("Discovery: pinned %d OSM cantors for %s on the list", len(cantors), s.city)
+	s.finishLoading()
+}
+
+// nearestCantors returns up to limit POIs sorted by distance from the city centre.
+func nearestCantors(cantors []osmCantorPOI, lat, lon float64, limit int) []cantorWithDistance {
+	var withDist []cantorWithDistance
+	for _, c := range cantors {
+		withDist = append(withDist, cantorWithDistance{Element: c, Distance: haversineKm(lat, lon, c.Lat, c.Lon)})
+	}
+	sort.Slice(withDist, func(i, j int) bool {
+		return withDist[i].Distance < withDist[j].Distance
+	})
+	if len(withDist) < limit {
+		limit = len(withDist)
+	}
+	return withDist[:limit]
+}
+
+// newDiscoveryTarget extracts name, address and website of an OSM POI.
+func newDiscoveryTarget(c osmCantorPOI, city string) discoveryTarget {
+	name := c.Tags["name"]
+	if name == "" || strings.EqualFold(name, "kantor") {
+		name = kantorPrefix + city
+	}
+
+	var addrParts []string
+	for _, tag := range []string{osmTagStreet, osmTagHouseNumber, "addr:city"} {
+		if v := c.Tags[tag]; v != "" {
+			addrParts = append(addrParts, v)
+		}
+	}
+	addr := strings.Join(addrParts, ", ")
+	if addr == "" {
+		addr = name
+	}
+
+	website := c.Tags["website"]
+	if website == "" {
+		website = c.Tags["contact:website"]
+	}
+	return discoveryTarget{name: name, addr: addr, website: website, lat: c.Lat, lon: c.Lon}
+}
+
+// ddgSearchTerm builds the DuckDuckGo query term for a cantor.
+func ddgSearchTerm(name, addr, cityName string) string {
+	if name != "" {
+		return name + " " + cityName
+	}
+	if addr == "" {
+		return kantorPrefix + cityName
+	}
+	return kantorPrefix + addr + " " + cityName
+}
+
+// decodeDDGHref unwraps DuckDuckGo redirect links (…/l/?uddg=<encoded>) and protocol-relative URLs.
+func decodeDDGHref(href string) string {
+	if strings.Contains(href, "uddg=") {
+		parts := strings.Split(href, "uddg=")
+		if len(parts) > 1 {
+			decoded, _ := url.QueryUnescape(strings.Split(parts[1], "&")[0])
+			return decoded
+		}
+		return ""
+	}
+	// Sometimes DDG returns direct URLs
+	if strings.HasPrefix(href, "//") {
+		return "https:" + href
+	}
+	return href
+}
+
+// fetchDDGResultHrefs returns the result links of a DuckDuckGo HTML search.
+func (s *citySearch) fetchDDGResultHrefs(searchQuery string) []string {
+	ddgReq, _ := http.NewRequest("GET", "https://html.duckduckgo.com/html/?q="+searchQuery, nil)
+	ddgReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+	ddgResp, err := s.client.Do(ddgReq)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = ddgResp.Body.Close() }()
+
+	doc, err := goquery.NewDocumentFromReader(ddgResp.Body)
+	if err != nil {
+		return nil
+	}
+
+	var hrefs []string
+	doc.Find("a.result__url").Each(func(_ int, sel *goquery.Selection) {
+		if href, exists := sel.Attr("href"); exists {
+			hrefs = append(hrefs, href)
+		}
+	})
+	return hrefs
+}
+
+// discoverViaSearch finds a cantor website through DuckDuckGo and runs heuristic discovery on it.
+func (s *citySearch) discoverViaSearch(t discoveryTarget, index int, urls *seenURLSet) {
+	time.Sleep(time.Duration(index) * 2 * time.Second) // Stagger requests to avoid DDG limits
+
+	searchQuery := url.QueryEscape(fmt.Sprintf("%s kursy walut", ddgSearchTerm(t.name, t.addr, s.city)))
+	for _, href := range s.fetchDDGResultHrefs(searchQuery) {
+		// The href might look like "//duckduckgo.com/l/?uddg=https%3A%2F%2Fkantor..."
+		decoded := decodeDDGHref(href)
+		if decoded == "" || isExcludedDiscoveryURL(decoded) {
+			continue
+		}
+		if !urls.claim(decoded) {
+			continue
+		}
+		if s.isStale() {
+			return
+		}
+		if triggerHeuristicDiscovery(decoded, t.name, t.lat, t.lon, t.addr, s.state, s.config, s.window) {
+			return // Stop at the first plausible specific URL that worked
+		}
+	}
+}
+
+// resolveWebsites looks up websites for the closest cantors in the background and scrapes their rates.
+func (s *citySearch) resolveWebsites(top []cantorWithDistance) {
+	urls := &seenURLSet{seen: make(map[string]bool)}
+	var wg sync.WaitGroup
+	for i, cw := range top {
+		if s.isStale() {
+			break
+		}
+		t := newDiscoveryTarget(cw.Element, s.city)
+		if t.website == "" { // Find via DDG using precise cantor name
+			wg.Add(1)
+			go func(index int) {
+				defer wg.Done()
+				s.discoverViaSearch(t, index, urls)
+			}(i)
+			continue
+		}
+		if !urls.claim(t.website) {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if s.isStale() {
+				return
+			}
+			triggerHeuristicDiscovery(t.website, t.name, t.lat, t.lon, t.addr, s.state, s.config, s.window)
+		}()
+	}
+	wg.Wait()
+}
+
+// DiscoverCityCantors finds physical cantors via Nominatim/Overpass and their URLs via DuckDuckGo.
+func DiscoverCityCantors(city string, state *AppState, config AppConfig, window *app.Window) {
+	city = strings.TrimSpace(city)
+	if city == "" {
 		return
 	}
 
-	state.UI.MapFocus.Latitude = lat
-	state.UI.MapFocus.Longitude = lon
-	state.UI.MapState.CenterLat = lat
-	state.UI.MapState.CenterLon = lon
-	// CityName + radius filter only after pins exist — otherwise the list flashes empty.
-	state.UI.FilteredIDs = nil
-	if window != nil {
-		window.Invalidate()
-	}
+	s := newCitySearch(city, state, config, window)
+	s.resetForSearch()
+	log.Printf("Starting city discovery for: %s", city)
 
-	if isStale() {
+	lat, lon, ok := s.geocodeCity()
+	if !ok {
+		return
+	}
+	s.focusMap(lat, lon)
+	if s.isStale() {
 		return
 	}
 
 	// Nominatim fair-use: ≥1s between requests (geocode → amenity).
 	time.Sleep(1100 * time.Millisecond)
 
-	// Step 2: Nominatim first (fast). Overpass only if the city still looks empty.
-	nominatim := fetchCantorsNominatim(client, city, lat, lon)
-	log.Printf("Discovery: Nominatim %d POIs near %s", len(nominatim), city)
-	cantors := mergeOSMCantors(lat, lon, nominatim)
-	if len(cantors) < 3 {
-		log.Printf("Discovery: thin Nominatim for %s — short Overpass fallback", city)
-		overpass := fetchCantorsOverpass(client, lat, lon)
-		log.Printf("Discovery: Overpass %d POIs near %s", len(overpass), city)
-		cantors = mergeOSMCantors(lat, lon, cantors, overpass)
-	}
-	if isStale() {
+	cantors := s.collectCantors(lat, lon)
+	if s.isStale() {
 		return
 	}
-
 	if len(cantors) == 0 {
 		log.Printf("Discovery: no OSM cantors near %s", city)
 		state.UI.MapFocus.CityName = city
-		setSearchFeedback(GetTranslation(state.UI.Language, "err_no_cantors_found"))
-		finishLoading()
+		s.fail("err_no_cantors_found")
 		return
 	}
 
-	// Show pins on the map/list immediately (rates come later if a website is found).
-	for i := range cantors {
-		if cantors[i].Lat == 0 && cantors[i].Center.Lat != 0 {
-			cantors[i].Lat = cantors[i].Center.Lat
-			cantors[i].Lon = cantors[i].Center.Lon
-		}
-		name := osmDisplayName(cantors[i], city)
-		if cantors[i].Tags == nil {
-			cantors[i].Tags = map[string]string{}
-		}
-		cantors[i].Tags["name"] = name
-		osmKey := fmt.Sprintf("osm_%.4f_%.4f", cantors[i].Lat, cantors[i].Lon)
-		state.CantorsMu.Lock()
-		if state.Cantors[osmKey] == nil {
-			state.Cantors[osmKey] = &CantorInfo{
-				DisplayName: name,
-				Latitude:    cantors[i].Lat,
-				Longitude:   cantors[i].Lon,
-				Address:     city,
-				Strategy:    "OSM",
-			}
-		} else {
-			state.Cantors[osmKey].DisplayName = name
-			state.Cantors[osmKey].Address = city
-			state.Cantors[osmKey].Latitude = cantors[i].Lat
-			state.Cantors[osmKey].Longitude = cantors[i].Lon
-		}
-		state.CantorsMu.Unlock()
-	}
-	state.UI.MapFocus.CityName = city
-	state.UI.SortMode = "DIST"
-	// nil → filterCantorList rebuilds each frame until non-empty; also picks up later Discover APIs.
-	state.UI.FilteredIDs = nil
-	clearSearchIfQuery()
-	log.Printf("Discovery: pinned %d OSM cantors for %s on the list", len(cantors), city)
-	finishLoading()
-	if window != nil {
-		window.Invalidate()
-	}
-
-	haversine := func(lat1, lon1, lat2, lon2 float64) float64 {
-		const R = 6371.0
-		dLat := (lat2 - lat1) * math.Pi / 180.0
-		dLon := (lon2 - lon1) * math.Pi / 180.0
-		lat1Rad := lat1 * math.Pi / 180.0
-		lat2Rad := lat2 * math.Pi / 180.0
-		a := math.Sin(dLat/2)*math.Sin(dLat/2) + math.Sin(dLon/2)*math.Sin(dLon/2)*math.Cos(lat1Rad)*math.Cos(lat2Rad)
-		c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-		return R * c
-	}
-
-	type CantorWithDistance struct {
-		Element  osmCantorPOI
-		Distance float64
-	}
-	var cantorsWithDist []CantorWithDistance
-	for _, c := range cantors {
-		dist := haversine(lat, lon, c.Lat, c.Lon)
-		cantorsWithDist = append(cantorsWithDist, CantorWithDistance{Element: c, Distance: dist})
-	}
-
-	sort.Slice(cantorsWithDist, func(i, j int) bool {
-		return cantorsWithDist[i].Distance < cantorsWithDist[j].Distance
-	})
+	s.pinCantors(cantors)
+	s.invalidate()
 
 	// Take top 5 — website lookup runs in background (spinner already cleared).
-	limit := 5
-	if len(cantorsWithDist) < limit {
-		limit = len(cantorsWithDist)
-	}
-	topCantors := cantorsWithDist[:limit]
-	log.Printf("Discovery: found %d OSM cantors near %s — resolving websites…", limit, city)
-
-	seenURLs := make(map[string]bool)
-	var urlMu sync.Mutex
-	var wg sync.WaitGroup
-	for i, cw := range topCantors {
-		if isStale() {
-			break
-		}
-		c := cw.Element
-		cLat := c.Lat
-		cLon := c.Lon
-		cName := ""
-		if c.Tags != nil {
-			cName = c.Tags["name"]
-		}
-		if cName == "" || strings.EqualFold(cName, "kantor") {
-			cName = "Kantor " + city
-		}
-
-		var addrParts []string
-		if c.Tags != nil {
-			if c.Tags["addr:street"] != "" {
-				addrParts = append(addrParts, c.Tags["addr:street"])
-			}
-			if c.Tags["addr:housenumber"] != "" {
-				addrParts = append(addrParts, c.Tags["addr:housenumber"])
-			}
-			if c.Tags["addr:city"] != "" {
-				addrParts = append(addrParts, c.Tags["addr:city"])
-			}
-		}
-		cAddr := strings.Join(addrParts, ", ")
-		if cAddr == "" {
-			cAddr = cName
-		}
-
-		website := ""
-		if c.Tags != nil {
-			website = c.Tags["website"]
-			if website == "" {
-				website = c.Tags["contact:website"]
-			}
-		}
-
-		if website != "" {
-			if seenURLs[website] {
-				continue
-			}
-			seenURLs[website] = true
-			wg.Add(1)
-			go func(urlStr, name string, lt, ln float64, addr string) {
-				defer wg.Done()
-				if isStale() {
-					return
-				}
-				triggerHeuristicDiscovery(urlStr, name, lt, ln, addr, state, config, window)
-			}(website, cName, cLat, cLon, cAddr)
-		} else { // Find via DDG using precise cantor name
-			wg.Add(1)
-			go func(name, cityName string, lt, ln float64, addr string, index int) {
-				defer wg.Done()
-				time.Sleep(time.Duration(index) * 2 * time.Second) // Stagger requests to avoid DDG limits
-
-				searchTerm := name
-				if searchTerm == "" {
-					if addr == "" {
-						searchTerm = "Kantor " + cityName
-					} else {
-						searchTerm = "Kantor " + addr + " " + cityName
-					}
-				} else {
-					searchTerm = name + " " + cityName
-				}
-				searchQuery := url.QueryEscape(fmt.Sprintf("%s kursy walut", searchTerm))
-
-				ddgReq, _ := http.NewRequest("GET", "https://html.duckduckgo.com/html/?q="+searchQuery, nil)
-				ddgReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-				ddgResp, err := client.Do(ddgReq)
-				if err != nil {
-					return
-				}
-				defer func() { _ = ddgResp.Body.Close() }()
-
-				doc, err := goquery.NewDocumentFromReader(ddgResp.Body)
-				if err != nil {
-					return
-				}
-
-				doc.Find("a.result__url").EachWithBreak(func(i int, s *goquery.Selection) bool {
-					href, exists := s.Attr("href")
-					if !exists {
-						return true
-					}
-
-					// The href might look like "//duckduckgo.com/l/?uddg=https%3A%2F%2Fkantor..."
-					var decoded string
-					if strings.Contains(href, "uddg=") {
-						parts := strings.Split(href, "uddg=")
-						if len(parts) > 1 {
-							decoded, _ = url.QueryUnescape(strings.Split(parts[1], "&")[0])
-						}
-					} else {
-						// Sometimes DDG returns direct URLs
-						decoded = href
-						if strings.HasPrefix(decoded, "//") {
-							decoded = "https:" + decoded
-						}
-					}
-
-					if decoded == "" {
-						return true
-					}
-
-					decodedLower := strings.ToLower(decoded)
-
-					// Skip aggregators, directories, maps, social media, and crypto exchanges
-					excludedDomains := []string{
-						"facebook.com", "instagram.com", "google.com", "linkedin.com",
-						"kantor.pl", "quantor.pl", "tavex.pl", "kantor.live", "kantroom.pl",
-						"kantorywsieci.pl", "marketportal.pl", "zlata.ws", "dobrykantor.pl", "wymieniarka.pl",
-						"mapy.com", "targeo.pl", "zumi.pl", "e-mapa.net", "osm.org", "openstreetmap.org",
-						"pkt.pl", "panoramafirm.pl", "biznesfinder.pl", "cylex-polska.pl", "gowork.pl",
-						"biznes.gov.pl", "aleo.com", "orly.pl", "baza-firm.com.pl", "katalog.wp.pl",
-						"kursarz.pl", "strefawalut.pl", "revieweuro.com", "oferteo.pl", "cinkciarz.pl",
-						"walutomat.pl", "internetowykantor.pl", "amronet.pl", "liderwalut.pl", "money.pl",
-						"bankier.pl", "najlepszekantory.pl", "kursy-walut.pl", "kantory.pl", "katalog.onet.pl",
-						"przeliczwalut.pl", "firmania.pl", "aliorbank.pl", "kryptokurier.pl", "cashify.eu",
-						"krypto", "crypto", "bitcoin", "bithub", "coin", "mennica",
-					}
-
-					isExcluded := false
-					for _, domain := range excludedDomains {
-						if strings.Contains(decodedLower, domain) {
-							isExcluded = true
-							break
-						}
-					}
-
-					if !isExcluded {
-						urlMu.Lock()
-						already := seenURLs[decoded]
-						if !already {
-							seenURLs[decoded] = true
-						}
-						urlMu.Unlock()
-						if already {
-							return true
-						}
-						if isStale() {
-							return false
-						}
-						success := triggerHeuristicDiscovery(decoded, name, lt, ln, addr, state, config, window)
-						if success {
-							return false // Stop at the first plausible specific URL that worked
-						}
-					}
-
-					return true // Continue checking other results
-				})
-			}(cName, city, cLat, cLon, cAddr, i)
-		}
-	}
-	wg.Wait()
+	top := nearestCantors(cantors, lat, lon, 5)
+	log.Printf("Discovery: found %d OSM cantors near %s — resolving websites…", len(top), city)
+	s.resolveWebsites(top)
 }
 
 // LLMDiscoverCityCantors is kept for compatibility. Discovery is heuristic, not LLM-backed.

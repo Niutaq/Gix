@@ -10,8 +10,9 @@ DATABASE_URL="${DATABASE_URL:-postgres://gixuser:change-me-local-only@127.0.0.1:
 PF_PID=""
 
 need() {
-  command -v "$1" >/dev/null 2>&1 || {
-    echo "Missing dependency: $1" >&2
+  local bin="$1"
+  command -v "${bin}" >/dev/null 2>&1 || {
+    echo "Missing dependency: ${bin}" >&2
     exit 1
   }
 }

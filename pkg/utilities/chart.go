@@ -201,13 +201,9 @@ func processChartEvents(gtx layout.Context, lc *LineChart, state *UIState) {
 	event.Op(gtx.Ops, lc.Tag)
 }
 
-// calculateChartLayout calculates the layout context for a line chart.
-func calculateChartLayout(gtx layout.Context, lc *LineChart) chartLayoutContext {
-	width := float32(gtx.Constraints.Max.X)
-	height := float32(gtx.Constraints.Max.Y)
-
-	// Find min/max across ALL series
-	minVal, maxVal := lc.Data[0], lc.Data[0]
+// chartValueBounds finds min/max across ALL series.
+func chartValueBounds(lc *LineChart) (minVal, maxVal float64) {
+	minVal, maxVal = lc.Data[0], lc.Data[0]
 
 	allSeries := append([][]float64{lc.Data}, lc.ExtraSeries...)
 	for _, series := range allSeries {
@@ -220,24 +216,44 @@ func calculateChartLayout(gtx layout.Context, lc *LineChart) chartLayoutContext 
 			}
 		}
 	}
+	return minVal, maxVal
+}
 
+// chartValueRange returns the value span, widening flat series so the line stays visible.
+func chartValueRange(minVal, maxVal float64) float64 {
 	rangeVal := maxVal - minVal
-	if rangeVal == 0 {
-		rangeVal = maxVal * 0.2
-		if rangeVal == 0 {
-			rangeVal = 0.1
-		}
+	if rangeVal != 0 {
+		return rangeVal
 	}
+	rangeVal = maxVal * 0.2
+	if rangeVal == 0 {
+		rangeVal = 0.1
+	}
+	return rangeVal
+}
+
+// chartTimeWindow returns the X axis window, falling back to the first/last timestamps.
+func chartTimeWindow(lc *LineChart) (winStart, winEnd int64) {
+	winStart, winEnd = lc.WindowStart, lc.WindowEnd
+	if (winStart <= 0 || winEnd <= winStart) && len(lc.Timestamps) >= 2 {
+		winStart, winEnd = lc.Timestamps[0], lc.Timestamps[len(lc.Timestamps)-1]
+	}
+	return winStart, winEnd
+}
+
+// calculateChartLayout calculates the layout context for a line chart.
+func calculateChartLayout(gtx layout.Context, lc *LineChart) chartLayoutContext {
+	width := float32(gtx.Constraints.Max.X)
+	height := float32(gtx.Constraints.Max.Y)
+
+	// Find min/max across ALL series
+	minVal, maxVal := chartValueBounds(lc)
+	rangeVal := chartValueRange(minVal, maxVal)
 
 	verticalPadding := rangeVal * 0.25
 	paddingX := float32(16.0)
 
-	winStart, winEnd := lc.WindowStart, lc.WindowEnd
-	if winStart <= 0 || winEnd <= winStart {
-		if len(lc.Timestamps) >= 2 {
-			winStart, winEnd = lc.Timestamps[0], lc.Timestamps[len(lc.Timestamps)-1]
-		}
-	}
+	winStart, winEnd := chartTimeWindow(lc)
 
 	return chartLayoutContext{
 		width:       width,

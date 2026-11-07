@@ -315,12 +315,20 @@ func handleMapEvents(gtx layout.Context, window *app.Window, state *AppState) {
 	}
 }
 
-// renderMarkers renders the markers on the map
-func renderMarkers(gtx layout.Context, state *AppState, ctx, cty float64, tileSize float64, zoom int) {
-	halfW := float64(gtx.Constraints.Max.X) / 2
-	halfH := float64(gtx.Constraints.Max.Y) / 2
+// markerFrame holds the per-frame values shared by all map pins.
+type markerFrame struct {
+	halfW, halfH float64
+	ctx, cty     float64
+	tileSize     float64
+	zoom         int
+	breath       float64
+	hasTop       bool
+}
 
+// visibleMarkerIDs returns the cantor IDs to pin: the filtered list, or on-map cantors with rates.
+func visibleMarkerIDs(state *AppState) []string {
 	state.CantorsMu.RLock()
+	defer state.CantorsMu.RUnlock()
 	ids := append([]string(nil), state.UI.FilteredIDs...)
 	if len(ids) == 0 {
 		// List not built yet — show on-map cantors that already have rates.
@@ -330,10 +338,20 @@ func renderMarkers(gtx layout.Context, state *AppState, ctx, cty float64, tileSi
 			}
 		}
 	}
-	state.CantorsMu.RUnlock()
+	return ids
+}
 
+// isTopMarkerRate reports whether a buy/sell pair matches the best kupno / sprzedaż within eps.
+func isTopMarkerRate(buy, sell, bestBuy, bestSell, eps float64) bool {
+	return (bestBuy > 0 && buy+eps >= bestBuy) ||
+		(bestSell > 0 && sell > 0 && sell-eps <= bestSell)
+}
+
+// topMarkerIDs returns the pins holding the best rates — same TOP definition as the list.
+func topMarkerIDs(state *AppState, ids []string) map[string]bool {
 	// Same TOP definition as the list: best kupno / sprzedaż among visible pins with rates.
 	state.Vault.Mu.Lock()
+	defer state.Vault.Mu.Unlock()
 	rates := state.Vault.Rates[state.UI.Currency]
 	bestBuy, bestSell := calculateBestRatesAmong(rates, ids)
 	topIDs := map[string]bool{}
@@ -345,14 +363,86 @@ func renderMarkers(gtx layout.Context, state *AppState, ctx, cty float64, tileSi
 		}
 		buy := parseRate(entry.Rate.BuyRate)
 		sell := parseRate(entry.Rate.SellRate)
-		if bestBuy > 0 && buy+eps >= bestBuy {
-			topIDs[id] = true
-		}
-		if bestSell > 0 && sell > 0 && sell-eps <= bestSell {
+		if isTopMarkerRate(buy, sell, bestBuy, bestSell, eps) {
 			topIDs[id] = true
 		}
 	}
-	state.Vault.Mu.Unlock()
+	return topIDs
+}
+
+// drawTopPinIcon draws a TOP pin: subtle gold pulse — darker amber in light theme for dock-like contrast.
+func drawTopPinIcon(gtx layout.Context, state *AppState, breath float64) {
+	topHue := AppColors.Accent1
+	if state.UI.LightMode {
+		topHue = AppColors.Accent1Dark
+	}
+	halo := topHue
+	halo.A = uint8(10 + breath*16)
+	if state.UI.LightMode {
+		halo.A = uint8(36 + breath*40)
+	}
+	haloCircle := clip.Ellipse{Min: image.Point{X: -4, Y: -4}, Max: image.Point{X: 28, Y: 28}}.Op(gtx.Ops)
+	paint.FillShape(gtx.Ops, halo, haloCircle)
+	pin := topHue
+	pin.A = uint8(220 + breath*35)
+	if state.UI.LightMode {
+		pin.A = 255
+	}
+	DrawIconMap(gtx, pin)
+}
+
+// drawMutedPinIcon draws a quieter pin for other cantors in the area.
+func drawMutedPinIcon(gtx layout.Context, state *AppState) {
+	muted := AppColors.Secondary
+	if state.UI.LightMode {
+		muted = color.NRGBA{R: 150, G: 150, B: 158, A: 210}
+	} else {
+		muted.A = 190
+	}
+	DrawIconMap(gtx, muted)
+}
+
+// drawMapPin draws the shadow and icon of a single cantor pin (skipped when off-screen).
+func drawMapPin(gtx layout.Context, state *AppState, f markerFrame, id string, isTop bool) {
+	state.CantorsMu.RLock()
+	cantor, ok := state.Cantors[id]
+	state.CantorsMu.RUnlock()
+	if !ok || cantor == nil {
+		return
+	}
+
+	cx, cy := latLonToTile(cantor.Latitude, cantor.Longitude, f.zoom)
+	posX := f.halfW + (cx-f.ctx)*f.tileSize
+	posY := f.halfH + (cy-f.cty)*f.tileSize
+
+	if posX < -50 || posX > float64(gtx.Constraints.Max.X)+50 || posY < -50 || posY > float64(gtx.Constraints.Max.Y)+50 {
+		return
+	}
+
+	shadowStack := op.Offset(image.Point{X: int(posX), Y: int(posY)}).Push(gtx.Ops)
+	shadowCircle := clip.Ellipse{Min: image.Point{X: -6, Y: -3}, Max: image.Point{X: 6, Y: 3}}.Op(gtx.Ops)
+	paint.FillShape(gtx.Ops, color.NRGBA{A: 100}, shadowCircle)
+	shadowStack.Pop()
+
+	stack := op.Offset(image.Point{X: int(posX) - 12, Y: int(posY) - 24}).Push(gtx.Ops)
+	defer stack.Pop()
+
+	switch {
+	case isTop:
+		drawTopPinIcon(gtx, state, f.breath)
+	case f.hasTop:
+		// Other cantors in the area stay readable but quieter.
+		drawMutedPinIcon(gtx, state)
+	default:
+		// No rates yet — normal pins (don't mute the whole city).
+		DrawIconMap(gtx, AppColors.Accent1)
+	}
+}
+
+// renderMarkers renders the markers on the map
+func renderMarkers(gtx layout.Context, state *AppState, ctx, cty float64, tileSize float64, zoom int) {
+	ids := visibleMarkerIDs(state)
+	topIDs := topMarkerIDs(state, ids)
 
 	hasTop := len(topIDs) > 0
 	phase := float64(time.Now().UnixNano()%3_600_000_000) / 3_600_000_000
@@ -361,74 +451,26 @@ func renderMarkers(gtx layout.Context, state *AppState, ctx, cty float64, tileSi
 		gtx.Execute(op.InvalidateCmd{})
 	}
 
-	drawPin := func(id string, isTop bool) {
-		state.CantorsMu.RLock()
-		cantor, ok := state.Cantors[id]
-		state.CantorsMu.RUnlock()
-		if !ok || cantor == nil {
-			return
-		}
-
-		cx, cy := latLonToTile(cantor.Latitude, cantor.Longitude, zoom)
-		posX := halfW + (cx-ctx)*tileSize
-		posY := halfH + (cy-cty)*tileSize
-
-		if posX < -50 || posX > float64(gtx.Constraints.Max.X)+50 || posY < -50 || posY > float64(gtx.Constraints.Max.Y)+50 {
-			return
-		}
-
-		shadowStack := op.Offset(image.Point{X: int(posX), Y: int(posY)}).Push(gtx.Ops)
-		shadowCircle := clip.Ellipse{Min: image.Point{X: -6, Y: -3}, Max: image.Point{X: 6, Y: 3}}.Op(gtx.Ops)
-		paint.FillShape(gtx.Ops, color.NRGBA{A: 100}, shadowCircle)
-		shadowStack.Pop()
-
-		stack := op.Offset(image.Point{X: int(posX) - 12, Y: int(posY) - 24}).Push(gtx.Ops)
-		defer stack.Pop()
-
-		switch {
-		case isTop:
-			// Subtle gold pulse — darker amber in light theme for dock-like contrast.
-			topHue := AppColors.Accent1
-			if state.UI.LightMode {
-				topHue = AppColors.Accent1Dark
-			}
-			halo := topHue
-			halo.A = uint8(10 + breath*16)
-			if state.UI.LightMode {
-				halo.A = uint8(36 + breath*40)
-			}
-			haloCircle := clip.Ellipse{Min: image.Point{X: -4, Y: -4}, Max: image.Point{X: 28, Y: 28}}.Op(gtx.Ops)
-			paint.FillShape(gtx.Ops, halo, haloCircle)
-			pin := topHue
-			pin.A = uint8(220 + breath*35)
-			if state.UI.LightMode {
-				pin.A = 255
-			}
-			DrawIconMap(gtx, pin)
-		case hasTop:
-			// Other cantors in the area stay readable but quieter.
-			muted := AppColors.Secondary
-			if state.UI.LightMode {
-				muted = color.NRGBA{R: 150, G: 150, B: 158, A: 210}
-			} else {
-				muted.A = 190
-			}
-			DrawIconMap(gtx, muted)
-		default:
-			// No rates yet — normal pins (don't mute the whole city).
-			DrawIconMap(gtx, AppColors.Accent1)
-		}
+	frame := markerFrame{
+		halfW:    float64(gtx.Constraints.Max.X) / 2,
+		halfH:    float64(gtx.Constraints.Max.Y) / 2,
+		ctx:      ctx,
+		cty:      cty,
+		tileSize: tileSize,
+		zoom:     zoom,
+		breath:   breath,
+		hasTop:   hasTop,
 	}
 
 	// Non-TOP first, TOP last so winners paint on top when pins overlap.
 	for _, id := range ids {
 		if !topIDs[id] {
-			drawPin(id, false)
+			drawMapPin(gtx, state, frame, id, false)
 		}
 	}
 	for _, id := range ids {
 		if topIDs[id] {
-			drawPin(id, true)
+			drawMapPin(gtx, state, frame, id, true)
 		}
 	}
 }
@@ -558,14 +600,37 @@ func tileWorker() {
 	}
 }
 
-// fetchOneTile loads one FOSS raster tile. Default: OpenStreetMap (no API key).
-func fetchOneTile(client *http.Client, key string, state *AppState) bool {
-	parts := strings.Split(key, "/")
-	if len(parts) != 5 { // v7/theme/z/x/y
-		return false
+// providerTileURL returns the tile URL of an API-key based provider, or "" when it is not usable.
+func providerTileURL(provider, theme, z, x, y string, state *AppState) string {
+	switch provider {
+	case "carto":
+		cartoKey := strings.TrimSpace(os.Getenv("CARTO_API_KEY"))
+		if ed := strings.TrimSpace(state.UI.MapTilerKeyEditor.Text()); looksLikeMapAPIKey(ed) {
+			cartoKey = ed
+		}
+		if !looksLikeMapAPIKey(cartoKey) {
+			return ""
+		}
+		style := "rastertiles/voyager_labels_under"
+		if theme == "dark" {
+			style = "dark_all"
+		}
+		return fmt.Sprintf("https://basemaps.cartocdn.com/%s/%s/%s/%s.png?key=%s", style, z, x, y, cartoKey)
+	case "maptiler":
+		apiKey := strings.TrimSpace(state.UI.MapTilerAPIKey)
+		if ed := strings.TrimSpace(state.UI.MapTilerKeyEditor.Text()); looksLikeMapAPIKey(ed) {
+			apiKey = ed
+		}
+		if !looksLikeMapAPIKey(apiKey) {
+			return ""
+		}
+		return fmt.Sprintf("https://api.maptiler.com/maps/streets-v2/256/%s/%s/%s.png?key=%s", z, x, y, apiKey)
 	}
-	theme, z, x, y := parts[1], parts[2], parts[3], parts[4]
+	return ""
+}
 
+// buildTileURLs lists candidate tile sources in priority order.
+func buildTileURLs(theme, z, x, y string, state *AppState) []string {
 	urls := []string{
 		fmt.Sprintf("https://tile.openstreetmap.org/%s/%s/%s.png", z, x, y),
 		fmt.Sprintf("https://tile.openstreetmap.de/%s/%s/%s.png", z, x, y),
@@ -577,71 +642,69 @@ func fetchOneTile(client *http.Client, key string, state *AppState) bool {
 	}
 
 	provider := strings.ToLower(strings.TrimSpace(os.Getenv("MAP_TILE_PROVIDER")))
-	cartoKey := strings.TrimSpace(os.Getenv("CARTO_API_KEY"))
-	if ed := strings.TrimSpace(state.UI.MapTilerKeyEditor.Text()); looksLikeMapAPIKey(ed) {
-		if provider == "carto" || provider == "maptiler" {
-			cartoKey = ed
+	if providerURL := providerTileURL(provider, theme, z, x, y, state); providerURL != "" {
+		urls = append([]string{providerURL}, urls...)
+	}
+	return urls
+}
+
+// downloadTileImage fetches and validates a single 256×256 tile image.
+func downloadTileImage(client *http.Client, tileURL string) (image.Image, bool) {
+	req, err := http.NewRequest("GET", tileURL, nil)
+	if err != nil {
+		return nil, false
+	}
+	req.Header.Set("User-Agent", UserAgentApp+" (local map; github.com/Niutaq/Gix)")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, false
+	}
+	data, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	// Reject Carto keyless watermark (~2.5KB) and other tiny error PNGs.
+	if readErr != nil || resp.StatusCode != http.StatusOK || len(data) < 4000 {
+		return nil, false
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, false
+	}
+	b := img.Bounds()
+	if b.Dx() != 256 || b.Dy() != 256 {
+		return nil, false
+	}
+	return img, true
+}
+
+// storeTileImage caches a decoded tile, evicting one random entry when the cache is full.
+func storeTileImage(key string, img image.Image) {
+	tileCacheMu.Lock()
+	defer tileCacheMu.Unlock()
+	if len(tileCache) >= maxTileCacheEntries {
+		for oldKey := range tileCache {
+			delete(tileCache, oldKey)
+			break
 		}
 	}
+	opImg := paint.NewImageOp(img)
+	opImg.Filter = paint.FilterLinear
+	tileCache[key] = opImg
+}
 
-	switch provider {
-	case "carto":
-		if looksLikeMapAPIKey(cartoKey) {
-			style := "rastertiles/voyager_labels_under"
-			if theme == "dark" {
-				style = "dark_all"
-			}
-			urls = append([]string{
-				fmt.Sprintf("https://basemaps.cartocdn.com/%s/%s/%s/%s.png?key=%s", style, z, x, y, cartoKey),
-			}, urls...)
-		}
-	case "maptiler":
-		apiKey := strings.TrimSpace(state.UI.MapTilerAPIKey)
-		if ed := strings.TrimSpace(state.UI.MapTilerKeyEditor.Text()); looksLikeMapAPIKey(ed) {
-			apiKey = ed
-		}
-		if looksLikeMapAPIKey(apiKey) {
-			urls = append([]string{
-				fmt.Sprintf("https://api.maptiler.com/maps/streets-v2/256/%s/%s/%s.png?key=%s", z, x, y, apiKey),
-			}, urls...)
-		}
+// fetchOneTile loads one FOSS raster tile. Default: OpenStreetMap (no API key).
+func fetchOneTile(client *http.Client, key string, state *AppState) bool {
+	parts := strings.Split(key, "/")
+	if len(parts) != 5 { // v7/theme/z/x/y
+		return false
 	}
+	theme, z, x, y := parts[1], parts[2], parts[3], parts[4]
 
-	for _, tileURL := range urls {
-		req, err := http.NewRequest("GET", tileURL, nil)
-		if err != nil {
+	for _, tileURL := range buildTileURLs(theme, z, x, y, state) {
+		img, ok := downloadTileImage(client, tileURL)
+		if !ok {
 			continue
 		}
-		req.Header.Set("User-Agent", UserAgentApp+" (local map; github.com/Niutaq/Gix)")
-		resp, err := client.Do(req)
-		if err != nil {
-			continue
-		}
-		data, readErr := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		// Reject Carto keyless watermark (~2.5KB) and other tiny error PNGs.
-		if readErr != nil || resp.StatusCode != http.StatusOK || len(data) < 4000 {
-			continue
-		}
-		img, _, err := image.Decode(bytes.NewReader(data))
-		if err != nil {
-			continue
-		}
-		b := img.Bounds()
-		if b.Dx() != 256 || b.Dy() != 256 {
-			continue
-		}
-		tileCacheMu.Lock()
-		if len(tileCache) >= maxTileCacheEntries {
-			for oldKey := range tileCache {
-				delete(tileCache, oldKey)
-				break
-			}
-		}
-		opImg := paint.NewImageOp(img)
-		opImg.Filter = paint.FilterLinear
-		tileCache[key] = opImg
-		tileCacheMu.Unlock()
+		storeTileImage(key, img)
 		return true
 	}
 	return false

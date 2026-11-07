@@ -136,21 +136,27 @@ func run(window *app.Window, config utilities.AppConfig) error {
 			}
 			handleFrame(window, &ops, e, state, config, cantorChan, theme)
 		case key.Event:
-			if e.State == key.Press {
-				// Language tumbler steals ↑↓ / Enter / Esc while open.
-				if utilities.HandleLanguageWheelKey(state, window, e) {
-					continue
-				}
-				switch e.Name {
-				case "F", "f":
-					state.UI.IsFinOpsDashboardOpen = !state.UI.IsFinOpsDashboardOpen
-					window.Invalidate()
-				case key.NameEscape:
-					state.UI.IsFinOpsDashboardOpen = false
-					window.Invalidate()
-				}
-			}
+			handleKeyEvent(window, state, e)
 		}
+	}
+}
+
+// handleKeyEvent handles global key shortcuts (Control Panel toggle / close).
+func handleKeyEvent(window *app.Window, state *utilities.AppState, e key.Event) {
+	if e.State != key.Press {
+		return
+	}
+	// Language tumbler steals ↑↓ / Enter / Esc while open.
+	if utilities.HandleLanguageWheelKey(state, window, e) {
+		return
+	}
+	switch e.Name {
+	case "F", "f":
+		state.UI.IsFinOpsDashboardOpen = !state.UI.IsFinOpsDashboardOpen
+		window.Invalidate()
+	case key.NameEscape:
+		state.UI.IsFinOpsDashboardOpen = false
+		window.Invalidate()
 	}
 }
 

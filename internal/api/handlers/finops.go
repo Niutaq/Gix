@@ -64,21 +64,22 @@ func HandleFinOps(app *infrastructure.AppState) gin.HandlerFunc {
 	}
 }
 
-// HandleFinOpsFlow returns business → application → category cost allocation (FOCUS showback).
-func HandleFinOpsFlow(app *infrastructure.AppState) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+// flowEdge is one business → application → category cost allocation edge.
+type flowEdge struct {
+	Business    string  `json:"business"`
+	Application string  `json:"application"`
+	Category    string  `json:"category"`
+	Source      string  `json:"source"`
+	USD         float64 `json:"usd"`
+}
 
-		type flowEdge struct {
-			Business    string  `json:"business"`
-			Application string  `json:"application"`
-			Category    string  `json:"category"`
-			Source      string  `json:"source"`
-			USD         float64 `json:"usd"`
-		}
+// flowRows is the subset of pgx.Rows needed to scan flow edges.
+type flowRows interface {
+	Next() bool
+	Scan(dest ...any) error
+}
 
-		rows, err := app.DB.Query(ctx, `
+const finOpsFlowQuery = `
 			SELECT
 				COALESCE(x_team, 'platform') AS business,
 				COALESCE(x_application, 'gix') AS application,
@@ -89,10 +90,9 @@ func HandleFinOpsFlow(app *infrastructure.AppState) gin.HandlerFunc {
 			WHERE time > NOW() - INTERVAL '1 day'
 			GROUP BY 1, 2, 3, 4
 			ORDER BY usd DESC
-		`)
-		if err != nil {
-			// Table may be empty / missing before first migration — fall back to unit costs.
-			fallback, ferr := app.DB.Query(ctx, `
+		`
+
+const finOpsFlowFallbackQuery = `
 				SELECT
 					'app' AS business,
 					'gix' AS application,
@@ -103,38 +103,54 @@ func HandleFinOpsFlow(app *infrastructure.AppState) gin.HandlerFunc {
 				WHERE time > NOW() - INTERVAL '1 day'
 				GROUP BY 3
 				ORDER BY usd DESC
-			`)
-			if ferr != nil {
-				log.Printf("FinOps flow fallback error: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-				return
-			}
-			defer fallback.Close()
-			edges := make([]flowEdge, 0)
-			for fallback.Next() {
-				var e flowEdge
-				if scanErr := fallback.Scan(&e.Business, &e.Application, &e.Category, &e.Source, &e.USD); scanErr == nil {
-					edges = append(edges, e)
-				}
-			}
-			c.JSON(http.StatusOK, gin.H{
-				"window": "24h",
-				"edges":  edges,
-				"note":   "focus_cost_records unavailable; showing provider_unit_costs fallback",
-			})
+			`
+
+// scanFlowEdges reads all flow edges from rows and returns them with their total USD.
+func scanFlowEdges(rows flowRows) ([]flowEdge, float64) {
+	edges := make([]flowEdge, 0)
+	var total float64
+	for rows.Next() {
+		var e flowEdge
+		if rows.Scan(&e.Business, &e.Application, &e.Category, &e.Source, &e.USD) == nil {
+			edges = append(edges, e)
+			total += e.USD
+		}
+	}
+	return edges, total
+}
+
+// respondFinOpsFlowFallback answers from provider_unit_costs when focus_cost_records is unavailable.
+func respondFinOpsFlowFallback(ctx context.Context, c *gin.Context, app *infrastructure.AppState, queryErr error) {
+	// Table may be empty / missing before first migration — fall back to unit costs.
+	fallback, ferr := app.DB.Query(ctx, finOpsFlowFallbackQuery)
+	if ferr != nil {
+		log.Printf("FinOps flow fallback error: %v", queryErr)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+	defer fallback.Close()
+	edges, _ := scanFlowEdges(fallback)
+	c.JSON(http.StatusOK, gin.H{
+		"window": "24h",
+		"edges":  edges,
+		"note":   "focus_cost_records unavailable; showing provider_unit_costs fallback",
+	})
+}
+
+// HandleFinOpsFlow returns business → application → category cost allocation (FOCUS showback).
+func HandleFinOpsFlow(app *infrastructure.AppState) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		rows, err := app.DB.Query(ctx, finOpsFlowQuery)
+		if err != nil {
+			respondFinOpsFlowFallback(ctx, c, app, err)
 			return
 		}
 		defer rows.Close()
 
-		edges := make([]flowEdge, 0)
-		var total float64
-		for rows.Next() {
-			var e flowEdge
-			if scanErr := rows.Scan(&e.Business, &e.Application, &e.Category, &e.Source, &e.USD); scanErr == nil {
-				edges = append(edges, e)
-				total += e.USD
-			}
-		}
+		edges, total := scanFlowEdges(rows)
 
 		c.JSON(http.StatusOK, gin.H{
 			"window":    "24h",
