@@ -175,9 +175,7 @@ type UIState struct {
 	ControlPanelTab  int // 0=FinOps, 1=Scraper, 2=Providers, 3=Geo, 4=Debug
 	ControlPanelTabs []widget.Clickable
 	ControlPanelList widget.List
-	ScraperIntervalEditor widget.Editor
-	ScraperTimeoutEditor  widget.Editor
-	GeoRadiusEditor       widget.Editor
+	GeoRadiusEditor widget.Editor
 	MapTilerKeyEditor     widget.Editor
 	DebugLogLines         []string
 

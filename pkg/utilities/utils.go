@@ -508,6 +508,8 @@ func layoutFinOpsTab(gtx layout.Context, theme *material.Theme, finOps FinOpsSta
 }
 
 func layoutScraperTab(gtx layout.Context, theme *material.Theme, state *AppState, window *app.Window, lang string) layout.Dimensions {
+	_ = state
+	_ = window
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			lbl := material.Caption(theme, GetTranslation(lang, "cp_scraper_config"))
@@ -517,37 +519,9 @@ func layoutScraperTab(gtx layout.Context, theme *material.Theme, state *AppState
 		}),
 		layout.Rigid(layout.Spacer{Height: unit.Dp(16)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal, Spacing: layout.SpaceBetween, Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					lbl := material.Body2(theme, GetTranslation(lang, "cp_update_interval"))
-					lbl.Color = color.NRGBA{R: 200, G: 200, B: 210, A: 255}
-					return lbl.Layout(gtx)
-				}),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					gtx.Constraints.Max.X = gtx.Dp(unit.Dp(120))
-					e := material.Editor(theme, &state.UI.ScraperIntervalEditor, "5000")
-					e.Color = color.NRGBA{R: 250, G: 250, B: 250, A: 255}
-					e.HintColor = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
-					return e.Layout(gtx)
-				}),
-			)
-		}),
-		layout.Rigid(layout.Spacer{Height: unit.Dp(12)}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal, Spacing: layout.SpaceBetween, Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					lbl := material.Body2(theme, GetTranslation(lang, "cp_timeout"))
-					lbl.Color = color.NRGBA{R: 200, G: 200, B: 210, A: 255}
-					return lbl.Layout(gtx)
-				}),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					gtx.Constraints.Max.X = gtx.Dp(unit.Dp(120))
-					e := material.Editor(theme, &state.UI.ScraperTimeoutEditor, "15000")
-					e.Color = color.NRGBA{R: 250, G: 250, B: 250, A: 255}
-					e.HintColor = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
-					return e.Layout(gtx)
-				}),
-			)
+			lbl := material.Body2(theme, GetTranslation(lang, "cp_scraper_server_side"))
+			lbl.Color = color.NRGBA{R: 180, G: 180, B: 190, A: 255}
+			return lbl.Layout(gtx)
 		}),
 	)
 }
@@ -590,6 +564,8 @@ func layoutProvidersTab(gtx layout.Context, theme *material.Theme, state *AppSta
 }
 
 func layoutGeoTab(gtx layout.Context, theme *material.Theme, state *AppState, window *app.Window, lang string) layout.Dimensions {
+	_ = window
+	applyGeoRadiusFromEditor(state)
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			lbl := material.Caption(theme, GetTranslation(lang, "cp_geo_settings"))
@@ -607,7 +583,7 @@ func layoutGeoTab(gtx layout.Context, theme *material.Theme, state *AppState, wi
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Max.X = gtx.Dp(unit.Dp(120))
-					e := material.Editor(theme, &state.UI.GeoRadiusEditor, "30")
+					e := material.Editor(theme, &state.UI.GeoRadiusEditor, GetTranslation(lang, "cp_geo_radius_hint"))
 					e.Color = color.NRGBA{R: 250, G: 250, B: 250, A: 255}
 					e.HintColor = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
 					return e.Layout(gtx)

@@ -134,15 +134,9 @@ func main() {
 		}()
 	}
 
-	log.Println("--- FinOps Analysis ---")
-	log.Println(finops.DefaultRates.Summary(0, 0))
-	for _, tip := range finops.GenerateTips(0, 0) {
-		log.Printf("[TIP] %s: %s (Potential: $%.2f/mo)", tip.Title, tip.Description, tip.Potential)
-	}
-	log.Println("-----------------------")
-
 	estimator := finops.NewTimescaleEstimator(dbpool, finops.DefaultRates)
 	govEngine := finops.NewGovernanceEngine(estimator, 0.05)
+	log.Printf("FinOps governance active (breaker $%.2f/day per cantor)", 0.05)
 	govEngine.StartMonitor(context.Background(), 1*time.Minute)
 
 	appState := &infrastructure.AppState{

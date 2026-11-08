@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -139,6 +138,4 @@ func processEvent(msg *nats.Msg, estimator *finops.TimescaleEstimator) {
 	if err := msg.Ack(); err != nil {
 		log.Printf("Error acking message: %v", err)
 	}
-	fmt.Printf("[FinOps] Calculated unit cost for %s (%s): %vms\n",
-		event.ProviderId, event.ScraperType, event.DurationMs)
 }

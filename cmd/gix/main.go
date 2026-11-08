@@ -27,6 +27,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/trace"
+	"strings"
 	"time"
 
 	"gioui.org/app"
@@ -41,11 +42,14 @@ import (
 	"github.com/Niutaq/Gix/pkg/utilities"
 )
 
-const remoteAPIHost = "165.227.246.100"
+const (
+	defaultLocalAPI = "http://127.0.0.1:8080"
+	remoteAPIHost   = "165.227.246.100" // legacy cloud demo for task start:gui:remote
+)
 
 // main is the entry point of the application that initializes configuration, sets up the main window, and starts the app loop.
 func main() {
-	apiBase := flag.String("api", "http://"+remoteAPIHost+":8080", "API base URL")
+	apiBase := flag.String("api", defaultLocalAPI, "API base URL (default: local Gix-API)")
 	tracePath := flag.String("trace", "", "Path to write trace file")
 	flag.Parse()
 
@@ -71,7 +75,7 @@ func main() {
 	}
 
 	drpcBase := "localhost:8081"
-	if base == "http://"+remoteAPIHost+":8080" {
+	if strings.Contains(base, remoteAPIHost) {
 		drpcBase = remoteAPIHost + ":8081"
 	}
 

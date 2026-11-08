@@ -102,5 +102,7 @@
   "cp_cat_other": "Diğer",
   "cantor_unnamed_fmt": "Döviz bürosu · %s",
   "delete_all_short": "Sil",
-  "rate_pending": "Kur alınıyor…"
+  "rate_pending": "Kur alınıyor…",
+  "cp_scraper_server_side": "Interval and timeout are set on Gix-API / the harvester — not from this panel yet.",
+  "cp_geo_radius_hint": "empty = all"
 }
