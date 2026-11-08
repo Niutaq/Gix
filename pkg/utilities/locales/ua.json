@@ -101,5 +101,6 @@
   "cp_cat_network": "Мережа",
   "cp_cat_other": "Інше",
   "cantor_unnamed_fmt": "Обмінник · %s",
-  "delete_all_short": "Видал."
+  "delete_all_short": "Видал.",
+  "rate_pending": "Завантаження курсу…"
 }

@@ -101,5 +101,6 @@
   "cp_cat_network": "Réseau",
   "cp_cat_other": "Autre",
   "cantor_unnamed_fmt": "Bureau de change · %s",
-  "delete_all_short": "Suppr."
+  "delete_all_short": "Suppr.",
+  "rate_pending": "Cours en cours…"
 }

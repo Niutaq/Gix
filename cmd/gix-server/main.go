@@ -36,10 +36,10 @@ import (
 // @host      localhost:8080
 // @BasePath  /api/v1
 func main() {
-	tracer.Start(tracer.WithService("gix-server"))
+	tracer.Start(tracer.WithService("gix-api"))
 	defer tracer.Stop()
 
-	log.Println("Launching Gix server...")
+	log.Println("Launching Gix API...")
 
 	if envHost := os.Getenv("SWAGGER_HOST"); envHost != "" {
 		docs.SwaggerInfo.Host = envHost

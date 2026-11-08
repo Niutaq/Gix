@@ -101,5 +101,6 @@
   "cp_cat_network": "Hálózat",
   "cp_cat_other": "Egyéb",
   "cantor_unnamed_fmt": "Pénzváltó · %s",
-  "delete_all_short": "Törlés"
+  "delete_all_short": "Törlés",
+  "rate_pending": "Árfolyam betöltése…"
 }

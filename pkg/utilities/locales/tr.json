@@ -101,5 +101,6 @@
   "cp_cat_network": "Ağ",
   "cp_cat_other": "Diğer",
   "cantor_unnamed_fmt": "Döviz bürosu · %s",
-  "delete_all_short": "Sil"
+  "delete_all_short": "Sil",
+  "rate_pending": "Kur alınıyor…"
 }

@@ -107,5 +107,6 @@
   "cp_cat_network": "Network",
   "cp_cat_other": "Other",
   "cantor_unnamed_fmt": "Exchange · %s",
-  "delete_all_short": "Delete"
+  "delete_all_short": "Delete",
+  "rate_pending": "Fetching rate…"
 }

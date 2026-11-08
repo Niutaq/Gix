@@ -101,5 +101,6 @@
   "cp_cat_network": "Nätverk",
   "cp_cat_other": "Övrigt",
   "cantor_unnamed_fmt": "Växlingskontor · %s",
-  "delete_all_short": "Radera"
+  "delete_all_short": "Radera",
+  "rate_pending": "Hämtar kurs…"
 }

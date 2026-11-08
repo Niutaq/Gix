@@ -18,14 +18,15 @@ datasources:
       - name: Prometheus
         type: prometheus
         uid: prometheus
-        url: http://prometheus-server.finops.svc.cluster.local
+        url: http://prometheus-server.gix.svc.cluster.local
         access: proxy
         isDefault: true
       - name: TimescaleDB
-        type: postgres
+        # Grafana 10+ plugin id (dashboard panels use the same type)
+        type: grafana-postgresql-datasource
         uid: timescale
         url: host.k3d.internal:5433
-        # Must match docker-compose POSTGRES_* / .env.example
+        # Must match docker-compose POSTGRES_* / .env.example — replaced by apply-grafana-finops.sh
         database: gix_rates
         user: gixuser
         secureJsonData:
@@ -59,8 +60,9 @@ dashboardsConfigMaps:
   gix-finops: gix-finops-dashboards
 
 resources:
+  # Idle/local usage ~5–6mCPU over 30m; was 50m. Limits kept for dashboard spikes.
   requests:
-    cpu: 50m
+    cpu: 12m
     memory: 128Mi
   limits:
     cpu: 300m

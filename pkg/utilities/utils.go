@@ -70,6 +70,8 @@ type CantorItemArgs struct {
 	Scale         float32
 	BestBuyPulse  bool
 	BestSellPulse bool
+	// PendingRates: OSM/heuristic pin still waiting for a usable quote — soft muted pulse.
+	PendingRates bool
 }
 
 // updateLoadingAlpha animates the global loading overlay alpha (fade in/out).
@@ -1478,7 +1480,6 @@ func layoutChartToggle(gtx layout.Context, theme *material.Theme, state *AppStat
 // layoutToggleButton creates a toggleable button with specified text and styling based on its active state.
 func layoutToggleButton(gtx layout.Context, theme *material.Theme, btn *widget.Clickable, text string, active bool, onClick func()) layout.Dimensions {
 	if btn.Clicked(gtx) {
-		log.Println("Toggle clicked:", text)
 		onClick()
 	}
 
@@ -2019,8 +2020,10 @@ func layoutSortButton(gtx layout.Context, theme *material.Theme, state *AppState
 
 // layoutTopMovers renders the information bar showing top gainers and losers.
 func layoutTopMovers(gtx layout.Context, window *app.Window, theme *material.Theme, state *AppState) layout.Dimensions {
+	namedIDs := cantorIDsWithDisplayName(state)
+
 	state.Vault.Mu.Lock()
-	gainerID, loserID := calculateMoverCandidates(state)
+	gainerID, loserID := calculateMoverCandidates(state, namedIDs)
 	updateTopMoversState(state, gainerID, loserID)
 
 	gainerName := state.UI.TopMovers.GainerID
@@ -2061,15 +2064,41 @@ func layoutTopMovers(gtx layout.Context, window *app.Window, theme *material.The
 	return renderMovers(gtx, theme, state, gainerName, loserName, topGainer, topLoser, gScale, lScale)
 }
 
+// cantorIDsWithDisplayName returns cantor IDs that have a human-readable name (not blank / not the raw id).
+func cantorIDsWithDisplayName(state *AppState) map[string]struct{} {
+	out := make(map[string]struct{})
+	state.CantorsMu.RLock()
+	defer state.CantorsMu.RUnlock()
+	for id, c := range state.Cantors {
+		if c == nil {
+			continue
+		}
+		name := strings.TrimSpace(c.DisplayName)
+		if name == "" || name == id {
+			continue
+		}
+		out[id] = struct{}{}
+	}
+	return out
+}
+
 // calculateMoverCandidates identifies the cantors with the largest 24h gain and loss.
-func calculateMoverCandidates(state *AppState) (string, string) {
+// namedIDs limits candidates so the notch never falls back to a bare numeric id.
+func calculateMoverCandidates(state *AppState, namedIDs map[string]struct{}) (string, string) {
 	var gainerID, loserID string
 	maxGain := -999999.0
 	maxLoss := 999999.0
 
 	currencyRates := state.Vault.Rates[state.UI.Currency]
+	if currencyRates == nil {
+		return "", ""
+	}
+
 	for id, entry := range currencyRates {
 		if entry == nil || entry.Rate.Change24h == 0 {
+			continue
+		}
+		if _, ok := namedIDs[id]; !ok {
 			continue
 		}
 		chg := entry.Rate.Change24h
@@ -2115,12 +2144,18 @@ func updateTopMoversState(state *AppState, gainerID, loserID string) {
 // renderMovers handles the layout for the top gainer and loser notches.
 func renderMovers(gtx layout.Context, theme *material.Theme, state *AppState, gainerName, loserName string, topGainer, topLoser *CantorEntry, gScale, lScale float32) layout.Dimensions {
 	resolveName := func(id string) string {
+		if id == "" {
+			return ""
+		}
 		state.CantorsMu.RLock()
 		defer state.CantorsMu.RUnlock()
-		if c, ok := state.Cantors[id]; ok {
-			return c.DisplayName
+		if c, ok := state.Cantors[id]; ok && c != nil {
+			name := strings.TrimSpace(c.DisplayName)
+			if name != "" && name != id {
+				return localizeCantorDisplayName(state.UI.Language, name)
+			}
 		}
-		return id
+		return ""
 	}
 
 	axis := layout.Horizontal
@@ -2139,23 +2174,25 @@ func renderMovers(gtx layout.Context, theme *material.Theme, state *AppState, ga
 
 	return layout.Flex{Axis: axis, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			if topGainer != nil {
+			name := resolveName(gainerName)
+			if topGainer != nil && name != "" {
 				if gScale != 1.0 {
 					offY := (1.0 - gScale) * 15
 					op.Affine(f32.Affine2D{}.Scale(f32.Point{}, f32.Pt(gScale, gScale)).Offset(f32.Pt(0, offY))).Add(gtx.Ops)
 				}
-				return layoutMoverNotch(gtx, theme, resolveName(gainerName), topGainer.Rate.Change24h, AppColors.Success)
+				return layoutMoverNotch(gtx, theme, name, topGainer.Rate.Change24h, AppColors.Success)
 			}
 			return layout.Dimensions{}
 		}),
 		layout.Rigid(layout.Spacer{Width: spacerWidth, Height: spacerHeight}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			if topLoser != nil {
+			name := resolveName(loserName)
+			if topLoser != nil && name != "" {
 				if lScale != 1.0 {
 					offY := (1.0 - lScale) * 15
 					op.Affine(f32.Affine2D{}.Scale(f32.Point{}, f32.Pt(lScale, lScale)).Offset(f32.Pt(0, offY))).Add(gtx.Ops)
 				}
-				return layoutMoverNotch(gtx, theme, resolveName(loserName), topLoser.Rate.Change24h, AppColors.Error)
+				return layoutMoverNotch(gtx, theme, name, topLoser.Rate.Change24h, AppColors.Error)
 			}
 			return layout.Dimensions{}
 		}),
@@ -2526,6 +2563,15 @@ func layoutCantorItem(
 	handleCantorLongPress(window, state, cantor, cantorKey, displayName)
 
 	isSelected := state.UI.SelectedCantor == cantorKey
+	pending := !hasUsableCantorRates(state, cantorKey)
+	if pending {
+		// Soft breath — keep the frame invalidating while quotes are missing.
+		window.Invalidate()
+		breath := float32(0.55 + 0.45*math.Sin(float64(gtx.Now.UnixNano())/1e9*1.6))
+		dim := uint8(100 + breath*90)
+		buyColor.A = min(buyColor.A, dim)
+		sellColor.A = min(sellColor.A, dim)
+	}
 	return renderCantorItem(gtx, window, theme, state, config, CantorItemArgs{
 		Cantor:        cantor,
 		CantorKey:     cantorKey,
@@ -2542,6 +2588,7 @@ func layoutCantorItem(
 		Scale:         scale,
 		BestBuyPulse:  bestBuy,
 		BestSellPulse: bestSell,
+		PendingRates:  pending,
 	}, pulse)
 }
 
@@ -2702,14 +2749,31 @@ func drawCantorItemBackground(gtx layout.Context, window *app.Window, theme *mat
 					}
 					bgColor = color.NRGBA{R: 0, G: 0, B: 0, A: bgAlpha}
 				}
-
-				paint.FillShape(gtx.Ops, bgColor, shape.Op(gtx.Ops))
+				if args.PendingRates {
+					// Desaturate / grey wash so empty heuristic rows read as "waiting".
+					breath := float32(0.5 + 0.5*math.Sin(float64(gtx.Now.UnixNano())/1e9*1.6))
+					wash := uint8(18 + breath*22)
+					if state.UI.LightMode {
+						paint.FillShape(gtx.Ops, bgColor, shape.Op(gtx.Ops))
+						paint.FillShape(gtx.Ops, color.NRGBA{R: 120, G: 120, B: 130, A: wash}, shape.Op(gtx.Ops))
+					} else {
+						paint.FillShape(gtx.Ops, bgColor, shape.Op(gtx.Ops))
+						paint.FillShape(gtx.Ops, color.NRGBA{R: 70, G: 70, B: 80, A: wash}, shape.Op(gtx.Ops))
+					}
+				} else {
+					paint.FillShape(gtx.Ops, bgColor, shape.Op(gtx.Ops))
+				}
 
 				// 2. Bright Glass Border
 				borderColor := color.NRGBA{R: 255, G: 255, B: 255, A: 45}
 				if args.IsSelected {
 					borderColor = AppColors.Accent1
 					borderColor.A = 120
+				} else if args.PendingRates {
+					borderColor = color.NRGBA{R: 140, G: 140, B: 150, A: 70}
+					if state.UI.LightMode {
+						borderColor = color.NRGBA{R: 110, G: 110, B: 120, A: 55}
+					}
 				} else if state.UI.LightMode {
 					borderColor = color.NRGBA{R: 0, G: 0, B: 0, A: 30}
 				}
@@ -2749,7 +2813,7 @@ func renderCantorRowContent(gtx layout.Context, window *app.Window, theme *mater
 	displayChange := ""
 	state.Vault.Mu.Lock()
 	if currencyRates, ok := state.Vault.Rates[state.UI.Currency]; ok {
-		if entry, ok := currencyRates[args.Cantor.DisplayName]; ok {
+		if entry, ok := currencyRates[args.CantorKey]; ok {
 			displayChange = entry.DisplayChange
 		}
 	}
@@ -2761,8 +2825,22 @@ func renderCantorRowContent(gtx layout.Context, window *app.Window, theme *mater
 	// Default Horizontal Layout
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			lbl := material.Body1(theme, args.DisplayName)
-			lbl.Color = AppColors.Text
+			nameColor := AppColors.Text
+			if args.PendingRates {
+				nameColor = color.NRGBA{R: 140, G: 140, B: 150, A: 200}
+				if args.LightMode {
+					nameColor = color.NRGBA{R: 110, G: 110, B: 120, A: 220}
+				}
+			}
+			title := args.DisplayName
+			if args.PendingRates {
+				hint := GetTranslation(state.UI.Language, "rate_pending")
+				if hint != "" && hint != "rate_pending" {
+					title = args.DisplayName + "  ·  " + hint
+				}
+			}
+			lbl := material.Body1(theme, title)
+			lbl.Color = nameColor
 			if args.IsMobile {
 				lbl.TextSize = unit.Sp(14)
 			}
@@ -3486,11 +3564,9 @@ func handleLocateClick(gtx layout.Context, window *app.Window, state *AppState, 
 		go func() {
 			lat, lon, err := FetchUserLocation()
 			if err != nil || (lat == 0 && lon == 0) {
-				fmt.Printf("Location failed: %v\n", err)
 				return
 			}
-			fmt.Printf("Location success: %f, %f\n", lat, lon)
-			// No radius slider — locate only for sort/distance, never hide the list.
+			// Locate is for sort/distance only — no radius filter that hides the list.
 			ApplyUserLocation(state, lat, lon, 0)
 			state.UI.SortMode = "DIST"
 			state.UI.FilteredIDs = nil

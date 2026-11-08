@@ -101,5 +101,6 @@
   "cp_cat_network": "Síť",
   "cp_cat_other": "Ostatní",
   "cantor_unnamed_fmt": "Směnárna · %s",
-  "delete_all_short": "Smazat"
+  "delete_all_short": "Smazat",
+  "rate_pending": "Načítám kurz…"
 }

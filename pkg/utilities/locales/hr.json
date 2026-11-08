@@ -101,5 +101,6 @@
   "cp_cat_network": "Mreža",
   "cp_cat_other": "Ostalo",
   "cantor_unnamed_fmt": "Mjenjačnica · %s",
-  "delete_all_short": "Obriši"
+  "delete_all_short": "Obriši",
+  "rate_pending": "Učitavanje tečaja…"
 }
