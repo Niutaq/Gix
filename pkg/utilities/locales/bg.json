@@ -101,5 +101,6 @@
   "cp_cat_network": "Мрежа",
   "cp_cat_other": "Други",
   "cantor_unnamed_fmt": "Обменно бюро · %s",
-  "delete_all_short": "Изтрий"
+  "delete_all_short": "Изтрий",
+  "rate_pending": "Зареждане на курса…"
 }

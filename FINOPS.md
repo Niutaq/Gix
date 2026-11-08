@@ -13,6 +13,14 @@ Gix practices **real FinOps** on a **CNCF / FOSS** stack that runs at `$0` for d
 
 We are not “erasing” DO or Datadog — they validated the product under real hosting and APM. The active choice is to **replace the bill** with CNCF/FOSS equivalents for day-to-day work.
 
+## Elevator pitch
+
+If someone asks “what does your FinOps actually show?”:
+
+- **App burn (Gio Control Panel / `/api/v1/finops`)** — synthetic USD per scrape (CPU/RAM model + discovery/LLM add-ons). Used for **unit economics** and the **$0.05/day** circuit breaker per cantor.
+- **Cluster allocation (OpenCost UI `:9090`)** — Prometheus usage on k3d priced with the same local rates. Namespaces like `finops` and `kube-system` each cost a few cents/day; efficiency % shows request waste.
+- **Joined view (Grafana `:3000`)** — FOCUS rows from OpenCost + mirrored app estimator spend. Absolute dollars are **relative**; there is no cloud invoice on the default path.
+
 ## Stack (local, FOSS)
 
 ```
@@ -23,12 +31,21 @@ k3d cluster ──► Prometheus ──► OpenCost ──► focus_cost_records
                       Grafana (cost-flow dashboard)
 ```
 
-Bootstrap:
+Bootstrap (prefer one command):
 
 ```bash
-task finops:bootstrap   # scripts/bootstrap-local-finops.sh
+task up                 # preferred alias — Compose + k3d (cluster gix-local, ns gix) + Gix-API + sync
+task start:gui:local    # second terminal — Gio UI (bin/Gix)
+task finops:status      # what's listening
+task finops:down        # stop background procs from task up
+```
+
+Granular (legacy / debugging):
+
+```bash
+task finops:bootstrap   # scripts/bootstrap-local-finops.sh (cluster only)
 task finops:sync        # OpenCost allocation → Timescale
-task obs:ui             # Grafana → http://127.0.0.1:3000  (admin / gix-finops-local)
+task obs:ui             # Grafana forward in foreground (finops:up does this in bg)
 task obs:grafana-sync   # re-apply dashboards + Timescale password from .env
 task finops:flow        # GET /api/v1/finops/flow
 ```

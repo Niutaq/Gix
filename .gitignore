@@ -42,6 +42,9 @@ gix-db-data/
 # Local process logs (Promtail / task obs:up)
 logs/*.log
 
+# PIDs from task finops:up
+.finops/
+
 # Digital Ocean and K8s sensitives
 digital_ocean_api_token.txt
 kubectl

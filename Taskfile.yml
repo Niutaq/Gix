@@ -32,15 +32,16 @@ tasks:
       - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   run:backend:
-    desc: "Run backend locally"
+    desc: "Run Gix API / harvester locally (bin/Gix-API — not FinOps-branded)"
     dotenv: ['.env']
     env:
       REDIS_URL: "redis://localhost:6379/0"
       NATS_URL: "nats://localhost:4222"
       DD_TRACE_ENABLED: "false"
     cmds:
-      - mkdir -p logs
-      - DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:5433/$POSTGRES_DB?sslmode=disable" go run ./cmd/gix-server 2>&1 | tee -a logs/backend.log
+      - mkdir -p logs bin
+      - go build -buildvcs=false -o bin/Gix-API ./cmd/gix-server
+      - DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:5433/$POSTGRES_DB?sslmode=disable" ./bin/Gix-API 2>&1 | tee -a logs/backend.log
 
   run:estimator:
     desc: "Run cost estimator locally"
@@ -89,8 +90,29 @@ tasks:
         echo "Pulling Ollama model: ${MODEL}"
         docker exec gix-ollama ollama pull "${MODEL}"
 
+  up:
+    desc: "Alias for finops:up — full local Gix stack (API + observability), product-branded"
+    cmds:
+      - task: finops:up
+
+  finops:up:
+    desc: "One terminal: Compose + k3d (ns gix) + port-forwards + Gix-API + estimator + sync (verbose)"
+    dotenv: ['.env']
+    cmds:
+      - bash scripts/finops-stack.sh up
+
+  finops:down:
+    desc: "Stop background procs started by finops:up (backend, estimator, port-forwards)"
+    cmds:
+      - bash scripts/finops-stack.sh down
+
+  finops:status:
+    desc: "Show which FinOps-related ports / PIDs are up"
+    cmds:
+      - bash scripts/finops-stack.sh status
+
   finops:bootstrap:
-    desc: "Bootstrap local CNCF FinOps stack (k3d + Prometheus + OpenCost + Grafana)"
+    desc: "Bootstrap local CNCF FinOps stack only (k3d + Prometheus + OpenCost + Grafana)"
     cmds:
       - bash scripts/bootstrap-local-finops.sh
 
@@ -113,7 +135,7 @@ tasks:
       - docker compose -f docker-compose-obs.yml up -d
       - |
         echo "Loki:     http://127.0.0.1:3100"
-        echo "Grafana:  task obs:ui  (or http://127.0.0.1:30300)"
+        echo "Grafana:  http://127.0.0.1:3000 after task finops:up (or task obs:ui)"
         echo "Explore → Loki → {job=~\"gix-.*\"} or {container=~\"gix-.*\"}"
 
   obs:down:
@@ -122,12 +144,13 @@ tasks:
       - docker compose -f docker-compose-obs.yml down
 
   obs:ui:
-    desc: "Port-forward FinOps Grafana (logs + cost) to localhost:3000"
+    desc: "Port-forward FinOps Grafana only (prefer task finops:up which does this in background)"
     cmds:
       - |
         echo "Grafana → http://127.0.0.1:3000  (admin / gix-finops-local)"
+        echo "Tip: task finops:up keeps this forward in the background."
         echo "NodePort also: http://127.0.0.1:30300"
-        kubectl -n finops port-forward svc/grafana 3000:80
+        kubectl -n "${GIX_NS:-gix}" port-forward svc/grafana 3000:80
 
   obs:grafana-sync:
     desc: "Re-apply Grafana + FinOps dashboard; Timescale password from .env"

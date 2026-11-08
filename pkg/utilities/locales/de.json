@@ -101,5 +101,6 @@
   "cp_cat_network": "Netzwerk",
   "cp_cat_other": "Sonstiges",
   "cantor_unnamed_fmt": "Wechselstube · %s",
-  "delete_all_short": "Löschen"
+  "delete_all_short": "Löschen",
+  "rate_pending": "Kurs wird geladen…"
 }

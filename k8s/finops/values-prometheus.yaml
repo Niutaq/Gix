@@ -7,9 +7,28 @@ prometheus-pushgateway:
 
 prometheus-node-exporter:
   enabled: true
+  resources:
+    requests:
+      cpu: 5m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
 
 kube-state-metrics:
   enabled: true
+  resources:
+    requests:
+      cpu: 5m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# Sidecar reloader image is often amd64-only; disable so Prometheus runs on Apple Silicon / k3d.
+configmapReload:
+  prometheus:
+    enabled: false
 
 server:
   persistentVolume:
@@ -18,8 +37,10 @@ server:
   global:
     scrape_interval: 30s
   resources:
+    # Right-sized from ~7–8mCPU 30m avg usage (was 50m → ~10% eff).
+    # ~2× headroom for scrape spikes; limits unchanged for bursts.
     requests:
-      cpu: 50m
+      cpu: 15m
       memory: 128Mi
     limits:
       cpu: 500m

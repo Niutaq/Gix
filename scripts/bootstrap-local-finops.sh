@@ -3,9 +3,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLUSTER_NAME="${GIX_CLUSTER_NAME:-gix-finops}"
+# Cluster/namespace are product-branded (Gix), not "finops-only" — FinOps is one capability inside.
+CLUSTER_NAME="${GIX_CLUSTER_NAME:-gix-local}"
 CTX="k3d-${CLUSTER_NAME}"
-NS=finops
+NS="${GIX_NS:-gix}"
 
 need() {
   local bin="$1"
@@ -58,8 +59,8 @@ echo "==> Grafana (Timescale creds from .env)"
 bash "${ROOT}/scripts/apply-grafana-finops.sh"
 
 echo ""
-echo "=== Local FinOps ready (FOSS / CNCF) ==="
-echo "kubectl context : ${CTX}"
+echo "=== Local Gix observability stack ready (FOSS / CNCF) ==="
+echo "kubectl context : ${CTX}  (namespace: ${NS})"
 echo "OpenCost UI     : kubectl -n ${NS} port-forward svc/opencost 9090:9090"
 echo "                 then open http://localhost:9090"
 echo "OpenCost API    : kubectl -n ${NS} port-forward svc/opencost 9003:9003"

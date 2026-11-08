@@ -3,7 +3,7 @@
   <h1>Gix</h1>
 </div>
 
-Gix is a distributed currency exchange rate monitor for the Polish cantor market: a native Gio UI, a Go backend, heuristic scraping with an **offline LLM fallback**, and a local **CNCF FinOps** stack — no paid cloud required for day-to-day work.
+Gix is a distributed currency exchange rate monitor for the Polish cantor market: a native Gio UI (**`bin/Gix`**), a Go API (**`bin/Gix-API`**), heuristic scraping with an **offline LLM fallback**, and optional local **CNCF observability / FinOps** — no paid cloud required for day-to-day work.
 
 ## Table of Contents
 - [Problem Statement](#problem-statement)
@@ -90,39 +90,54 @@ task llm:pull          # one-time model download (large)
 
 ### 4. App (two terminals)
 ```bash
-# terminal 1
+# terminal 1 — builds & runs bin/Gix-API
 task run:backend
 
-# terminal 2
+# terminal 2 — builds & runs bin/Gix (native Gio)
 task start:gui:local
 ```
 
-- API: `http://127.0.0.1:8080`
-- dRPC: `localhost:8081`
+Or one shot (Compose + optional k3d FinOps + API + estimator): **`task up`**, then GUI in a second terminal.
+
+- API: `http://127.0.0.1:8080` · dRPC: `localhost:8081`
 - GUI: native Gio window (not a browser) — **Gio v0.9+ / v0.10.x**
 - **Search**: type a Polish city → **Szukaj / Search** (or Enter). OSM discovery pins cantors nearby; rates fill in as scrapers resolve websites.
-- **Locate**: shown when the search field is empty — GPS/IP for distance sorting (no radius slider).
+- **Locate**: when the search field is empty — GPS/IP for distance sorting.
 - Language: macOS-style wheel picker in the sidebar / drawer.
-
-Optional cost estimator (unit costs → Timescale):
-
-```bash
-task run:estimator
-```
-
+- Empty quotes: soft grey pulse + localized “pending” hint (not a countdown).
 ## FinOps (CNCF / FOSS)
 
 Details: **[FINOPS.md](FINOPS.md)**.
 
-```bash
-task finops:bootstrap   # k3d + Prometheus + OpenCost + Grafana (once)
-```
+### Elevator pitch (what you are looking at)
 
-Then (backend + DB should already be running):
+Gix FinOps answers two different questions on purpose:
+
+1. **How expensive is scraping cantors?** — every scrape emits a NATS event; `cost-estimator` writes a synthetic USD row to Timescale (`provider_unit_costs`). The Gio **Control Panel** shows the 24h burn (e.g. Compute vs Network). A circuit breaker blocks a cantor above **$0.05 / day**.
+2. **How expensive is the local cluster?** — Prometheus + **OpenCost** allocate CPU/RAM on k3d using synthetic rates (not a cloud invoice). OpenCost Home is typically ~$0.04/day for `gix` + `kube-system`.
+
+`task finops:sync` copies OpenCost allocation into FOCUS-shaped `focus_cost_records`. **Grafana** joins both worlds (cluster allocation + app unit costs). Absolute dollars are for ranking and guardrails; the cloud bill for day-to-day work stays **$0**.
+
+<p align="center">
+  <img src="demos/finops/opencost_home.png" alt="OpenCost UI — cluster cost allocation" width="720" />
+  <br />
+  <em>OpenCost (:9090) — cluster allocation by namespace (synthetic local rates)</em>
+</p>
+
+<p align="center">
+  <img src="demos/finops/grafana_cost_flow.png" alt="Grafana Gix FinOps cost-flow dashboard" width="720" />
+  <br />
+  <em>Grafana (:3000) — FOCUS spend + app unit costs + cluster CPU</em>
+</p>
+
+Reading the OpenCost JSON at a glance: `totalCost` per namespace, `cpuCost` / `ramCost` from requests×rates, `cpuEfficiency` / `totalEfficiency` = usage vs request (low % ⇒ over-requested). Example: `gix` ≈ $0.022 + `kube-system` ≈ $0.022 → **~$0.04** cluster day — matches the UI. Local cluster/namespace defaults are **`gix-local` / `gix`** (product-branded; FinOps is a capability, not the whole stack).
+
+### Run it
 
 ```bash
-task finops:sync        # OpenCost API :9003 → focus_cost_records
-task finops:flow        # GET /api/v1/finops/flow
+task up                 # preferred: Compose + k3d (gix-local / ns gix) + Gix-API + estimator + sync
+task start:gui:local    # second terminal — bin/Gix
+task finops:down        # stop background procs from task up
 ```
 
 | Port | What |
@@ -130,12 +145,7 @@ task finops:flow        # GET /api/v1/finops/flow
 | **9003** | OpenCost **API** (JSON) — used by `finops:sync` |
 | **9090** | OpenCost **UI** (HTML) |
 | **3000** | Grafana (`admin` / `gix-finops-local`) |
-
-```bash
-kubectl -n finops port-forward svc/opencost 9003:9003   # if sync cannot auto-forward
-kubectl -n finops port-forward svc/opencost 9090:9090   # UI → http://localhost:9090
-kubectl -n finops port-forward svc/grafana 3000:80      # → http://localhost:3000
-```
+| **8080** | App API — `/api/v1/finops` (GUI burn) and `/api/v1/finops/flow` |
 
 Do **not** point sync at `:9090` — that serves the UI, not the allocation API.
 
@@ -160,11 +170,13 @@ Legacy cloud: set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY=...` only if you exp
 
 | Command | Description |
 | :--- | :--- |
-| `task run:backend` | Backend + harvester |
-| `task start:gui:local` | Native GUI → local API |
+| `task up` | Full local stack (API + optional FinOps) |
+| `task run:backend` | `bin/Gix-API` + harvester |
+| `task start:gui:local` | `bin/Gix` → local API |
 | `task run:estimator` | Cost estimator worker |
 | `task llm:up` / `task llm:pull` | Offline Ollama |
-| `task finops:bootstrap` | Local OpenCost stack |
+| `task finops:up` / `down` / `status` | Same as `task up` + lifecycle helpers |
+| `task finops:bootstrap` | k3d OpenCost stack only |
 | `task finops:sync` / `task finops:flow` | FOCUS sync + showback JSON |
 | `task test` / `task lint` / `task vuln` | Quality |
 | `task trivy:scan` | Vulnerability scan |

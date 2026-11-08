@@ -101,5 +101,6 @@
   "cp_cat_network": "Netværk",
   "cp_cat_other": "Andet",
   "cantor_unnamed_fmt": "Vekselkontor · %s",
-  "delete_all_short": "Slet"
+  "delete_all_short": "Slet",
+  "rate_pending": "Henter kurs…"
 }

@@ -3,7 +3,7 @@
 # OpenCost API listens on :9003; :9090 is the UI (HTML) — do not sync from 9090.
 set -euo pipefail
 
-NS="${GIX_FINOPS_NS:-finops}"
+NS="${GIX_NS:-${GIX_FINOPS_NS:-gix}}"
 WINDOW="${OPENCOST_WINDOW:-1d}"
 OPENCOST_URL="${OPENCOST_URL:-http://127.0.0.1:9003}"
 DATABASE_URL="${DATABASE_URL:-postgres://gixuser:change-me-local-only@127.0.0.1:5433/gix_rates?sslmode=disable}"
@@ -47,12 +47,18 @@ elif command -v kubectl >/dev/null 2>&1; then
   echo "    local API not up — starting: kubectl -n ${NS} port-forward svc/opencost 9003:9003"
   kubectl -n "${NS}" port-forward svc/opencost 9003:9003 >/dev/null 2>&1 &
   PF_PID=$!
-  sleep 2
   ALLOC_URL="http://127.0.0.1:9003${ALLOC_PATH}"
-  if ! RAW="$(ensure_api "${ALLOC_URL}")"; then
+  RAW=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 1
+    if RAW="$(ensure_api "${ALLOC_URL}")"; then
+      break
+    fi
+  done
+  if [[ -z "${RAW}" ]]; then
     echo "OpenCost API unreachable on :9003." >&2
-    echo "UI is on :9090 (HTML). API port-forward:" >&2
-    echo "  kubectl -n ${NS} port-forward svc/opencost 9003:9003" >&2
+    echo "UI is on :9090 (HTML). Prefer: task finops:up  (starts API forward for you)" >&2
+    echo "Or: kubectl -n ${NS} port-forward svc/opencost 9003:9003" >&2
     exit 1
   fi
 else
@@ -110,7 +116,7 @@ EOSQL
   while IFS=$'\t' read -r cost ns ctrl; do
     [[ -z "${cost}" ]] && continue
     team="app"
-    [[ "${ns}" == "finops" || "${ns}" == kube-* ]] && team="platform"
+    [[ "${ns}" == "gix" || "${ns}" == "finops" || "${ns}" == kube-* ]] && team="platform"
     esc_ctrl="${ctrl//\'/\'\'}"
     esc_ns="${ns//\'/\'\'}"
     printf "INSERT INTO focus_cost_records (time, provider_name, source, billed_cost, effective_cost, service_category, resource_name, x_application, x_team, x_environment, charge_description) VALUES (NOW(), 'OpenCost', 'opencost', %s, %s, 'Compute', '%s', 'gix', '%s', 'local', 'OpenCost allocation %s/%s');\n" \

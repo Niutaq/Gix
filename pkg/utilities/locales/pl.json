@@ -107,5 +107,6 @@
   "cp_cat_network": "Sieć",
   "cp_cat_other": "Inne",
   "cantor_unnamed_fmt": "Kantor · %s",
-  "delete_all_short": "Usuń"
+  "delete_all_short": "Usuń",
+  "rate_pending": "Pobieram kurs…"
 }

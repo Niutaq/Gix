@@ -192,7 +192,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"finops\"}[5m]))",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"gix\"}[5m]))",
           "legendFormat": "finops CPU"
         }
       ]

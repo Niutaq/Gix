@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-NS="${GIX_FINOPS_NS:-finops}"
+NS="${GIX_NS:-${GIX_FINOPS_NS:-gix}}"
 ENV_FILE="${ROOT}/.env"
 
 if [[ -f "${ENV_FILE}" ]]; then

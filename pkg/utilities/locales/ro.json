@@ -101,5 +101,6 @@
   "cp_cat_network": "Rețea",
   "cp_cat_other": "Altele",
   "cantor_unnamed_fmt": "Casă de schimb · %s",
-  "delete_all_short": "Șterge"
+  "delete_all_short": "Șterge",
+  "rate_pending": "Se încarcă cursul…"
 }

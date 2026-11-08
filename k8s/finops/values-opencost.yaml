@@ -5,8 +5,9 @@ opencost:
   exporter:
     defaultClusterId: gix-local
     resources:
+      # Idle usage ~1–2mCPU; was 50m (major efficiency drag).
       requests:
-        cpu: 50m
+        cpu: 5m
         memory: 128Mi
       limits:
         cpu: 500m
@@ -35,10 +36,16 @@ opencost:
       enabled: false
     external:
       enabled: true
-      url: http://prometheus-server.finops.svc.cluster.local
+      url: http://prometheus-server.gix.svc.cluster.local
 
   ui:
     enabled: true
+    resources:
+      requests:
+        cpu: 5m
+        memory: 55Mi
+      limits:
+        memory: 1Gi
 
 service:
   type: ClusterIP

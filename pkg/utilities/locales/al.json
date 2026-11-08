@@ -101,5 +101,6 @@
   "cp_cat_network": "Rrjeti",
   "cp_cat_other": "Tjetër",
   "cantor_unnamed_fmt": "Këmbim valutor · %s",
-  "delete_all_short": "Fshi"
+  "delete_all_short": "Fshi",
+  "rate_pending": "Duke ngarkuar kursin…"
 }
