@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	gioui.org v0.9.0
-	github.com/DataDog/dd-trace-go/contrib/redis/go-redis.v9/v2 v2.8.2
+	github.com/DataDog/dd-trace-go/contrib/redis/go-redis.v9/v2 v2.12.0
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/elastic/go-elasticsearch/v8 v8.19.5
 	github.com/gin-gonic/gin v1.12.0
@@ -33,7 +33,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/trace/traceutil v0.82.0 // indirect
 	github.com/DataDog/datadog-go/v5 v5.9.0 // indirect
 	github.com/DataDog/dd-trace-go/contrib/gin-gonic/gin/v2 v2.3.0 // indirect
-	github.com/DataDog/dd-trace-go/v2 v2.10.1 // indirect
+	github.com/DataDog/dd-trace-go/v2 v2.12.0 // indirect
 	github.com/DataDog/go-libddwaf/v5 v5.0.0 // indirect
 	github.com/DataDog/go-runtime-metrics-internal v0.0.4-0.20260217080614-b0f4edc38a6d // indirect
 	github.com/DataDog/go-sqllexer v0.2.3 // indirect
@@ -54,7 +54,7 @@ require (
 	github.com/elastic/elastic-transport-go/v8 v8.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.22.4 // indirect
@@ -97,7 +97,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
-	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
+	github.com/puzpuzpuz/xsync/v4 v4.5.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.62.0 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.11.0 // indirect
@@ -117,10 +117,10 @@ require (
 	go.opentelemetry.io/collector/featuregate v1.61.0 // indirect
 	go.opentelemetry.io/collector/pdata v1.61.0 // indirect
 	go.opentelemetry.io/collector/pdata/pprofile v0.155.0 // indirect
-	go.opentelemetry.io/otel v1.44.0 // indirect
-	go.opentelemetry.io/otel/metric v1.44.0 // indirect
-	go.opentelemetry.io/otel/trace v1.44.0 // indirect
-	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
+	go.opentelemetry.io/otel v1.45.0 // indirect
+	go.opentelemetry.io/otel/metric v1.45.0 // indirect
+	go.opentelemetry.io/otel/trace v1.45.0 // indirect
+	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
