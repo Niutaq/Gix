@@ -57,26 +57,36 @@ type GeoLocationResponse struct {
 }
 
 // FetchUserLocation attempts to retrieve the user's real-world location.
-// Order: native OS location → IP geolocation → optional GIX_DEV_COORDS
-// (only when GIX_USE_DEV_COORDS=1, for local testing overrides).
+// Order: explicit GIX_USE_DEV_COORDS=1 override → native OS location (in Poland) →
+// configured GIX_DEV_COORDS fallback (when native GPS is unavailable on desktop CLI) → IP geolocation.
 func FetchUserLocation() (float64, float64, error) {
+	if os.Getenv("GIX_USE_DEV_COORDS") == "1" {
+		if lat, lon, ok := parseDevCoords(os.Getenv("GIX_DEV_COORDS")); ok {
+			lat, lon = NormalizeLatLon(lat, lon)
+			return lat, lon, nil
+		}
+	}
+
 	lat, lon, err := fetchNativeLocation()
 	if err == nil && lat != 0 && lon != 0 {
 		lat, lon = NormalizeLatLon(lat, lon)
-		return lat, lon, nil
+		if InPoland(lat, lon) {
+			return lat, lon, nil
+		}
+	}
+
+	if os.Getenv("GIX_USE_DEV_COORDS") != "0" {
+		if dlat, dlon, ok := parseDevCoords(os.Getenv("GIX_DEV_COORDS")); ok {
+			dlat, dlon = NormalizeLatLon(dlat, dlon)
+			log.Printf("location: native GPS unavailable; using GIX_DEV_COORDS (%.4f, %.4f)", dlat, dlon)
+			return dlat, dlon, nil
+		}
 	}
 
 	lat, lon, err = fetchIPLocation()
 	if err == nil && lat != 0 && lon != 0 {
 		lat, lon = NormalizeLatLon(lat, lon)
 		return lat, lon, nil
-	}
-
-	if os.Getenv("GIX_USE_DEV_COORDS") == "1" {
-		if lat, lon, ok := parseDevCoords(os.Getenv("GIX_DEV_COORDS")); ok {
-			lat, lon = NormalizeLatLon(lat, lon)
-			return lat, lon, nil
-		}
 	}
 
 	if err != nil {
@@ -116,6 +126,8 @@ func ApplyUserLocation(state *AppState, lat, lon float64, maxDistanceKm float64)
 	state.UI.MaxDistance = maxDistanceKm
 	state.UI.DistanceSlider.Value = 0
 	state.UI.MapFocus.CityName = ""
+	state.UI.MapFocus.CityLat = 0
+	state.UI.MapFocus.CityLon = 0
 	state.UI.MapState.CenterLat = lat
 	state.UI.MapState.CenterLon = lon
 	state.UI.MapFocus.Latitude = lat

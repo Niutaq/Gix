@@ -160,6 +160,8 @@ type UIState struct {
 		Latitude  float64
 		Longitude float64
 		CityName  string
+		CityLat   float64
+		CityLon   float64
 	}
 
 	MapState struct {

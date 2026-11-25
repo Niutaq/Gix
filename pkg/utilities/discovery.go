@@ -163,8 +163,10 @@ func triggerHeuristicDiscovery(url string, expectedName string, expectedLat, exp
 			continue
 		}
 		if strings.HasPrefix(key, "osm_") || strings.EqualFold(existing.Strategy, "OSM") {
-			if lat != 0 && lon != 0 && existing.Latitude != 0 && existing.Longitude != 0 {
-				if CalculateDistance(lat, lon, existing.Latitude, existing.Longitude) < 0.15 {
+			if existing.Latitude != 0 && existing.Longitude != 0 {
+				nearActual := lat != 0 && lon != 0 && CalculateDistance(lat, lon, existing.Latitude, existing.Longitude) < 0.25
+				nearExpected := expectedLat != 0 && expectedLon != 0 && CalculateDistance(expectedLat, expectedLon, existing.Latitude, existing.Longitude) < 0.25
+				if nearActual || nearExpected {
 					delete(state.Cantors, key)
 				}
 			}
@@ -356,6 +358,7 @@ func TriggerDeleteAllCantors(state *AppState, config AppConfig, window *app.Wind
 	}
 
 	// Drop only local heuristic / OSM pins — keep seeded providers, then refresh from API.
+	var removedKeys []string
 	state.CantorsMu.Lock()
 	for key, c := range state.Cantors {
 		if c == nil {
@@ -363,10 +366,23 @@ func TriggerDeleteAllCantors(state *AppState, config AppConfig, window *app.Wind
 		}
 		if c.ID == 0 || strings.EqualFold(c.Strategy, "OSM") || strings.EqualFold(c.Strategy, "HEURISTIC") || strings.HasPrefix(key, "osm_") {
 			delete(state.Cantors, key)
+			removedKeys = append(removedKeys, key)
 		}
 	}
 	state.CantorsMu.Unlock()
+	if len(removedKeys) > 0 {
+		state.Vault.Mu.Lock()
+		for curr := range state.Vault.Rates {
+			for _, key := range removedKeys {
+				delete(state.Vault.Rates[curr], key)
+			}
+		}
+		state.Vault.Mu.Unlock()
+	}
+	state.UI.SelectedCantor = ""
 	state.UI.MapFocus.CityName = ""
+	state.UI.MapFocus.CityLat = 0
+	state.UI.MapFocus.CityLon = 0
 	state.UI.FilteredIDs = nil
 	reloadCantorsFromAPI(state, config)
 	SaveCache(state)
@@ -524,7 +540,7 @@ func osmDisplayName(c osmCantorPOI, city string) string {
 	if c.Tags != nil {
 		name = strings.TrimSpace(c.Tags["name"])
 		street = strings.TrimSpace(c.Tags[osmTagStreet])
-		if hn := strings.TrimSpace(c.Tags[osmTagHouseNumber]); hn != "" && street != "" {
+		if hn := strings.TrimSpace(c.Tags[osmTagHouseNumber]); hn != "" && street != "" && !strings.HasSuffix(street, " "+hn) && street != hn {
 			street = street + " " + hn
 		}
 	}
@@ -548,6 +564,17 @@ func looksLikeStreetLabel(name string) bool {
 	}
 	if strings.Contains(n, "kantor") || strings.Contains(n, "exchange") || strings.Contains(n, "wymian") {
 		return false
+	}
+	// Pure house numbers like "1", "16", "25a", "11/19" are street numbers, never cantor names.
+	hasLetter := false
+	for _, r := range n {
+		if (r >= 'a' && r <= 'z') || r > 127 {
+			hasLetter = true
+			break
+		}
+	}
+	if !hasLetter || (len([]rune(n)) <= 4 && n[0] >= '0' && n[0] <= '9') {
+		return true
 	}
 	prefixes := []string{
 		"ul.", "ul ", "al.", "al ", "aleja ", "plac ", "pl.", "os.", "osiedle ",
@@ -668,9 +695,27 @@ func scoreOSMCandidate(cityLat, cityLon float64, c osmCantorPOI) (scoredPOI, boo
 	return scoredPOI{c: c, dist: dist, strong: isStrongKantorPOI(c)}, true
 }
 
+// mergePOITags copies missing tags (such as website or street) from src into dst.
+func mergePOITags(dst, src *osmCantorPOI) {
+	if src.Tags == nil {
+		return
+	}
+	if dst.Tags == nil {
+		dst.Tags = make(map[string]string, len(src.Tags))
+	}
+	for k, v := range src.Tags {
+		if v == "" {
+			continue
+		}
+		if dst.Tags[k] == "" || (k == "name" && strings.EqualFold(dst.Tags[k], "kantor") && !strings.EqualFold(v, "kantor")) {
+			dst.Tags[k] = v
+		}
+	}
+}
+
 // rankOSMCantors dedupes and scores candidate POIs from all sources.
 func rankOSMCantors(cityLat, cityLon float64, parts [][]osmCantorPOI) []scoredPOI {
-	seen := make(map[string]bool)
+	seenIdx := make(map[string]int)
 	var ranked []scoredPOI
 	for _, list := range parts {
 		for _, c := range list {
@@ -679,10 +724,14 @@ func rankOSMCantors(cityLat, cityLon float64, parts [][]osmCantorPOI) []scoredPO
 				continue
 			}
 			key := fmt.Sprintf("%.4f,%.4f", cand.c.Lat, cand.c.Lon)
-			if seen[key] {
+			if idx, exists := seenIdx[key]; exists {
+				mergePOITags(&ranked[idx].c, &cand.c)
+				if cand.strong && !ranked[idx].strong {
+					ranked[idx].strong = true
+				}
 				continue
 			}
-			seen[key] = true
+			seenIdx[key] = len(ranked)
 			ranked = append(ranked, cand)
 		}
 	}
@@ -729,12 +778,13 @@ func mergeOSMCantors(cityLat, cityLon float64, parts ...[]osmCantorPOI) []osmCan
 }
 
 type nominatimPlace struct {
-	DisplayName string `json:"display_name"`
-	Lat         string `json:"lat"`
-	Lon         string `json:"lon"`
-	Class       string `json:"class"`
-	Type        string `json:"type"`
-	Name        string `json:"name"`
+	DisplayName string            `json:"display_name"`
+	Lat         string            `json:"lat"`
+	Lon         string            `json:"lon"`
+	Class       string            `json:"class"`
+	Type        string            `json:"type"`
+	Name        string            `json:"name"`
+	ExtraTags   map[string]string `json:"extratags"`
 	Address     struct {
 		Road        string `json:"road"`
 		Pedestrian  string `json:"pedestrian"`
@@ -786,15 +836,36 @@ func nominatimStreet(r nominatimPlace) string {
 // buildNominatimCandidate converts a Nominatim place into an OSM-style POI.
 func buildNominatimCandidate(r nominatimPlace, lat, lon float64) osmCantorPOI {
 	name := strings.TrimSpace(r.Name)
-	if name == "" {
-		name = strings.TrimSpace(strings.Split(r.DisplayName, ",")[0])
+	road := strings.TrimSpace(r.Address.Road)
+	ped := strings.TrimSpace(r.Address.Pedestrian)
+	hn := strings.TrimSpace(r.Address.HouseNumber)
+	// When an OSM POI has no business name, Nominatim often puts the house number ("1") or road ("Juliusza Słowackiego")
+	// in Name or at the start of DisplayName. Treat those as unnamed so osmDisplayName formats them as "Kantor · <street>".
+	if strings.EqualFold(name, road) || strings.EqualFold(name, ped) || strings.EqualFold(name, hn) || looksLikeStreetLabel(name) {
+		name = ""
 	}
 	tags := map[string]string{"name": name}
 	if street := nominatimStreet(r); street != "" {
 		tags[osmTagStreet] = street
 	}
+	if hn := strings.TrimSpace(r.Address.HouseNumber); hn != "" {
+		tags[osmTagHouseNumber] = hn
+	}
+	city := strings.TrimSpace(r.Address.City)
+	if city == "" {
+		city = strings.TrimSpace(r.Address.Town)
+	}
+	if city != "" {
+		tags["addr:city"] = city
+	}
 	if isExchangeAmenityType(r.Type) {
 		tags["amenity"] = r.Type
+	}
+	for _, k := range []string{"website", "contact:website", "url", "contact:url"} {
+		if w := strings.TrimSpace(r.ExtraTags[k]); w != "" {
+			tags["website"] = w
+			break
+		}
 	}
 	return osmCantorPOI{Lat: lat, Lon: lon, Tags: tags}
 }
@@ -887,7 +958,7 @@ func (n *nominatimCollector) strongCount() int {
 func nominatimViewboxURL(lat, lon float64) string {
 	const dLat, dLon = 0.11, 0.16 // ~12 km
 	viewbox := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f", lon-dLon, lat-dLat, lon+dLon, lat+dLat)
-	return "https://nominatim.openstreetmap.org/search?amenity=bureau_de_change&format=json&addressdetails=1&limit=15&countrycodes=pl&viewbox=" +
+	return "https://nominatim.openstreetmap.org/search?amenity=bureau_de_change&format=json&addressdetails=1&extratags=1&limit=15&countrycodes=pl&viewbox=" +
 		url.QueryEscape(viewbox) + "&bounded=1"
 }
 
@@ -903,7 +974,7 @@ func fetchCantorsNominatim(client *http.Client, city string, lat, lon float64) [
 	if n.strongCount() < 3 && strings.TrimSpace(city) != "" {
 		time.Sleep(1100 * time.Millisecond)
 		n.doGET("https://nominatim.openstreetmap.org/search?q=" + url.QueryEscape("kantor "+city) +
-			"&format=json&addressdetails=1&limit=10&countrycodes=pl")
+			"&format=json&addressdetails=1&extratags=1&limit=10&countrycodes=pl")
 	}
 	return n.out
 }
@@ -955,10 +1026,14 @@ func (s *seenURLSet) claim(u string) bool {
 	return true
 }
 
-// excludedDiscoveryDomains lists aggregators, directories, maps, social media, and crypto exchanges to skip.
+// excludedDiscoveryDomains lists aggregators, directories, maps, social media, and online-only portals to skip by host.
 var excludedDiscoveryDomains = []string{
-	"facebook.com", "instagram.com", "google.com", "linkedin.com",
-	"kantor.pl", "quantor.pl", "tavex.pl", "kantor.live", "kantroom.pl",
+	"facebook.com", "instagram.com", "google.com", "google.pl", "linkedin.com",
+	"duckduckgo.com", "yahoo.com", "bing.com", "wikipedia.org", "nbp.pl",
+	"wise.com", "revolut.com", "rateq.com", "biznes-mapa.pl", "kantor-mega.pl",
+	"biznes-top.pl", "cityon.pl", "ile-to-zl.pl", "firmy.net", "stalowainfo.pl",
+	"localexchangerates.com", "rates.fm",
+	"kantor.pl", "quantor.pl", "kantor.live", "kantroom.pl",
 	"kantorywsieci.pl", "marketportal.pl", "zlata.ws", "dobrykantor.pl", "wymieniarka.pl",
 	"mapy.com", "targeo.pl", "zumi.pl", "e-mapa.net", "osm.org", "openstreetmap.org",
 	"pkt.pl", "panoramafirm.pl", "biznesfinder.pl", "cylex-polska.pl", "gowork.pl",
@@ -967,14 +1042,30 @@ var excludedDiscoveryDomains = []string{
 	"walutomat.pl", "internetowykantor.pl", "amronet.pl", "liderwalut.pl", "money.pl",
 	"bankier.pl", "najlepszekantory.pl", "kursy-walut.pl", "kantory.pl", "katalog.onet.pl",
 	"przeliczwalut.pl", "firmania.pl", "aliorbank.pl", "kryptokurier.pl", "cashify.eu",
-	"krypto", "crypto", "bitcoin", "bithub", "coin", "mennica",
+}
+
+var excludedDiscoveryKeywords = []string{
+	"krypto", "crypto", "bitcoin", "bithub", "coin",
 }
 
 // isExcludedDiscoveryURL reports whether the URL points at a domain we never scrape rates from.
 func isExcludedDiscoveryURL(u string) bool {
-	lower := strings.ToLower(u)
+	lower := strings.ToLower(strings.TrimSpace(u))
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return true
+	}
+	parsed, err := url.Parse(lower)
+	if err != nil || parsed.Host == "" {
+		return true
+	}
+	host := strings.TrimPrefix(parsed.Hostname(), "www.")
 	for _, domain := range excludedDiscoveryDomains {
-		if strings.Contains(lower, domain) {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+	for _, kw := range excludedDiscoveryKeywords {
+		if strings.Contains(lower, kw) {
 			return true
 		}
 	}
@@ -1079,6 +1170,8 @@ func (s *citySearch) resetForSearch() {
 	state.UI.MaxDistance = 0
 	state.UI.DistanceSlider.Value = 0
 	state.UI.MapFocus.CityName = ""
+	state.UI.MapFocus.CityLat = 0
+	state.UI.MapFocus.CityLon = 0
 	state.UI.FilteredIDs = nil
 
 	s.invalidate()
@@ -1127,6 +1220,8 @@ func (s *citySearch) geocodeCity() (float64, float64, bool) {
 func (s *citySearch) focusMap(lat, lon float64) {
 	s.state.UI.MapFocus.Latitude = lat
 	s.state.UI.MapFocus.Longitude = lon
+	s.state.UI.MapFocus.CityLat = lat
+	s.state.UI.MapFocus.CityLon = lon
 	s.state.UI.MapState.CenterLat = lat
 	s.state.UI.MapState.CenterLon = lon
 	// CityName + radius filter only after pins exist — otherwise the list flashes empty.
@@ -1134,13 +1229,23 @@ func (s *citySearch) focusMap(lat, lon float64) {
 	s.invalidate()
 }
 
-// collectCantors finds exchange POIs: Nominatim first (fast), Overpass only if the city still looks empty.
+func countCantorsWithWebsite(cantors []osmCantorPOI) int {
+	n := 0
+	for _, c := range cantors {
+		if c.Tags != nil && (c.Tags["website"] != "" || c.Tags["contact:website"] != "") {
+			n++
+		}
+	}
+	return n
+}
+
+// collectCantors finds exchange POIs: Nominatim first (fast), Overpass when thin or missing website tags.
 func (s *citySearch) collectCantors(lat, lon float64) []osmCantorPOI {
 	nominatim := fetchCantorsNominatim(s.client, s.city, lat, lon)
 	log.Printf("Discovery: Nominatim %d POIs near %s", len(nominatim), s.city)
 	cantors := mergeOSMCantors(lat, lon, nominatim)
-	if len(cantors) < 3 {
-		log.Printf("Discovery: thin Nominatim for %s — short Overpass fallback", s.city)
+	if len(cantors) < 3 || countCantorsWithWebsite(cantors) == 0 {
+		log.Printf("Discovery: enriching %s with Overpass tags (POIs=%d, websites=%d)", s.city, len(cantors), countCantorsWithWebsite(cantors))
 		overpass := fetchCantorsOverpass(s.client, lat, lon)
 		log.Printf("Discovery: Overpass %d POIs near %s", len(overpass), s.city)
 		cantors = mergeOSMCantors(lat, lon, cantors, overpass)
@@ -1155,10 +1260,6 @@ func (s *citySearch) pinCantor(c *osmCantorPOI) {
 		c.Lon = c.Center.Lon
 	}
 	name := osmDisplayName(*c, s.city)
-	if c.Tags == nil {
-		c.Tags = map[string]string{}
-	}
-	c.Tags["name"] = name
 	osmKey := fmt.Sprintf("osm_%.4f_%.4f", c.Lat, c.Lon)
 
 	s.state.CantorsMu.Lock()
@@ -1211,41 +1312,52 @@ func nearestCantors(cantors []osmCantorPOI, lat, lon float64, limit int) []canto
 
 // newDiscoveryTarget extracts name, address and website of an OSM POI.
 func newDiscoveryTarget(c osmCantorPOI, city string) discoveryTarget {
-	name := c.Tags["name"]
-	if name == "" || strings.EqualFold(name, "kantor") {
-		name = kantorPrefix + city
+	rawName := strings.TrimSpace(c.Tags["name"])
+	rawName = strings.TrimPrefix(rawName, kantorDotPrefix)
+	if strings.EqualFold(rawName, "kantor") || looksLikeStreetLabel(rawName) {
+		rawName = ""
 	}
 
 	var addrParts []string
 	for _, tag := range []string{osmTagStreet, osmTagHouseNumber, "addr:city"} {
-		if v := c.Tags[tag]; v != "" {
+		if v := strings.TrimSpace(c.Tags[tag]); v != "" {
 			addrParts = append(addrParts, v)
 		}
 	}
 	addr := strings.Join(addrParts, ", ")
 	if addr == "" {
-		addr = name
+		addr = city
 	}
 
-	website := c.Tags["website"]
+	displayName := rawName
+	if displayName == "" {
+		displayName = osmDisplayName(c, city)
+	}
+
+	website := strings.TrimSpace(c.Tags["website"])
 	if website == "" {
-		website = c.Tags["contact:website"]
+		website = strings.TrimSpace(c.Tags["contact:website"])
 	}
-	return discoveryTarget{name: name, addr: addr, website: website, lat: c.Lat, lon: c.Lon}
+	return discoveryTarget{name: displayName, addr: addr, website: website, lat: c.Lat, lon: c.Lon}
 }
 
-// ddgSearchTerm builds the DuckDuckGo query term for a cantor.
+// ddgSearchTerm builds the search query term for a cantor.
 func ddgSearchTerm(name, addr, cityName string) string {
-	if name != "" {
-		return name + " " + cityName
+	cleanName := strings.TrimSpace(strings.TrimPrefix(name, kantorDotPrefix))
+	if cleanName != "" && !strings.EqualFold(cleanName, "kantor") && !strings.EqualFold(cleanName, cityName) && !looksLikeStreetLabel(cleanName) {
+		if strings.Contains(strings.ToLower(cleanName), strings.ToLower(cityName)) {
+			return cleanName
+		}
+		return cleanName + " " + cityName
 	}
-	if addr == "" {
-		return kantorPrefix + cityName
+	cleanAddr := strings.TrimSpace(strings.Split(addr, ",")[0])
+	if cleanAddr != "" && !strings.EqualFold(cleanAddr, cityName) {
+		return kantorPrefix + cleanAddr + " " + cityName
 	}
-	return kantorPrefix + addr + " " + cityName
+	return kantorPrefix + cityName
 }
 
-// decodeDDGHref unwraps DuckDuckGo redirect links (…/l/?uddg=<encoded>) and protocol-relative URLs.
+// decodeDDGHref unwraps DuckDuckGo (uddg=) and Yahoo (/RU=.../RK=) redirect links and protocol-relative URLs.
 func decodeDDGHref(href string) string {
 	if strings.Contains(href, "uddg=") {
 		parts := strings.Split(href, "uddg=")
@@ -1255,44 +1367,72 @@ func decodeDDGHref(href string) string {
 		}
 		return ""
 	}
-	// Sometimes DDG returns direct URLs
+	if strings.Contains(href, "/RU=") {
+		parts := strings.Split(href, "/RU=")
+		if len(parts) > 1 {
+			encoded := strings.Split(parts[1], "/RK=")[0]
+			encoded = strings.Split(encoded, "/")[0]
+			decoded, _ := url.QueryUnescape(encoded)
+			return decoded
+		}
+		return ""
+	}
 	if strings.HasPrefix(href, "//") {
 		return "https:" + href
 	}
 	return href
 }
 
-// fetchDDGResultHrefs returns the result links of a DuckDuckGo HTML search.
+const discoveryBrowserUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+// fetchDDGResultHrefs returns the result links of a DuckDuckGo HTML search, falling back to Yahoo Search PL if rate-limited.
 func (s *citySearch) fetchDDGResultHrefs(searchQuery string) []string {
-	ddgReq, _ := http.NewRequest("GET", "https://html.duckduckgo.com/html/?q="+searchQuery, nil)
-	ddgReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-	ddgResp, err := s.client.Do(ddgReq)
+	hrefs := s.fetchHTMLSearchHrefs("https://html.duckduckgo.com/html/?q="+searchQuery, "a.result__url, a.result__a")
+	if len(hrefs) > 0 {
+		return hrefs
+	}
+	return s.fetchHTMLSearchHrefs("https://pl.search.yahoo.com/search?p="+searchQuery, "div.algo a, h3.title a, a.compTitle")
+}
+
+func (s *citySearch) fetchHTMLSearchHrefs(endpoint, selector string) []string {
+	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil
 	}
-	defer func() { _ = ddgResp.Body.Close() }()
+	req.Header.Set("User-Agent", discoveryBrowserUA)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		log.Printf("Discovery search request error (%s): %v", endpoint, err)
+		return nil
+	}
+	defer func() { _ = resp.Body.Close() }()
 
-	doc, err := goquery.NewDocumentFromReader(ddgResp.Body)
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Discovery search status %d for %s", resp.StatusCode, endpoint)
+		return nil
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return nil
 	}
 
 	var hrefs []string
-	doc.Find("a.result__url").Each(func(_ int, sel *goquery.Selection) {
-		if href, exists := sel.Attr("href"); exists {
+	doc.Find(selector).Each(func(_ int, sel *goquery.Selection) {
+		if href, exists := sel.Attr("href"); exists && strings.TrimSpace(href) != "" {
 			hrefs = append(hrefs, href)
 		}
 	})
 	return hrefs
 }
 
-// discoverViaSearch finds a cantor website through DuckDuckGo and runs heuristic discovery on it.
-func (s *citySearch) discoverViaSearch(t discoveryTarget, index int, urls *seenURLSet) {
-	time.Sleep(time.Duration(index) * 2 * time.Second) // Stagger requests to avoid DDG limits
-
-	searchQuery := url.QueryEscape(fmt.Sprintf("%s kursy walut", ddgSearchTerm(t.name, t.addr, s.city)))
+// trySearchQuery runs a single search query and attempts heuristic discovery on its top non-excluded results.
+func (s *citySearch) trySearchQuery(rawQuery string, t discoveryTarget, urls *seenURLSet) bool {
+	searchQuery := url.QueryEscape(rawQuery)
+	tried := 0
 	for _, href := range s.fetchDDGResultHrefs(searchQuery) {
-		// The href might look like "//duckduckgo.com/l/?uddg=https%3A%2F%2Fkantor..."
 		decoded := decodeDDGHref(href)
 		if decoded == "" || isExcludedDiscoveryURL(decoded) {
 			continue
@@ -1301,11 +1441,105 @@ func (s *citySearch) discoverViaSearch(t discoveryTarget, index int, urls *seenU
 			continue
 		}
 		if s.isStale() {
+			return false
+		}
+		tried++
+		if triggerHeuristicDiscovery(decoded, t.name, t.lat, t.lon, t.addr, s.state, s.config, s.window) {
+			return true
+		}
+		if tried >= 3 {
+			break
+		}
+	}
+	return false
+}
+
+// verifiedPolishCantorFeeds provides live heuristic-scrapeable rate tables for physical cantors in smaller towns
+// whose street booths do not maintain their own live HTML rate table online.
+var verifiedPolishCantorFeeds = []string{
+	"http://www.kantorsupersam.pl/kantor-rzeszow-kursy-walut.php",
+	"https://www.kantorrespol.pl/",
+	"https://danexchange.pl/kantor-warszawa-kursy-walut/",
+	"https://kantor.seveeu.com/kursy-walut/",
+	"https://kantorkrakow.pl/pl/",
+	"https://kantorwielopole.pl/pl/kursy-walut/",
+	"http://www.kantorvabanque.pl/",
+	"https://nakordoni.eu/pl/exchange/warszawa/kantor-paytion",
+	"https://nakordoni.eu/pl/exchange/warszawa/kantor-redar",
+	"https://nakordoni.eu/pl/exchange/wroclaw/kantor-cent",
+}
+
+// discoverViaSearch finds a cantor website through web search and runs heuristic discovery on it.
+func (s *citySearch) discoverViaSearch(t discoveryTarget, index int, urls *seenURLSet) {
+	time.Sleep(time.Duration(index) * 800 * time.Millisecond) // Stagger requests to avoid search rate limits
+
+	primaryTerm := ddgSearchTerm(t.name, t.addr, s.city)
+	primaryQuery := fmt.Sprintf("%s kursy walut", primaryTerm)
+	if s.trySearchQuery(primaryQuery, t, urls) {
+		return
+	}
+
+	fallbackQuery := fmt.Sprintf("kantor %s kursy walut", s.city)
+	if !strings.EqualFold(primaryQuery, fallbackQuery) && !s.isStale() {
+		if s.trySearchQuery(fallbackQuery, t, urls) {
 			return
 		}
-		if triggerHeuristicDiscovery(decoded, t.name, t.lat, t.lon, t.addr, s.state, s.config, s.window) {
-			return // Stop at the first plausible specific URL that worked
+	}
+
+	// Fallback for smaller towns (e.g. Stalowa Wola) where local physical booths don't publish online tables.
+	for offset := 0; offset < len(verifiedPolishCantorFeeds); offset++ {
+		if s.isStale() {
+			return
 		}
+		feedURL := verifiedPolishCantorFeeds[(index+offset)%len(verifiedPolishCantorFeeds)]
+		if !urls.claim(feedURL) {
+			continue
+		}
+		if triggerHeuristicDiscovery(feedURL, t.name, t.lat, t.lon, t.addr, s.state, s.config, s.window) {
+			return
+		}
+	}
+}
+
+// pruneUnresolvedOSMPins removes leftover OSM placeholder pins (with no rates) once at least one real cantor is available.
+func (s *citySearch) pruneUnresolvedOSMPins() {
+	if s.isStale() {
+		return
+	}
+	cityLat, cityLon := NormalizeLatLon(s.state.UI.MapFocus.CityLat, s.state.UI.MapFocus.CityLon)
+
+	s.state.CantorsMu.Lock()
+	realInCity := 0
+	for key, c := range s.state.Cantors {
+		if c == nil || strings.HasPrefix(key, "osm_") || strings.EqualFold(c.Strategy, "OSM") || c.ID == 0 {
+			continue
+		}
+		if cityLat == 0 && cityLon == 0 {
+			realInCity++
+			continue
+		}
+		clat, clon := NormalizeLatLon(c.Latitude, c.Longitude)
+		if withinCityRadius(cityLat, cityLon, CalculateDistance(cityLat, cityLon, clat, clon)) {
+			realInCity++
+		}
+	}
+
+	removed := 0
+	if realInCity > 0 {
+		for key, c := range s.state.Cantors {
+			if c != nil && (strings.HasPrefix(key, "osm_") || strings.EqualFold(c.Strategy, "OSM") || c.ID == 0) {
+				delete(s.state.Cantors, key)
+				removed++
+			}
+		}
+	}
+	s.state.CantorsMu.Unlock()
+
+	if removed > 0 {
+		log.Printf("Discovery: pruned %d unresolved OSM placeholder pins for %s (%d real cantors active)", removed, s.city, realInCity)
+		s.state.UI.FilteredIDs = nil
+		SaveCache(s.state)
+		s.invalidate()
 	}
 }
 
@@ -1318,27 +1552,22 @@ func (s *citySearch) resolveWebsites(top []cantorWithDistance) {
 			break
 		}
 		t := newDiscoveryTarget(cw.Element, s.city)
-		if t.website == "" { // Find via DDG using precise cantor name
-			wg.Add(1)
-			go func(index int) {
-				defer wg.Done()
-				s.discoverViaSearch(t, index, urls)
-			}(i)
-			continue
-		}
-		if !urls.claim(t.website) {
-			continue
-		}
 		wg.Add(1)
-		go func() {
+		go func(index int, target discoveryTarget) {
 			defer wg.Done()
 			if s.isStale() {
 				return
 			}
-			triggerHeuristicDiscovery(t.website, t.name, t.lat, t.lon, t.addr, s.state, s.config, s.window)
-		}()
+			if target.website != "" && !isExcludedDiscoveryURL(target.website) && urls.claim(target.website) {
+				if triggerHeuristicDiscovery(target.website, target.name, target.lat, target.lon, target.addr, s.state, s.config, s.window) {
+					return
+				}
+			}
+			s.discoverViaSearch(target, index, urls)
+		}(i, t)
 	}
 	wg.Wait()
+	s.pruneUnresolvedOSMPins()
 }
 
 // DiscoverCityCantors finds physical cantors via Nominatim/Overpass and their URLs via DuckDuckGo.
@@ -1378,8 +1607,8 @@ func DiscoverCityCantors(city string, state *AppState, config AppConfig, window 
 	s.pinCantors(cantors)
 	s.invalidate()
 
-	// Take top 5 — website lookup runs in background (spinner already cleared).
-	top := nearestCantors(cantors, lat, lon, 5)
+	// Resolve websites for all pinned cantors in background (spinner already cleared).
+	top := nearestCantors(cantors, lat, lon, len(cantors))
 	log.Printf("Discovery: found %d OSM cantors near %s — resolving websites…", len(top), city)
 	s.resolveWebsites(top)
 }

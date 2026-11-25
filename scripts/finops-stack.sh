@@ -191,20 +191,21 @@ cmd_up() {
   fi
 
   step "4/7 Gix API (bin/Gix-API :8080 / :8081)"
+  stop_named backend
   if port_open 8080; then
-    ok "Gix API already on :8080"
-  else
-    (
-      cd "${ROOT}"
-      mkdir -p bin
-      go build -buildvcs=false -o bin/Gix-API ./cmd/gix-server
-      env DATABASE_URL="${DATABASE_URL}" REDIS_URL="${REDIS_URL}" NATS_URL="${NATS_URL}" \
-        DD_TRACE_ENABLED="${DD_TRACE_ENABLED}" GOFLAGS="${GOFLAGS}" \
-        ./bin/Gix-API >> "${LOG_DIR}/backend.log" 2>&1
-    ) &
-    write_pid backend $!
-    wait_port 8080 "Gix API" 90
+    lsof -ti:8080,8081 | xargs kill -9 2>/dev/null || true
+    sleep 0.5
   fi
+  mkdir -p "${ROOT}/bin"
+  go build -buildvcs=false -o "${ROOT}/bin/Gix-API" ./cmd/gix-server
+  (
+    cd "${ROOT}"
+    env DATABASE_URL="${DATABASE_URL}" REDIS_URL="${REDIS_URL}" NATS_URL="${NATS_URL}" \
+      DD_TRACE_ENABLED="${DD_TRACE_ENABLED}" GOFLAGS="${GOFLAGS}" \
+      ./bin/Gix-API >> "${LOG_DIR}/backend.log" 2>&1
+  ) &
+  write_pid backend $!
+  wait_port 8080 "Gix API" 90
 
   step "5/7 Cost estimator"
   if is_our_pid_alive estimator || pgrep -f 'cmd/cost-estimator|cost-estimator' >/dev/null 2>&1; then
@@ -238,23 +239,35 @@ cmd_up() {
 
   step "7/7 Ready"
   echo ""
-  echo "  API        http://127.0.0.1:8080"
-  echo "  FinOps     http://127.0.0.1:8080/api/v1/finops"
-  echo "  Flow       task finops:flow"
-  echo "  Grafana    http://127.0.0.1:3000   (admin / gix-finops-local)"
-  echo "  OpenCost UI http://127.0.0.1:9090"
+  echo "  API          http://127.0.0.1:8080"
+  echo "  FinOps       http://127.0.0.1:8080/api/v1/finops"
+  echo "  Flow         task finops:flow"
+  echo "  Grafana      http://127.0.0.1:3000   (admin / gix-finops-local)"
+  echo "  OpenCost UI  http://127.0.0.1:9090"
   echo "  OpenCost API http://127.0.0.1:9003/allocation/compute?window=1d&aggregate=namespace"
   echo ""
-  echo "  GUI (1 more terminal):  task start:gui:local"
-  echo "  Stop stack:             task finops:down"
-  echo "  Status:                 task finops:status"
-  echo ""
-  echo "  Logs: tail -f logs/backend.log logs/finops.log"
+  echo "  Stop stack:  task finops:down"
+  echo "  Status:      task finops:status"
+  echo "  Logs:        tail -f logs/backend.log logs/finops.log"
   cmd_status
+
+  if [[ "${GIX_NO_GUI:-0}" != "1" ]]; then
+    step "Launching Gix GUI (single-terminal mode; set GIX_NO_GUI=1 to skip)"
+    mkdir -p "${ROOT}/bin" "${LOG_DIR}"
+    go build -buildvcs=false -o "${ROOT}/bin/Gix" ./cmd/gix
+    "${ROOT}/bin/Gix" -api "http://localhost:8080" 2>&1 | tee -a "${LOG_DIR}/frontend.log"
+  fi
 }
 
 case "${1:-}" in
-  up) status=0; cmd_up || status=$?; exit "${status}" ;;
+  up)
+    if [[ "${2:-}" == "--no-gui" ]]; then
+      export GIX_NO_GUI=1
+    fi
+    status=0
+    cmd_up || status=$?
+    exit "${status}"
+    ;;
   down) cmd_down ;;
   status) load_env; cmd_status ;;
   *)

@@ -34,8 +34,8 @@ k3d cluster ──► Prometheus ──► OpenCost ──► focus_cost_records
 Bootstrap (prefer one command):
 
 ```bash
-task up                 # preferred alias — Compose + k3d (cluster gix-local, ns gix) + Gix-API + sync
-task start:gui:local    # second terminal — Gio UI (bin/Gix)
+task up                 # preferred (1 terminal) — Compose + k3d (cluster gix-local, ns gix) + Gix-API + sync + bin/Gix GUI
+task up:headless        # background stack only (skip GUI window)
 task finops:status      # what's listening
 task finops:down        # stop background procs from task up
 ```

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -384,9 +385,10 @@ func HeuristicScrape(ctx context.Context, url, targetCurrency string) (ScrapeRes
 		log.Printf("HeuristicScrape (fallback): rejected out-of-range %s pair %s/%s", targetCurrency, res.BuyRate, res.SellRate)
 	}
 
-	// Strategy 3: offline LLM only for major FX (keeps harvest + FinOps quiet for exotic pairs).
-	if !llmFallbackCurrency(targetCurrency) {
-		return ScrapeResult{}, fmt.Errorf("heuristics miss for %s (LLM skipped for %s)", url, targetCurrency)
+	// Strategy 3: offline LLM only when explicitly enabled via GIX_ENABLE_LLM_FALLBACK=1.
+	// Local Ollama timeouts otherwise stall discovery for 12–45s on static business-card sites.
+	if !llmFallbackCurrency(targetCurrency) || strings.TrimSpace(os.Getenv("GIX_ENABLE_LLM_FALLBACK")) != "1" {
+		return ScrapeResult{}, fmt.Errorf("heuristics miss for %s", url)
 	}
 	log.Printf("Heuristics miss %s [%s] — offline LLM (%s/%s)", url, targetCurrency, llmProvider(), ollamaModel())
 	llmRes, llmErr := LLMScrapeFallbackWithContext(ctx, doc, targetCurrency)
