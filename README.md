@@ -28,7 +28,7 @@ Physical cantors in Poland publish rates on fragmented, brittle websites. Gix ag
 | Component | Technology | Description |
 | :--- | :--- | :--- |
 | **Frontend** | [![Gio](https://img.shields.io/badge/Gio-v0.9+-blue)](https://gioui.org) | Native, GPU-accelerated UI |
-| **Backend API** | [![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?logo=go&logoColor=white)](https://go.dev/) [![Gin](https://img.shields.io/badge/Gin-v1.11-0088CC)](https://gin-gonic.com/) | HTTP API + harvester |
+| **Backend API** | [![Go](https://img.shields.io/badge/Go-1.27.4-00ADD8?logo=go&logoColor=white)](https://go.dev/) [![Gin](https://img.shields.io/badge/Gin-v1.11-0088CC)](https://gin-gonic.com/) | HTTP API + harvester |
 | **Streaming** | [![NATS](https://img.shields.io/badge/NATS_JetStream-27A16C?logo=nats.io&logoColor=white)](https://nats.io) | Event streaming / replay |
 | **Caching** | [![Redis](https://img.shields.io/badge/Redis-v7-DC382D?logo=redis&logoColor=white)](https://redis.io) | Cache + rate update pub/sub |
 | **Storage** | [![TimescaleDB](https://img.shields.io/badge/TimescaleDB-pg16-FDB515?logo=timescale&logoColor=black)](https://www.timescale.com) | Rates + FOCUS cost tables |
@@ -88,16 +88,20 @@ docker compose up -d db redis nats ollama
 task llm:pull          # one-time model download (large)
 ```
 
-### 4. App (two terminals)
+### 4. Start the App (one terminal)
 ```bash
-# terminal 1 — builds & runs bin/Gix-API
+# Single command: Compose + optional k3d FinOps + bin/Gix-API + estimator + bin/Gix GUI
+task up
+```
+
+Or run backend and GUI separately if you prefer two terminals:
+```bash
+# terminal 1 — builds & runs bin/Gix-API (or: task up:headless)
 task run:backend
 
 # terminal 2 — builds & runs bin/Gix (native Gio)
 task start:gui:local
 ```
-
-Or one shot (Compose + optional k3d FinOps + API + estimator): **`task up`**, then GUI in a second terminal.
 
 - API: `http://127.0.0.1:8080` · dRPC: `localhost:8081`
 - GUI: native Gio window (not a browser) — **Gio v0.9+ / v0.10.x**
@@ -135,8 +139,8 @@ Reading the OpenCost JSON at a glance: `totalCost` per namespace, `cpuCost` / `r
 ### Run it
 
 ```bash
-task up                 # preferred: Compose + k3d (gix-local / ns gix) + Gix-API + estimator + sync
-task start:gui:local    # second terminal — bin/Gix
+task up                 # preferred (1 terminal): Compose + k3d (gix-local / ns gix) + Gix-API + estimator + sync + bin/Gix GUI
+task up:headless        # background stack only (without launching GUI window)
 task finops:down        # stop background procs from task up
 ```
 
@@ -170,7 +174,8 @@ Legacy cloud: set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY=...` only if you exp
 
 | Command | Description |
 | :--- | :--- |
-| `task up` | Full local stack (API + optional FinOps) |
+| `task up` | Full local stack + native GUI in 1 terminal (API + optional FinOps + `bin/Gix`) |
+| `task up:headless` | Full local background stack without opening GUI window |
 | `task run:backend` | `bin/Gix-API` + harvester |
 | `task start:gui:local` | `bin/Gix` → local API |
 | `task run:estimator` | Cost estimator worker |

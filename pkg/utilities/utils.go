@@ -508,6 +508,8 @@ func layoutFinOpsTab(gtx layout.Context, theme *material.Theme, finOps FinOpsSta
 }
 
 func layoutScraperTab(gtx layout.Context, theme *material.Theme, state *AppState, window *app.Window, lang string) layout.Dimensions {
+	_ = state
+	_ = window
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			lbl := material.Caption(theme, GetTranslation(lang, "cp_scraper_config"))
@@ -517,37 +519,9 @@ func layoutScraperTab(gtx layout.Context, theme *material.Theme, state *AppState
 		}),
 		layout.Rigid(layout.Spacer{Height: unit.Dp(16)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal, Spacing: layout.SpaceBetween, Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					lbl := material.Body2(theme, GetTranslation(lang, "cp_update_interval"))
-					lbl.Color = color.NRGBA{R: 200, G: 200, B: 210, A: 255}
-					return lbl.Layout(gtx)
-				}),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					gtx.Constraints.Max.X = gtx.Dp(unit.Dp(120))
-					e := material.Editor(theme, &state.UI.ScraperIntervalEditor, "5000")
-					e.Color = color.NRGBA{R: 250, G: 250, B: 250, A: 255}
-					e.HintColor = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
-					return e.Layout(gtx)
-				}),
-			)
-		}),
-		layout.Rigid(layout.Spacer{Height: unit.Dp(12)}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal, Spacing: layout.SpaceBetween, Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					lbl := material.Body2(theme, GetTranslation(lang, "cp_timeout"))
-					lbl.Color = color.NRGBA{R: 200, G: 200, B: 210, A: 255}
-					return lbl.Layout(gtx)
-				}),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					gtx.Constraints.Max.X = gtx.Dp(unit.Dp(120))
-					e := material.Editor(theme, &state.UI.ScraperTimeoutEditor, "15000")
-					e.Color = color.NRGBA{R: 250, G: 250, B: 250, A: 255}
-					e.HintColor = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
-					return e.Layout(gtx)
-				}),
-			)
+			lbl := material.Body2(theme, GetTranslation(lang, "cp_scraper_server_side"))
+			lbl.Color = color.NRGBA{R: 180, G: 180, B: 190, A: 255}
+			return lbl.Layout(gtx)
 		}),
 	)
 }
@@ -590,6 +564,8 @@ func layoutProvidersTab(gtx layout.Context, theme *material.Theme, state *AppSta
 }
 
 func layoutGeoTab(gtx layout.Context, theme *material.Theme, state *AppState, window *app.Window, lang string) layout.Dimensions {
+	_ = window
+	applyGeoRadiusFromEditor(state)
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			lbl := material.Caption(theme, GetTranslation(lang, "cp_geo_settings"))
@@ -607,7 +583,7 @@ func layoutGeoTab(gtx layout.Context, theme *material.Theme, state *AppState, wi
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Max.X = gtx.Dp(unit.Dp(120))
-					e := material.Editor(theme, &state.UI.GeoRadiusEditor, "30")
+					e := material.Editor(theme, &state.UI.GeoRadiusEditor, GetTranslation(lang, "cp_geo_radius_hint"))
 					e.Color = color.NRGBA{R: 250, G: 250, B: 250, A: 255}
 					e.HintColor = color.NRGBA{R: 100, G: 100, B: 110, A: 255}
 					return e.Layout(gtx)
@@ -2430,14 +2406,19 @@ func compareDistanceSnapshot(state *AppState, latA, lonA, latB, lonB float64) (b
 }
 
 func distanceOrigin(state *AppState) (lat, lon float64, ok bool) {
-	// City browse: distance from the searched city (not a distant IP/GPS fix).
-	flat, flon := NormalizeLatLon(state.UI.MapFocus.Latitude, state.UI.MapFocus.Longitude)
-	if state.UI.MapFocus.CityName != "" && (flat != 0 || flon != 0) {
-		return flat, flon, true
-	}
+	// Always measure distance from the user's actual location (GPS / GIX_DEV_COORDS / IP) when available,
+	// so searching another city (e.g. Warszawa while in Stalowa Wola) shows the real ~195 km distance from the user.
 	ulat, ulon := NormalizeLatLon(state.UI.UserLocation.Latitude, state.UI.UserLocation.Longitude)
 	if ulat != 0 || ulon != 0 {
 		return ulat, ulon, true
+	}
+	// Fallback when user location is completely unknown: distance from searched city center.
+	flat, flon := NormalizeLatLon(state.UI.MapFocus.CityLat, state.UI.MapFocus.CityLon)
+	if flat == 0 && flon == 0 {
+		flat, flon = NormalizeLatLon(state.UI.MapFocus.Latitude, state.UI.MapFocus.Longitude)
+	}
+	if state.UI.MapFocus.CityName != "" && (flat != 0 || flon != 0) {
+		return flat, flon, true
 	}
 	return 0, 0, false
 }
@@ -2466,11 +2447,16 @@ func isWithinDistance(state *AppState, cantor *CantorInfo) bool {
 
 	// City search: radius around the geocoded city (MapFocus), NEVER map pan / GPS center.
 	// Using MapState.Center made Kraków results vanish when Locate/startup recentered the map.
-	if state.UI.MapFocus.CityName != "" && state.UI.MapFocus.Latitude != 0 && state.UI.MapFocus.Longitude != 0 {
-		olat, olon := NormalizeLatLon(state.UI.MapFocus.Latitude, state.UI.MapFocus.Longitude)
-		clat, clon := NormalizeLatLon(cantor.Latitude, cantor.Longitude)
-		dist := CalculateDistance(olat, olon, clat, clon)
-		return dist <= cityDiscoverRadiusKm
+	if state.UI.MapFocus.CityName != "" {
+		olat, olon := NormalizeLatLon(state.UI.MapFocus.CityLat, state.UI.MapFocus.CityLon)
+		if olat == 0 && olon == 0 {
+			olat, olon = NormalizeLatLon(state.UI.MapFocus.Latitude, state.UI.MapFocus.Longitude)
+		}
+		if olat != 0 || olon != 0 {
+			clat, clon := NormalizeLatLon(cantor.Latitude, cantor.Longitude)
+			dist := CalculateDistance(olat, olon, clat, clon)
+			return dist <= cityDiscoverRadiusKm
+		}
 	}
 
 	return true
@@ -3375,6 +3361,8 @@ func startSearchDiscover(window *app.Window, state *AppState, config AppConfig) 
 	// (handlers only wrote back when Text() still equalled the city).
 	state.UI.SearchActive = false
 	state.UI.MapFocus.CityName = "" // drop previous city radius filter while searching
+	state.UI.MapFocus.CityLat = 0
+	state.UI.MapFocus.CityLon = 0
 	state.UI.FilteredIDs = nil
 	// Form is city/area search. Pasted http(s) links still work as a quiet power-user path.
 	if strings.HasPrefix(q, "http://") || strings.HasPrefix(q, "https://") {

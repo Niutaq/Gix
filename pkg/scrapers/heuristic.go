@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -131,14 +132,10 @@ func findAddressRegex(doc *goquery.Document) string {
 
 // findAddressLLM is the final fallback: offline LLM address extraction.
 func findAddressLLM(ctx context.Context, doc *goquery.Document) string {
-	log.Printf("Discovery: Regex failed. Using offline LLM for address extraction...")
 	llmAddr, err := LLMExtractAddressWithContext(ctx, doc)
 	if err != nil {
-		log.Printf("Discovery: LLM address extraction skipped/failed: %v", err)
+		log.Printf("Discovery: LLM address extraction failed: %v", err)
 		return ""
-	}
-	if llmAddr != "" {
-		log.Printf("Discovery: LLM found address: '%s'", llmAddr)
 	}
 	return llmAddr
 }
@@ -151,15 +148,12 @@ func geocodeDiscoveredAddress(info *DiscoveredCantor, rawAddress string) {
 	re := regexp.MustCompile(`\s+`)
 	rawAddress = re.ReplaceAllString(rawAddress, " ")
 
-	log.Printf("Discovery: Found address for geocoding: '%s'", rawAddress)
-
-	// 3. Geocode with Nominatim (OSM)
+	// Geocode with Nominatim (OSM).
 	lat, lon, err := GeocodeAddress(rawAddress)
 	if err != nil {
-		log.Printf("Discovery: Geocoding failed for '%s': %v", rawAddress, err)
+		log.Printf("Discovery: geocoding failed for %q: %v", rawAddress, err)
 		return
 	}
-	log.Printf("Discovery: Geocoding successful: %f, %f", lat, lon)
 	info.Latitude = lat
 	info.Longitude = lon
 }
@@ -205,7 +199,6 @@ func HeuristicDiscoverCantorWithContext(ctx context.Context, urlStr string) (*Di
 
 // cleanHeuristicName cleans up the raw title from the HTML or falls back to parsing the URL path to generate a clean cantor name.
 func cleanHeuristicName(title, link string) string {
-	log.Printf("Discovery: cleanHeuristicName input title='%s', link='%s'", title, link)
 	parts := strings.FieldsFunc(title, func(r rune) bool {
 		return r == '|' || r == '-' || r == '–' || r == '—' || r == ','
 	})
@@ -311,7 +304,6 @@ func cleanHeuristicName(title, link string) string {
 		bestPart = bestPart[:42] + "..."
 	}
 
-	log.Printf("Discovery: cleanHeuristicName output='%s'", bestPart)
 	return bestPart
 }
 
@@ -393,9 +385,10 @@ func HeuristicScrape(ctx context.Context, url, targetCurrency string) (ScrapeRes
 		log.Printf("HeuristicScrape (fallback): rejected out-of-range %s pair %s/%s", targetCurrency, res.BuyRate, res.SellRate)
 	}
 
-	// Strategy 3: offline LLM only for major FX (keeps harvest + FinOps quiet for exotic pairs).
-	if !llmFallbackCurrency(targetCurrency) {
-		return ScrapeResult{}, fmt.Errorf("heuristics miss for %s (LLM skipped for %s)", url, targetCurrency)
+	// Strategy 3: offline LLM only when explicitly enabled via GIX_ENABLE_LLM_FALLBACK=1.
+	// Local Ollama timeouts otherwise stall discovery for 12–45s on static business-card sites.
+	if !llmFallbackCurrency(targetCurrency) || strings.TrimSpace(os.Getenv("GIX_ENABLE_LLM_FALLBACK")) != "1" {
+		return ScrapeResult{}, fmt.Errorf("heuristics miss for %s", url)
 	}
 	log.Printf("Heuristics miss %s [%s] — offline LLM (%s/%s)", url, targetCurrency, llmProvider(), ollamaModel())
 	llmRes, llmErr := LLMScrapeFallbackWithContext(ctx, doc, targetCurrency)
@@ -481,22 +474,14 @@ func analyzeTables(doc *goquery.Document, target string) []HeuristicResult {
 					}
 				})
 				buyVal, sellVal = pickBestPair(target, nums)
-				if buyVal != "" {
-					log.Printf("HeuristicScrape (table): guessed from %v -> buy: %s, sell: %s", nums, buyVal, sellVal)
-				} else if len(nums) >= 2 {
-					log.Printf("HeuristicScrape (table): no valid pair found in %v", nums)
-				}
 			}
 
 			if buyVal != "" && sellVal != "" {
 				if ok, b, s := sanitizePairForCurrency(target, buyVal, sellVal); ok {
-					log.Printf("HeuristicScrape (table): target '%s' found valid pair buy: %s, sell: %s", target, b, s)
 					results = append(results, HeuristicResult{
 						ScrapeResult: ScrapeResult{BuyRate: b, SellRate: s},
 						Confidence:   0.8,
 					})
-				} else {
-					log.Printf("HeuristicScrape (table): target '%s' ignored invalid pair buy: %s, sell: %s", target, buyVal, sellVal)
 				}
 			}
 		})
@@ -571,11 +556,9 @@ func fallbackRowSearch(doc *goquery.Document, target string) (ScrapeResult, erro
 			buy, sell := pickBestPair(target, validNums)
 			if buy != "" && sell != "" {
 				bestBuy, bestSell = buy, sell
-				log.Printf("HeuristicScrape (fallback): target '%s' in text '%s' found valid pair from %v -> buy: %s, sell: %s", target, txt, validNums, bestBuy, bestSell)
 				found = true
 				return false
 			}
-			log.Printf("HeuristicScrape (fallback): ignored row, no valid pair in %v", validNums)
 		}
 		return true
 	})

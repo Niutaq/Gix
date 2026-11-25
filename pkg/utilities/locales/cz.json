@@ -79,7 +79,7 @@
   "cp_dbg_language": "Jazyk UI",
   "cp_dbg_currency": "Měna",
   "cp_dbg_light": "Světlý režim",
-  "cp_dbg_finops": "Panel FinOps",
+  "cp_dbg_finops": "Control Panel open",
   "cp_dbg_backend": "Backend",
   "cp_dbg_offline": "Offline",
   "cp_dbg_connected": "Připojeno",
@@ -102,5 +102,7 @@
   "cp_cat_other": "Ostatní",
   "cantor_unnamed_fmt": "Směnárna · %s",
   "delete_all_short": "Smazat",
-  "rate_pending": "Načítám kurz…"
+  "rate_pending": "Načítám kurz…",
+  "cp_scraper_server_side": "Interval and timeout are set on Gix-API / the harvester — not from this panel yet.",
+  "cp_geo_radius_hint": "empty = all"
 }

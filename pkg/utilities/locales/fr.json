@@ -102,5 +102,7 @@
   "cp_cat_other": "Autre",
   "cantor_unnamed_fmt": "Bureau de change · %s",
   "delete_all_short": "Suppr.",
-  "rate_pending": "Cours en cours…"
+  "rate_pending": "Cours en cours…",
+  "cp_scraper_server_side": "Interval and timeout are set on Gix-API / the harvester — not from this panel yet.",
+  "cp_geo_radius_hint": "empty = all"
 }

@@ -102,5 +102,7 @@
   "cp_cat_other": "Annað",
   "cantor_unnamed_fmt": "Gjaldeyrisskipti · %s",
   "delete_all_short": "Eyða",
-  "rate_pending": "Sæki gengi…"
+  "rate_pending": "Sæki gengi…",
+  "cp_scraper_server_side": "Interval and timeout are set on Gix-API / the harvester — not from this panel yet.",
+  "cp_geo_radius_hint": "empty = all"
 }

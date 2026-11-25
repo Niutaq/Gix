@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -56,34 +57,36 @@ type GeoLocationResponse struct {
 }
 
 // FetchUserLocation attempts to retrieve the user's real-world location.
-// Order: native OS location → IP geolocation → optional GIX_DEV_COORDS
-// (only when GIX_USE_DEV_COORDS=1, for local testing overrides).
+// Order: explicit GIX_USE_DEV_COORDS=1 override → native OS location (in Poland) →
+// configured GIX_DEV_COORDS fallback (when native GPS is unavailable on desktop CLI) → IP geolocation.
 func FetchUserLocation() (float64, float64, error) {
+	if os.Getenv("GIX_USE_DEV_COORDS") == "1" {
+		if lat, lon, ok := parseDevCoords(os.Getenv("GIX_DEV_COORDS")); ok {
+			lat, lon = NormalizeLatLon(lat, lon)
+			return lat, lon, nil
+		}
+	}
+
 	lat, lon, err := fetchNativeLocation()
 	if err == nil && lat != 0 && lon != 0 {
 		lat, lon = NormalizeLatLon(lat, lon)
-		return lat, lon, nil
+		if InPoland(lat, lon) {
+			return lat, lon, nil
+		}
 	}
-	if err != nil {
-		fmt.Printf("Native Location Error: %v\n", err)
+
+	if os.Getenv("GIX_USE_DEV_COORDS") != "0" {
+		if dlat, dlon, ok := parseDevCoords(os.Getenv("GIX_DEV_COORDS")); ok {
+			dlat, dlon = NormalizeLatLon(dlat, dlon)
+			log.Printf("location: native GPS unavailable; using GIX_DEV_COORDS (%.4f, %.4f)", dlat, dlon)
+			return dlat, dlon, nil
+		}
 	}
 
 	lat, lon, err = fetchIPLocation()
 	if err == nil && lat != 0 && lon != 0 {
 		lat, lon = NormalizeLatLon(lat, lon)
-		fmt.Printf("IP location fallback: %f, %f (may differ from real GPS)\n", lat, lon)
 		return lat, lon, nil
-	}
-	if err != nil {
-		fmt.Printf("IP Location Error: %v\n", err)
-	}
-
-	if os.Getenv("GIX_USE_DEV_COORDS") == "1" {
-		if lat, lon, ok := parseDevCoords(os.Getenv("GIX_DEV_COORDS")); ok {
-			lat, lon = NormalizeLatLon(lat, lon)
-			fmt.Printf("Using GIX_DEV_COORDS override: %f, %f\n", lat, lon)
-			return lat, lon, nil
-		}
 	}
 
 	if err != nil {
@@ -123,6 +126,8 @@ func ApplyUserLocation(state *AppState, lat, lon float64, maxDistanceKm float64)
 	state.UI.MaxDistance = maxDistanceKm
 	state.UI.DistanceSlider.Value = 0
 	state.UI.MapFocus.CityName = ""
+	state.UI.MapFocus.CityLat = 0
+	state.UI.MapFocus.CityLon = 0
 	state.UI.MapState.CenterLat = lat
 	state.UI.MapState.CenterLon = lon
 	state.UI.MapFocus.Latitude = lat
@@ -131,6 +136,7 @@ func ApplyUserLocation(state *AppState, lat, lon float64, maxDistanceKm float64)
 		state.UI.MapState.Zoom = 12
 	}
 	state.UI.FilteredIDs = nil // force list re-filter
+	syncGeoRadiusEditor(state)
 }
 
 // RelaxDistanceFilterIfEmpty widens/clears the radius when the current filter hides every cantor.
@@ -142,10 +148,10 @@ func RelaxDistanceFilterIfEmpty(state *AppState) {
 		return
 	}
 
-	fmt.Printf("No cantors within %.0fkm — clearing GPS radius filter\n", state.UI.MaxDistance)
 	state.UI.MaxDistance = 0
 	state.UI.DistanceSlider.Value = 0
 	state.UI.FilteredIDs = nil
+	syncGeoRadiusEditor(state)
 }
 
 // InitLocationOnStartup resolves the current device location in the background
@@ -154,7 +160,7 @@ func InitLocationOnStartup(window *app.Window, state *AppState) {
 	go func() {
 		lat, lon, err := FetchUserLocation()
 		if err != nil {
-			fmt.Printf("Startup location failed: %v\n", err)
+			log.Printf("startup location: %v", err)
 			return
 		}
 		lat, lon = NormalizeLatLon(lat, lon)
@@ -162,7 +168,6 @@ func InitLocationOnStartup(window *app.Window, state *AppState) {
 		if state.UI.MapFocus.CityName != "" {
 			state.UI.UserLocation.Latitude = lat
 			state.UI.UserLocation.Longitude = lon
-			fmt.Printf("Startup location: %f, %f (kept city search focus %q)\n", lat, lon, state.UI.MapFocus.CityName)
 			window.Invalidate()
 			return
 		}
@@ -170,7 +175,6 @@ func InitLocationOnStartup(window *app.Window, state *AppState) {
 		ApplyUserLocation(state, lat, lon, 0)
 		state.UI.SortMode = "DIST"
 		RelaxDistanceFilterIfEmpty(state)
-		fmt.Printf("Startup location: %f, %f (map centered, showing all cantors by distance)\n", lat, lon)
 		window.Invalidate()
 	}()
 }
@@ -188,9 +192,8 @@ func fetchIPLocation() (float64, float64, error) {
 		return 0, 0, err
 	}
 	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			fmt.Printf("Error closing response body: %v\n", err)
+		if err := Body.Close(); err != nil {
+			log.Printf("location: close response: %v", err)
 		}
 	}(resp.Body)
 
@@ -248,4 +251,47 @@ func GeocodeCity(city string) (float64, float64, error) {
 	}
 
 	return lat, lon, nil
+}
+
+// syncGeoRadiusEditor keeps the Control Panel radius field aligned with MaxDistance.
+func syncGeoRadiusEditor(state *AppState) {
+	if state == nil {
+		return
+	}
+	want := ""
+	if state.UI.MaxDistance > 0 {
+		want = strconv.FormatFloat(state.UI.MaxDistance, 'f', -1, 64)
+	}
+	if state.UI.GeoRadiusEditor.Text() != want {
+		state.UI.GeoRadiusEditor.SetText(want)
+	}
+}
+
+// applyGeoRadiusFromEditor parses the Control Panel radius field into MaxDistance (km).
+// Empty / 0 = no distance filter. Invalid input is ignored until corrected.
+func applyGeoRadiusFromEditor(state *AppState) {
+	if state == nil {
+		return
+	}
+	state.UI.GeoRadiusEditor.SingleLine = true
+	text := strings.TrimSpace(state.UI.GeoRadiusEditor.Text())
+	if text == "" {
+		if state.UI.MaxDistance != 0 {
+			state.UI.MaxDistance = 0
+			state.UI.FilteredIDs = nil
+		}
+		return
+	}
+	km, err := strconv.ParseFloat(strings.ReplaceAll(text, ",", "."), 64)
+	if err != nil || km < 0 {
+		return
+	}
+	if km > 500 {
+		km = 500
+	}
+	if state.UI.MaxDistance == km {
+		return
+	}
+	state.UI.MaxDistance = km
+	state.UI.FilteredIDs = nil
 }

@@ -102,5 +102,7 @@
   "cp_cat_other": "Egyéb",
   "cantor_unnamed_fmt": "Pénzváltó · %s",
   "delete_all_short": "Törlés",
-  "rate_pending": "Árfolyam betöltése…"
+  "rate_pending": "Árfolyam betöltése…",
+  "cp_scraper_server_side": "Interval and timeout are set on Gix-API / the harvester — not from this panel yet.",
+  "cp_geo_radius_hint": "empty = all"
 }

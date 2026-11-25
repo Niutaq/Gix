@@ -91,12 +91,18 @@ tasks:
         docker exec gix-ollama ollama pull "${MODEL}"
 
   up:
-    desc: "Alias for finops:up — full local Gix stack (API + observability), product-branded"
+    desc: "One-terminal full local Gix stack (Compose + k3d + Gix-API + estimator + GUI)"
     cmds:
       - task: finops:up
 
+  up:headless:
+    desc: "Start local Gix stack in background without launching GUI window"
+    dotenv: ['.env']
+    cmds:
+      - bash scripts/finops-stack.sh up --no-gui
+
   finops:up:
-    desc: "One terminal: Compose + k3d (ns gix) + port-forwards + Gix-API + estimator + sync (verbose)"
+    desc: "One terminal: Compose + k3d (ns gix) + port-forwards + Gix-API + estimator + sync + GUI"
     dotenv: ['.env']
     cmds:
       - bash scripts/finops-stack.sh up

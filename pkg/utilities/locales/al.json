@@ -102,5 +102,7 @@
   "cp_cat_other": "Tjetër",
   "cantor_unnamed_fmt": "Këmbim valutor · %s",
   "delete_all_short": "Fshi",
-  "rate_pending": "Duke ngarkuar kursin…"
+  "rate_pending": "Duke ngarkuar kursin…",
+  "cp_scraper_server_side": "Interval and timeout are set on Gix-API / the harvester — not from this panel yet.",
+  "cp_geo_radius_hint": "empty = all"
 }

@@ -102,5 +102,7 @@
   "cp_cat_other": "Ostalo",
   "cantor_unnamed_fmt": "Mjenjačnica · %s",
   "delete_all_short": "Obriši",
-  "rate_pending": "Učitavanje tečaja…"
+  "rate_pending": "Učitavanje tečaja…",
+  "cp_scraper_server_side": "Interval and timeout are set on Gix-API / the harvester — not from this panel yet.",
+  "cp_geo_radius_hint": "empty = all"
 }

@@ -80,7 +80,7 @@ func fetchNativeLocation() (float64, float64, error) {
 	defer C.stopNativeLocationRequest()
 
 	// Wait for status update without blocking the main thread (Go's time.Sleep is non-blocking for OS threads)
-	timeout := time.After(15 * time.Second)
+	timeout := time.After(4 * time.Second)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 

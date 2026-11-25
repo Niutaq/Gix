@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -153,7 +154,13 @@ func callOllama(ctx context.Context, prompt string, jsonMode bool) (string, erro
 	}
 	req.Header.Set("Content-Type", mimeJSON)
 
-	client := &http.Client{Timeout: 45 * time.Second}
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &http.Transport{
+			DialContext:           (&net.Dialer{Timeout: 1500 * time.Millisecond}).DialContext,
+			ResponseHeaderTimeout: 12 * time.Second,
+		},
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		ollamaDownMu.Lock()

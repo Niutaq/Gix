@@ -56,7 +56,7 @@ case "$1" in
             source .env
             export DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}?sslmode=disable"
         else
-            export DATABASE_URL="postgres://gixuser:gixpassword@localhost:5433/gix_rates?sslmode=disable"
+            export DATABASE_URL="postgres://gixuser:change-me-local-only@localhost:5433/gix_rates?sslmode=disable"
         fi
         
         export REDIS_URL="redis://localhost:6379/0?protocol=2"

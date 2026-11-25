@@ -102,5 +102,7 @@
   "cp_cat_other": "Altele",
   "cantor_unnamed_fmt": "Casă de schimb · %s",
   "delete_all_short": "Șterge",
-  "rate_pending": "Se încarcă cursul…"
+  "rate_pending": "Se încarcă cursul…",
+  "cp_scraper_server_side": "Interval and timeout are set on Gix-API / the harvester — not from this panel yet.",
+  "cp_geo_radius_hint": "empty = all"
 }

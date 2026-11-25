@@ -102,5 +102,7 @@
   "cp_cat_other": "Sonstiges",
   "cantor_unnamed_fmt": "Wechselstube · %s",
   "delete_all_short": "Löschen",
-  "rate_pending": "Kurs wird geladen…"
+  "rate_pending": "Kurs wird geladen…",
+  "cp_scraper_server_side": "Interval and timeout are set on Gix-API / the harvester — not from this panel yet.",
+  "cp_geo_radius_hint": "empty = all"
 }

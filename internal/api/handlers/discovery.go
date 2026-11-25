@@ -165,8 +165,6 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 		}
 
 		go func(newID int, displayName, baseURL string) {
-			// FinOps: harvest majors first — full GlobalCurrencies burns budget + LLM slots.
-			currencies := []string{"EUR", "USD", "GBP", "CHF"}
 			ci := infrastructure.CantorInfo{
 				ID:          newID,
 				DisplayName: displayName,
@@ -175,15 +173,34 @@ func HandleDiscover(app *infrastructure.AppState) gin.HandlerFunc {
 				Units:       1,
 			}
 			log.Printf("Starting post-discovery background harvest for new cantor: %s", displayName)
+
+			// 1. Harvest major FX first so primary currencies appear immediately.
+			majors := []string{"EUR", "USD", "GBP", "CHF"}
+			majorSet := make(map[string]bool, len(majors))
 			var wg sync.WaitGroup
 			sem := make(chan struct{}, 2)
-			for _, curr := range currencies {
+			for _, curr := range majors {
+				majorSet[curr] = true
 				wg.Add(1)
 				go func(c string) {
 					defer wg.Done()
 					sem <- struct{}{}
 					workers.ProcessCantorCurrency(context.Background(), app, ci, c)
-					time.Sleep(1 * time.Second)
+					<-sem
+				}(curr)
+			}
+			wg.Wait()
+
+			// 2. Harvest remaining GlobalCurrencies (pure heuristic HTML — LLM is skipped for non-majors).
+			for _, curr := range types.GlobalCurrencies {
+				if majorSet[curr] {
+					continue
+				}
+				wg.Add(1)
+				go func(c string) {
+					defer wg.Done()
+					sem <- struct{}{}
+					workers.ProcessCantorCurrency(context.Background(), app, ci, c)
 					<-sem
 				}(curr)
 			}
